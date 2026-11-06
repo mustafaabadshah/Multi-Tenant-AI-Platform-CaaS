@@ -1,0 +1,86 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  backend-quality:
+    name: Backend Lint, Typecheck & Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgrespassword
+          POSTGRES_DB: mmaip_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install Backend Dependencies
+        working-directory: ./backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff mypy pytest pytest-asyncio httpx alembic
+          pip install -e .
+
+      - name: Run Ruff Linter & Formatter Check
+        working-directory: ./backend
+        run: |
+          ruff check .
+          ruff format --check .
+
+      - name: Run Pytest & Negative Tenant Security Suite
+        working-directory: ./backend
+        env:
+          DATABASE_URL: postgresql+asyncpg://postgres:postgrespassword@localhost:5432/mmaip_test
+          SECRET_KEY: ci-test-secret-key-at-least-thirty-two-bytes-long
+          JWT_SECRET: ci-test-jwt-secret-key-at-least-thirty-two-bytes
+        run: |
+          pytest -v --tb=short
+
+  frontend-quality:
+    name: Frontend Lint & Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Frontend Dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: Run ESLint
+        working-directory: ./frontend
+        run: npm run lint
+
+      - name: Build Next.js Application
+        working-directory: ./frontend
+        run: npm run build
