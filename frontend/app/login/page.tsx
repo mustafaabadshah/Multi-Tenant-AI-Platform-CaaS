@@ -43,7 +43,7 @@ export default function LoginPage() {
             <Bot className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
-            MM AI Platform
+            Multi-Tenant AI Platform-CaaS
           </h1>
           <p className="text-sm text-slate-400 mt-1">
             Enterprise Multi-Tenant AI Knowledge & Chatbot SaaS

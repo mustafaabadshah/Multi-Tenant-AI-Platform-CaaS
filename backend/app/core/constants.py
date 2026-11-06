@@ -72,6 +72,18 @@ class PermissionName(str, Enum):
     KNOWLEDGE_UPLOAD = "knowledge.upload"
     KNOWLEDGE_DELETE = "knowledge.delete"
 
+    # Granular Document & Ingestion (Milestone 02)
+    DOCUMENT_UPLOAD = "document.upload"
+    DOCUMENT_READ = "document.read"
+    DOCUMENT_DELETE = "document.delete"
+    DOCUMENT_REPROCESS = "document.reprocess"
+    DOCUMENT_READ_CONTENT = "document.read_content"
+    DOCUMENT_READ_CHUNKS = "document.read_chunks"
+    INGESTION_READ = "ingestion.read"
+    INGESTION_RETRY = "ingestion.retry"
+    INGESTION_CANCEL = "ingestion.cancel"
+    INGESTION_CONFIGURE = "ingestion.configure"
+
     # Conversations & Chat
     CONVERSATION_CREATE = "conversation.create"
     CONVERSATION_READ = "conversation.read"
@@ -111,6 +123,16 @@ ROLE_PERMISSIONS_MAP: dict[SystemRole, list[PermissionName]] = {
         PermissionName.KNOWLEDGE_READ,
         PermissionName.KNOWLEDGE_UPLOAD,
         PermissionName.KNOWLEDGE_DELETE,
+        PermissionName.DOCUMENT_UPLOAD,
+        PermissionName.DOCUMENT_READ,
+        PermissionName.DOCUMENT_DELETE,
+        PermissionName.DOCUMENT_REPROCESS,
+        PermissionName.DOCUMENT_READ_CONTENT,
+        PermissionName.DOCUMENT_READ_CHUNKS,
+        PermissionName.INGESTION_READ,
+        PermissionName.INGESTION_RETRY,
+        PermissionName.INGESTION_CANCEL,
+        PermissionName.INGESTION_CONFIGURE,
         PermissionName.CONVERSATION_CREATE,
         PermissionName.CONVERSATION_READ,
         PermissionName.CONVERSATION_DELETE,
@@ -139,6 +161,16 @@ ROLE_PERMISSIONS_MAP: dict[SystemRole, list[PermissionName]] = {
         PermissionName.KNOWLEDGE_CREATE,
         PermissionName.KNOWLEDGE_READ,
         PermissionName.KNOWLEDGE_UPLOAD,
+        PermissionName.DOCUMENT_UPLOAD,
+        PermissionName.DOCUMENT_READ,
+        PermissionName.DOCUMENT_DELETE,
+        PermissionName.DOCUMENT_REPROCESS,
+        PermissionName.DOCUMENT_READ_CONTENT,
+        PermissionName.DOCUMENT_READ_CHUNKS,
+        PermissionName.INGESTION_READ,
+        PermissionName.INGESTION_RETRY,
+        PermissionName.INGESTION_CANCEL,
+        PermissionName.INGESTION_CONFIGURE,
         PermissionName.CONVERSATION_CREATE,
         PermissionName.CONVERSATION_READ,
         PermissionName.CONVERSATION_DELETE,
@@ -155,6 +187,12 @@ ROLE_PERMISSIONS_MAP: dict[SystemRole, list[PermissionName]] = {
         PermissionName.ASSISTANT_EXECUTE,
         PermissionName.KNOWLEDGE_READ,
         PermissionName.KNOWLEDGE_UPLOAD,
+        PermissionName.DOCUMENT_UPLOAD,
+        PermissionName.DOCUMENT_READ,
+        PermissionName.DOCUMENT_READ_CONTENT,
+        PermissionName.DOCUMENT_READ_CHUNKS,
+        PermissionName.INGESTION_READ,
+        PermissionName.INGESTION_RETRY,
         PermissionName.CONVERSATION_CREATE,
         PermissionName.CONVERSATION_READ,
         PermissionName.CONVERSATION_DELETE,
@@ -167,6 +205,9 @@ ROLE_PERMISSIONS_MAP: dict[SystemRole, list[PermissionName]] = {
         PermissionName.ASSISTANT_DELETE,
         PermissionName.ASSISTANT_EXECUTE,
         PermissionName.KNOWLEDGE_READ,
+        PermissionName.DOCUMENT_READ,
+        PermissionName.DOCUMENT_READ_CONTENT,
+        PermissionName.DOCUMENT_READ_CHUNKS,
         PermissionName.CONVERSATION_CREATE,
         PermissionName.CONVERSATION_READ,
     ],
@@ -176,6 +217,15 @@ ROLE_PERMISSIONS_MAP: dict[SystemRole, list[PermissionName]] = {
         PermissionName.KNOWLEDGE_READ,
         PermissionName.KNOWLEDGE_UPLOAD,
         PermissionName.KNOWLEDGE_DELETE,
+        PermissionName.DOCUMENT_UPLOAD,
+        PermissionName.DOCUMENT_READ,
+        PermissionName.DOCUMENT_DELETE,
+        PermissionName.DOCUMENT_REPROCESS,
+        PermissionName.DOCUMENT_READ_CONTENT,
+        PermissionName.DOCUMENT_READ_CHUNKS,
+        PermissionName.INGESTION_READ,
+        PermissionName.INGESTION_RETRY,
+        PermissionName.INGESTION_CONFIGURE,
         PermissionName.ASSISTANT_READ,
         PermissionName.CONVERSATION_CREATE,
         PermissionName.CONVERSATION_READ,
@@ -188,6 +238,10 @@ ROLE_PERMISSIONS_MAP: dict[SystemRole, list[PermissionName]] = {
         PermissionName.ASSISTANT_READ,
         PermissionName.ASSISTANT_EXECUTE,
         PermissionName.KNOWLEDGE_READ,
+        PermissionName.DOCUMENT_READ,
+        PermissionName.DOCUMENT_READ_CONTENT,
+        PermissionName.DOCUMENT_READ_CHUNKS,
+        PermissionName.INGESTION_READ,
         PermissionName.CONVERSATION_CREATE,
         PermissionName.CONVERSATION_READ,
     ],
@@ -198,6 +252,9 @@ ROLE_PERMISSIONS_MAP: dict[SystemRole, list[PermissionName]] = {
         PermissionName.GROUP_READ,
         PermissionName.ASSISTANT_READ,
         PermissionName.KNOWLEDGE_READ,
+        PermissionName.DOCUMENT_READ,
+        PermissionName.DOCUMENT_READ_CONTENT,
+        PermissionName.DOCUMENT_READ_CHUNKS,
         PermissionName.CONVERSATION_READ,
     ],
 }

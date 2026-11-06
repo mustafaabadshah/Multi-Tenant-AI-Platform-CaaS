@@ -151,5 +151,11 @@ Application repositories simultaneously enforce explicit `WHERE tenant_id = :ten
 ## 6. Migration Strategy
 
 - Migrations are managed through **Alembic** (`backend/alembic/`).
-- Initial baseline migration `0001_initial_core_schema.py` establishes Identity, Tenancy, RBAC, Organizations, Departments, Employee Groups, and Audit tables, while establishing foundational schemas for Assistants and Knowledge Bases.
-- Forward migrations must maintain non-destructive schema evolutions (additive columns, nullability migrations with backfills).
+- **`0001_initial_core_schema.py`**: Establishes Identity, Tenancy, RBAC, Organizations, Departments, Employee Groups, and Audit tables, while establishing foundational schemas for Assistants and Knowledge Bases.
+- **`0002_document_ingestion_engine.py`**: Adds Document Ingestion, Parsing, OCR, and Chunking tables:
+  - `ingestion_configs`: Per-KB chunking strategies, chunk size, overlap, and OCR settings.
+  - `documents`: Tenant-isolated document container tracking filenames, SHA-256 hashes, storage paths, status, pages, and chunks.
+  - `document_versions`: Additive version history storing raw extracted text, structured section breakdowns, and extraction statistics.
+  - `document_chunks`: Fine-grained extracted text chunks preserving chunk index, page number, heading paths, character/token counts, and cryptographic hashes.
+  - `ingestion_jobs`: Ingestion job execution tracker recording state (`QUEUED`, `PROCESSING`, `OCR_REQUIRED`, `CHUNKING`, `COMPLETED`, `FAILED`, `CANCELLED`), progress, duration, and error classifications.
+  - `ingestion_events`: Comprehensive audit event log recording timestamps and structured details for every pipeline step.

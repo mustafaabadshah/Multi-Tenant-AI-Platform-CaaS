@@ -123,8 +123,51 @@ A user may belong to multiple tenants. When calling tenant-scoped APIs:
 
 ---
 
-## 5. Extensibility Boundaries for Future Milestones
+---
 
-- **Vector Storage:** An abstract `VectorStoreRepository` interface allows switching between PostgreSQL (FTS / pgvector), Qdrant, or in-memory vectors without altering application business logic.
-- **LLM Gateway:** Integrated via OmniRoute Gateway (`http://localhost:20128/v1`) using standard OpenAI client abstractions with dynamic model fallback (`model="auto"`).
-- **Document Ingestion:** Future parsers (PDF, DOCX, TXT, CSV, PPTX, JSON, SQL, OCR) implement a standard `DocumentParser` interface producing normalized chunks for ingestion jobs.
+## 5. Document Ingestion, Parsing, OCR & Chunking Architecture (Milestone 02)
+
+### Storage Abstraction (`app.storage`)
+Tenant-partitioned storage engine adhering to strict path containment.
+- `StorageProvider` (Interface): defines `save`, `get`, `delete`, `exists`, `get_size`, `build_storage_key`.
+- `LocalStorageProvider`: saves files under `./data/storage/tenants/{tenant_id}/kbs/{kb_id}/docs/{doc_id}/v{version_num}/{safe_filename}`. Detects and blocks directory traversal attempts.
+- `S3StorageProvider`: Cloud-ready S3 / MinIO integration boundary.
+
+### Parser Registry (`app.parsers`)
+Independent parser implementations registered in `ParserRegistry` with magic byte / signature validation via `filetype`:
+- **PDF (`PyMuPDF`)**: Page text, page numbers, metadata, scanned page heuristic.
+- **DOCX (`python-docx`)**: Headings (h1..h4), paragraphs, table headers and rows.
+- **XLSX (`openpyxl`)**: Sheet names, rows, columns, markdown tables.
+- **PPTX (`python-pptx`)**: Slide text, titles, notes, slide tables.
+- **CSV (`python csv`)**: Automatic delimiter sniffing (comma, semicolon, tab, pipe), header detection, rows.
+- **JSON (`python json`)**: Nested JSON, JSON Lines (JSONL), flattened key-path traversal.
+- **SQL (`sqlglot`)**: Static AST parsing of table definitions, columns, data types, primary keys, and views. Strictly ZERO execution against live databases.
+- **TXT (`python stdlib`)**: UTF-8 and legacy encodings, paragraph grouping.
+- **Markdown (`python stdlib`)**: Heading hierarchy (`#`, `##`, `###`), sections, code blocks.
+
+### OCR Subsystem (`app.ocr`)
+Provider-independent OCR abstraction:
+- `TesseractOCRProvider`: CPU-based local OCR using `pytesseract` and PyMuPDF rendering (200 DPI). Detects missing binaries gracefully without crashing.
+- `BadhoOCRProvider`: Honest integration placeholder documenting missing official API endpoint specification and authentication tokens; prevents sending documents to unverified endpoints.
+
+### Chunking Engine (`app.chunking`)
+Configurable strategies preserving source metadata:
+1. **Recursive Character Chunking (`recursive`)**: Splitting along paragraph, sentence, and word boundaries with configurable chunk size and overlap.
+2. **Markdown Header-Aware Chunking (`markdown`)**: Preserves heading hierarchy and attaches contextual heading paths (`Doc > Section > Subsection`) to chunks.
+3. **Token-Bounded Chunking (`token`)**: Strictly limits chunks by token estimation without downloading heavy tokenizer models.
+4. **Structured Document Chunking (`structured`)**: Keeps spreadsheet and table rows associated with their table headers on every chunk; preserves slide numbers and titles on presentation chunks.
+
+Every generated chunk records: `tenant_id`, `knowledge_base_id`, `document_id`, `document_version_id`, `chunk_index`, `page_number`, `heading_path`, `source_filename`, `source_type`, `parser_version`, `chunking_strategy`, `chunk_hash`, `character_count`, and `token_count`.
+
+### Background Processing & Ingestion Service (`app.services.ingestion`)
+- State machine: `PENDING` -> `QUEUED` -> `PROCESSING` -> `OCR_REQUIRED` -> `CHUNKING` -> `COMPLETED` / `FAILED` / `CANCELLED`.
+- Standalone polling worker (`app.services.ingestion.worker`) and asynchronous background tasks.
+- Automatic retry with exponential backoff and max retry limits.
+- Duplicate file upload detection using SHA-256 checksums within knowledge bases.
+
+---
+
+## 6. Extensibility Boundaries for Future Milestones
+
+- **Vector Storage (Milestone 03):** An abstract `VectorStoreRepository` interface allows switching between PostgreSQL (FTS / pgvector), Qdrant, or in-memory vectors without altering application business logic.
+- **LLM Gateway (Milestone 04):** Integrated via OmniRoute Gateway (`http://localhost:20128/v1`) using standard OpenAI client abstractions with dynamic model fallback (`model="auto"`).

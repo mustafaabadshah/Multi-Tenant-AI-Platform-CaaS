@@ -14,10 +14,10 @@ class TenantScopedRepository(Generic[ModelType]):
     """Repository base ensuring all queries and operations are strictly scoped
     to a single tenant."""
 
-    def __init__(self, model: type[ModelType], session: AsyncSession, tenant_id: uuid.UUID):
+    def __init__(self, model: type[ModelType], session: AsyncSession, tenant_id: uuid.UUID | str):
         self.model = model
         self.session = session
-        self.tenant_id = tenant_id
+        self.tenant_id = uuid.UUID(str(tenant_id)) if isinstance(tenant_id, str) else tenant_id
 
     async def get_by_id(self, entity_id: uuid.UUID) -> ModelType | None:
         """Fetch a single entity by ID strictly within the active tenant."""

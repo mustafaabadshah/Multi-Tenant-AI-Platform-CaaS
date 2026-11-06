@@ -3,8 +3,8 @@ import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
 
 export const metadata: Metadata = {
-  title: "MM AI Platform — Enterprise Multi-Tenant AI Platform",
-  description: "Enterprise Multi-Tenant AI Knowledge & Chatbot SaaS Platform",
+  title: "Multi-Tenant AI Platform-CaaS — Enterprise Multi-Tenant AI Platform",
+  description: "Multi-Tenant AI Platform-CaaS Enterprise Knowledge & Chatbot SaaS Platform",
 };
 
 export default function RootLayout({

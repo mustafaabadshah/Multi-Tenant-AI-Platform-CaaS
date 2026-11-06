@@ -15,6 +15,8 @@ from app.models.knowledge import (
     Document,
     DocumentChunk,
     DocumentVersion,
+    IngestionConfig,
+    IngestionEvent,
     IngestionJob,
     KnowledgeBase,
 )
@@ -39,6 +41,8 @@ __all__ = [
     "EmbeddingConfig",
     "EmployeeGroup",
     "GroupMembership",
+    "IngestionConfig",
+    "IngestionEvent",
     "IngestionJob",
     "Invitation",
     "KnowledgeBase",

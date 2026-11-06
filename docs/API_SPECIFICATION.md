@@ -143,6 +143,21 @@
 | `/assistants` | `POST` | Bearer | `assistant.create` | Create a new assistant |
 | `/knowledge` | `GET` | Bearer | `knowledge.read` | List knowledge bases in active tenant |
 | `/knowledge` | `POST` | Bearer | `knowledge.upload` | Create a knowledge base container |
+| `/knowledge/{kb_id}/documents` | `POST` | Bearer | `document.upload` | Multipart upload files into knowledge base |
+| `/knowledge/{kb_id}/documents` | `GET` | Bearer | `document.read` | List documents in knowledge base |
+| `/knowledge/{kb_id}/ingestion-config` | `GET` | Bearer | `document.read` | Get KB chunking & OCR configuration |
+| `/knowledge/{kb_id}/ingestion-config` | `PATCH` | Bearer | `ingestion.configure` | Update KB chunking & OCR configuration |
+| `/documents/{doc_id}` | `GET` | Bearer | `document.read` | Get document metadata and status |
+| `/documents/{doc_id}` | `DELETE` | Bearer | `document.delete` | Delete document and cascade chunks |
+| `/documents/{doc_id}/versions` | `GET` | Bearer | `document.read` | List document version history |
+| `/documents/{doc_id}/reprocess` | `POST` | Bearer | `document.reprocess` | Trigger asynchronous reprocessing |
+| `/documents/{doc_id}/content` | `GET` | Bearer | `document.read_content` | Preview extracted text and structure |
+| `/documents/{doc_id}/chunks` | `GET` | Bearer | `document.read_chunks` | Inspect generated document chunks |
+| `/documents/{doc_id}/processing-history` | `GET` | Bearer | `document.read` | View document event audit trail |
+| `/ingestion/jobs` | `GET` | Bearer | `ingestion.read` | List ingestion jobs with filters |
+| `/ingestion/jobs/{job_id}` | `GET` | Bearer | `ingestion.read` | Get ingestion job status and progress |
+| `/ingestion/jobs/{job_id}/retry` | `POST` | Bearer | `ingestion.retry` | Retry failed or cancelled job |
+| `/ingestion/jobs/{job_id}/cancel` | `POST` | Bearer | `ingestion.cancel` | Cancel active or queued job |
 
 ---
 

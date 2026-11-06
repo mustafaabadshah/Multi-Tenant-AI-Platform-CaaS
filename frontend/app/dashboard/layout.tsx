@@ -107,7 +107,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <Bot className="w-5 h-5 text-white" />
             </div>
             <div>
-              <span className="font-bold text-sm tracking-tight text-white block">MM AI Platform</span>
+              <span className="font-bold text-sm tracking-tight text-white block">Multi-Tenant AI Platform-CaaS</span>
               <span className="text-[10px] text-blue-400 font-medium block">Enterprise Multi-Tenant</span>
             </div>
           </div>

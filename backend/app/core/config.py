@@ -12,7 +12,7 @@ class Settings(BaseSettings):
 
     ENVIRONMENT: str = "development"
     DEBUG: bool = True
-    PROJECT_NAME: str = "MM AI Platform"
+    PROJECT_NAME: str = "Multi-Tenant AI Platform-CaaS"
     API_V1_STR: str = "/api/v1"
 
     FRONTEND_URL: str = "http://localhost:3000"
@@ -29,9 +29,23 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/mmaip_dev"
     DATABASE_SYNC_URL: str = "postgresql://postgres:postgres@localhost:5432/mmaip_dev"
 
-    # Storage
+    # Storage & Upload Limits
     STORAGE_BACKEND: str = "local"
     STORAGE_PATH: str = "./data/storage"
+    MAX_FILE_SIZE_BYTES: int = 50 * 1024 * 1024  # 50 MB
+    MAX_FILES_PER_REQUEST: int = 10
+    MAX_EXTRACTED_TEXT_SIZE_BYTES: int = 20 * 1024 * 1024  # 20 MB
+    MAX_ARCHIVE_EXPANSION_BYTES: int = 100 * 1024 * 1024  # 100 MB
+    MAX_PROCESSING_DURATION_SECONDS: int = 600
+    MAX_DOCUMENT_PAGES: int = 1000
+
+    # OCR Settings
+    OCR_ENABLED_DEFAULT: bool = False
+    OCR_DEFAULT_PROVIDER: str = "tesseract"
+    OCR_DEFAULT_LANGUAGE: str = "eng"
+    TESSERACT_CMD: str | None = None
+    BADHO_OCR_API_KEY: str | None = None
+    BADHO_OCR_API_URL: str | None = None
 
     # Optional Providers / Cache
     REDIS_URL: str = "redis://localhost:6379/0"

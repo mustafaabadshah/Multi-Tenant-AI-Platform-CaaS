@@ -1,10 +1,10 @@
-# MM AI Platform — Enterprise Multi-Tenant AI Knowledge & Chatbot Platform
+# Multi-Tenant AI Platform-CaaS — Enterprise Multi-Tenant AI Knowledge & Chatbot Platform
 
 A production-oriented, multi-tenant AI chatbot SaaS platform foundation built for individuals, educational institutions, enterprises, and research organizations.
 
 ## Overview
 
-The **MM AI Platform** is architected as a security-first modular monolith supporting:
+The **Multi-Tenant AI Platform-CaaS** is architected as a security-first modular monolith supporting:
 - Dual-mode tenancy (Individual Workspaces & Enterprise Organization Workspaces).
 - Fine-grained Role-Based Access Control (RBAC) and tenant isolation.
 - Organization hierarchy: Departments, Employee Groups, Memberships, Invitations.

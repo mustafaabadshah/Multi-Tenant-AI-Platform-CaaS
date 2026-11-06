@@ -73,8 +73,29 @@ services:
       - /app/.next
 
   # ---------------------------------------------------------------------------
-  # OPTIONAL PROFILES: Vector DB, Cache, Observability
+  # OPTIONAL PROFILES: Worker, Vector DB, Cache, Observability
   # ---------------------------------------------------------------------------
+  worker:
+    build:
+      context: ./backend
+      dockerfile: ../infrastructure/docker/backend.Dockerfile
+    container_name: mmaip_worker
+    restart: unless-stopped
+    profiles: ["worker"]
+    command: python -m app.services.ingestion.worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - ENVIRONMENT=development
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/mmaip_dev
+      - DATABASE_SYNC_URL=postgresql://postgres:postgres@postgres:5432/mmaip_dev
+      - STORAGE_BACKEND=local
+      - STORAGE_PATH=/app/data/storage
+    volumes:
+      - ./backend:/app
+      - backend_storage:/app/data/storage
+
   qdrant:
     image: qdrant/qdrant:v1.9.0
     container_name: mmaip_qdrant

@@ -101,8 +101,11 @@ For containerized workflows, Docker Compose orchestrates the platform services:
 docker compose up -d
 ```
 
-### 5.2 Optional Profiles (Qdrant, Redis, Phoenix)
+### 5.2 Optional Profiles (Worker, Qdrant, Redis, Phoenix)
 ```bash
+# Start background ingestion worker
+docker compose --profile worker up -d
+
 # Start with Qdrant vector store and Redis
 docker compose --profile qdrant --profile redis up -d
 
@@ -112,24 +115,46 @@ docker compose --profile phoenix up -d
 
 ---
 
-## 6. Running Tests
+## 6. Background Ingestion Worker (Local Development)
 
-### 6.1 Backend Tests (Pytest)
-```bash
+To run the background ingestion worker standalone on Windows PowerShell:
+
+```powershell
 cd backend
+.\.venv\Scripts\Activate.ps1
+python -m app.services.ingestion.worker
+```
+
+The worker continuously polls for `QUEUED` ingestion jobs, coordinates parser selection, handles OCR if required, executes chunking, and persists structured extraction results.
+
+---
+
+## 7. Running Tests
+
+### 7.1 Backend Tests (Pytest)
+
+Windows PowerShell:
+```powershell
+cd backend
+.\.venv\Scripts\Activate.ps1
 pytest -v
 ```
 
-This runs:
-- Identity & Authentication tests
-- Password hashing & Argon2id verification
-- Multi-tenant workspace lifecycle tests
-- Organization & Department management tests
-- Granular RBAC tests
-- Negative tenant isolation regression suite
+This runs all 43 tests across both Milestone 01 and Milestone 02:
+- **`test_auth.py`**: Identity, JWT token generation, refresh tokens, and session handling.
+- **`test_password_hashing.py`**: Argon2id password security.
+- **`test_tenants.py`**: Multi-tenant workspace lifecycle.
+- **`test_organizations_and_departments.py`**: Department, employee group, and membership tests.
+- **`test_rbac_permissions.py`**: Granular role permissions enforcement.
+- **`test_tenant_isolation_security.py`**: Negative cross-tenant security regression suite.
+- **`test_parsers.py`**: All 9 file formats (PDF, DOCX, XLSX, PPTX, CSV, JSON, SQL with zero execution, TXT, Markdown).
+- **`test_chunking.py`**: Recursive, Markdown Header-Aware, Token-Bounded, and Structured chunking strategies.
+- **`test_ocr.py`**: Tesseract fallback, Badho OCR honest placeholder, and scanned PDF detection.
+- **`test_ingestion_pipeline.py`**: End-to-end document upload, parsing, chunking, and content inspection.
+- **`test_document_tenant_isolation.py`**: Negative tenant security tests for documents, chunks, and jobs.
 
-### 6.2 Frontend Verification
-```bash
+### 7.2 Frontend Verification
+```powershell
 cd frontend
 npm run lint
 npm run build
