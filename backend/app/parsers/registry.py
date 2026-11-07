@@ -1,7 +1,7 @@
 """Parser Registry for MM AI Platform."""
 
-import os
 from pathlib import Path
+
 import filetype
 
 from app.parsers.base import DocumentParser

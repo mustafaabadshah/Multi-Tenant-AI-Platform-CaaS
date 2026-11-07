@@ -32,6 +32,9 @@ dependencies = [
     "pytesseract>=0.3.13",
     "pillow>=13.0.0",
     "filetype>=1.2.0",
+    "pgvector>=0.2.5",
+    "qdrant-client>=1.9.0",
+    "cryptography>=42.0.0",
 ]
 
 [project.optional-dependencies]
@@ -52,7 +55,7 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]
-ignore = ["B008"]
+ignore = ["B008", "E501"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

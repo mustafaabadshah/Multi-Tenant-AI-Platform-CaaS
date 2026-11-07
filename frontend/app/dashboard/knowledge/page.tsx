@@ -28,16 +28,21 @@ import {
   RefreshCw,
   Search,
   Sliders,
+  Sparkles,
   Trash2,
   UploadCloud,
   X,
 } from "lucide-react";
+import RetrievalSettingsTab from "./RetrievalSettingsTab";
+import RetrievalPreviewTab from "./RetrievalPreviewTab";
+import IndexStatusTab from "./IndexStatusTab";
 
 export default function KnowledgePage() {
   const { activeWorkspace } = useAuth();
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBaseItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedKB, setSelectedKB] = useState<KnowledgeBaseItem | null>(null);
+  const [kbTab, setKbTab] = useState<"documents" | "retrieval" | "preview" | "index">("documents");
 
   // Create KB Modal State
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -454,8 +459,62 @@ export default function KnowledgePage() {
             </div>
           </div>
 
-          {/* Drag & Drop Upload Dropzone */}
-          <div
+          {/* Milestone 03 Segmented Tab Bar */}
+          <div className="flex border-b border-slate-800 gap-6 text-xs font-semibold">
+            <button
+              type="button"
+              onClick={() => setKbTab("documents")}
+              className={`py-3 border-b-2 transition cursor-pointer flex items-center gap-1.5 ${
+                kbTab === "documents"
+                  ? "border-amber-500 text-amber-400"
+                  : "border-transparent text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>Documents ({documents.length})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setKbTab("retrieval")}
+              className={`py-3 border-b-2 transition cursor-pointer flex items-center gap-1.5 ${
+                kbTab === "retrieval"
+                  ? "border-amber-500 text-amber-400"
+                  : "border-transparent text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              <Sliders className="w-3.5 h-3.5" />
+              <span>Retrieval & Vectors</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setKbTab("preview")}
+              className={`py-3 border-b-2 transition cursor-pointer flex items-center gap-1.5 ${
+                kbTab === "preview"
+                  ? "border-amber-500 text-amber-400"
+                  : "border-transparent text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Search Sandbox</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setKbTab("index")}
+              className={`py-3 border-b-2 transition cursor-pointer flex items-center gap-1.5 ${
+                kbTab === "index"
+                  ? "border-amber-500 text-amber-400"
+                  : "border-transparent text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              <Database className="w-3.5 h-3.5" />
+              <span>Index Status</span>
+            </button>
+          </div>
+
+          {kbTab === "documents" && (
+            <>
+              {/* Drag & Drop Upload Dropzone */}
+              <div
             onDragOver={(e) => {
               e.preventDefault();
               setIsDragging(true);
@@ -635,8 +694,31 @@ export default function KnowledgePage() {
               </div>
             )}
           </div>
-        </div>
+        </>
       )}
+
+      {kbTab === "retrieval" && (
+        <RetrievalSettingsTab
+          kbId={selectedKB.id}
+          onConfigSaved={() => loadDocuments(selectedKB.id)}
+        />
+      )}
+
+      {kbTab === "preview" && (
+        <RetrievalPreviewTab
+          kbId={selectedKB.id}
+          kbName={selectedKB.name}
+        />
+      )}
+
+      {kbTab === "index" && (
+        <IndexStatusTab
+          kbId={selectedKB.id}
+          kbName={selectedKB.name}
+        />
+      )}
+    </div>
+  )}
 
       {/* Document Details & Inspection Modal */}
       {inspectedDoc && (

@@ -6,6 +6,7 @@ This parser performs pure AST parsing and static analysis only.
 """
 
 import time
+
 import sqlglot
 from sqlglot import exp
 
@@ -84,7 +85,6 @@ class SQLParser(DocumentParser):
                         table_name = str(target_table)
                     columns_data: list[list[str]] = []
                     primary_keys = []
-                    foreign_keys = []
 
                     # If schema expression, extract column definitions
                     if isinstance(target_table, exp.Schema):

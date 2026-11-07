@@ -84,6 +84,13 @@ class PermissionName(str, Enum):
     INGESTION_CANCEL = "ingestion.cancel"
     INGESTION_CONFIGURE = "ingestion.configure"
 
+    # Retrieval & Vector Search (Milestone 03)
+    RETRIEVAL_SEARCH = "retrieval.search"
+    RETRIEVAL_PREVIEW = "retrieval.preview"
+    RETRIEVAL_CONFIGURE = "retrieval.configure"
+    INDEX_READ = "index.read"
+    INDEX_REINDEX = "index.reindex"
+
     # Conversations & Chat
     CONVERSATION_CREATE = "conversation.create"
     CONVERSATION_READ = "conversation.read"
@@ -133,6 +140,11 @@ ROLE_PERMISSIONS_MAP: dict[SystemRole, list[PermissionName]] = {
         PermissionName.INGESTION_RETRY,
         PermissionName.INGESTION_CANCEL,
         PermissionName.INGESTION_CONFIGURE,
+        PermissionName.RETRIEVAL_SEARCH,
+        PermissionName.RETRIEVAL_PREVIEW,
+        PermissionName.RETRIEVAL_CONFIGURE,
+        PermissionName.INDEX_READ,
+        PermissionName.INDEX_REINDEX,
         PermissionName.CONVERSATION_CREATE,
         PermissionName.CONVERSATION_READ,
         PermissionName.CONVERSATION_DELETE,
@@ -171,6 +183,11 @@ ROLE_PERMISSIONS_MAP: dict[SystemRole, list[PermissionName]] = {
         PermissionName.INGESTION_RETRY,
         PermissionName.INGESTION_CANCEL,
         PermissionName.INGESTION_CONFIGURE,
+        PermissionName.RETRIEVAL_SEARCH,
+        PermissionName.RETRIEVAL_PREVIEW,
+        PermissionName.RETRIEVAL_CONFIGURE,
+        PermissionName.INDEX_READ,
+        PermissionName.INDEX_REINDEX,
         PermissionName.CONVERSATION_CREATE,
         PermissionName.CONVERSATION_READ,
         PermissionName.CONVERSATION_DELETE,
@@ -193,6 +210,9 @@ ROLE_PERMISSIONS_MAP: dict[SystemRole, list[PermissionName]] = {
         PermissionName.DOCUMENT_READ_CHUNKS,
         PermissionName.INGESTION_READ,
         PermissionName.INGESTION_RETRY,
+        PermissionName.RETRIEVAL_SEARCH,
+        PermissionName.RETRIEVAL_PREVIEW,
+        PermissionName.INDEX_READ,
         PermissionName.CONVERSATION_CREATE,
         PermissionName.CONVERSATION_READ,
         PermissionName.CONVERSATION_DELETE,
@@ -208,6 +228,9 @@ ROLE_PERMISSIONS_MAP: dict[SystemRole, list[PermissionName]] = {
         PermissionName.DOCUMENT_READ,
         PermissionName.DOCUMENT_READ_CONTENT,
         PermissionName.DOCUMENT_READ_CHUNKS,
+        PermissionName.RETRIEVAL_SEARCH,
+        PermissionName.RETRIEVAL_PREVIEW,
+        PermissionName.INDEX_READ,
         PermissionName.CONVERSATION_CREATE,
         PermissionName.CONVERSATION_READ,
     ],
@@ -226,6 +249,11 @@ ROLE_PERMISSIONS_MAP: dict[SystemRole, list[PermissionName]] = {
         PermissionName.INGESTION_READ,
         PermissionName.INGESTION_RETRY,
         PermissionName.INGESTION_CONFIGURE,
+        PermissionName.RETRIEVAL_SEARCH,
+        PermissionName.RETRIEVAL_PREVIEW,
+        PermissionName.RETRIEVAL_CONFIGURE,
+        PermissionName.INDEX_READ,
+        PermissionName.INDEX_REINDEX,
         PermissionName.ASSISTANT_READ,
         PermissionName.CONVERSATION_CREATE,
         PermissionName.CONVERSATION_READ,
@@ -242,6 +270,7 @@ ROLE_PERMISSIONS_MAP: dict[SystemRole, list[PermissionName]] = {
         PermissionName.DOCUMENT_READ_CONTENT,
         PermissionName.DOCUMENT_READ_CHUNKS,
         PermissionName.INGESTION_READ,
+        PermissionName.RETRIEVAL_SEARCH,
         PermissionName.CONVERSATION_CREATE,
         PermissionName.CONVERSATION_READ,
     ],
@@ -255,6 +284,7 @@ ROLE_PERMISSIONS_MAP: dict[SystemRole, list[PermissionName]] = {
         PermissionName.DOCUMENT_READ,
         PermissionName.DOCUMENT_READ_CONTENT,
         PermissionName.DOCUMENT_READ_CHUNKS,
+        PermissionName.RETRIEVAL_SEARCH,
         PermissionName.CONVERSATION_READ,
     ],
 }

@@ -19,6 +19,12 @@ class Assistant(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin):
     slug: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     description: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     default_model: Mapped[str] = mapped_column(String(100), default="auto", nullable=False)
+    llm_provider: Mapped[str] = mapped_column(String(50), default="omniroute", nullable=False)
+    temperature: Mapped[float] = mapped_column(default=0.7, nullable=False)
+    max_tokens: Mapped[int] = mapped_column(Integer, default=1024, nullable=False)
+    visibility: Mapped[str] = mapped_column(String(50), default="workspace", nullable=False)
+    retrieval_mode: Mapped[str] = mapped_column(String(50), default="hybrid", nullable=False)
+    top_k: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
     system_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(50), default="ACTIVE", nullable=False)
 
@@ -33,6 +39,10 @@ class Assistant(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin):
     conversations: Mapped[list["Conversation"]] = relationship(
         "Conversation", back_populates="assistant", cascade="all, delete-orphan"
     )
+    connected_kbs: Mapped[list["AssistantKnowledgeBase"]] = relationship(
+        "AssistantKnowledgeBase", back_populates="assistant", cascade="all, delete-orphan"
+    )
+
 
 
 class AssistantVersion(Base, UUIDPrimaryKeyMixin, TimestampMixin):
@@ -81,3 +91,24 @@ class AssistantMembership(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         ForeignKey("employee_groups.id", ondelete="CASCADE"),
         nullable=True,
     )
+
+
+class AssistantKnowledgeBase(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin):
+    __tablename__ = "assistant_knowledge_bases"
+    __table_args__ = (
+        UniqueConstraint("assistant_id", "knowledge_base_id", name="uq_assistant_kb"),
+    )
+
+    assistant_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("assistants.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    knowledge_base_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("knowledge_bases.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    assistant: Mapped["Assistant"] = relationship("Assistant", back_populates="connected_kbs")
+

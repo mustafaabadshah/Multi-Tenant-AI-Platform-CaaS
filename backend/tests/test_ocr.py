@@ -1,7 +1,7 @@
 """Tests for OCR subsystem, provider registration, and honest placeholder behavior."""
 
-import pytest
 import pymupdf
+import pytest
 
 from app.ocr.badho import BadhoOCRProvider
 from app.ocr.base import OCRConfiguration
@@ -43,7 +43,7 @@ async def test_scanned_pdf_detection_heuristic():
     page1.insert_text((50, 50), "This is text based content.")
     
     # Page 2: empty text
-    page2 = doc.new_page()
+    doc.new_page()
     pdf_bytes = doc.tobytes()
     doc.close()
 

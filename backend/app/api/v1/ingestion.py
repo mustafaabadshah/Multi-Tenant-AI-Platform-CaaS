@@ -13,7 +13,7 @@ from app.models.user import User
 from app.repositories.audit_repository import AuditLogRepository
 from app.repositories.document_repository import IngestionJobRepository
 from app.schemas.knowledge import IngestionJobResponse
-from app.services.ingestion.service import IngestionService, run_ingestion_in_background
+from app.services.ingestion.service import run_ingestion_in_background
 
 router = APIRouter(prefix="/ingestion", tags=["Ingestion Jobs"])
 

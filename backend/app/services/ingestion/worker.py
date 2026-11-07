@@ -4,7 +4,6 @@ import asyncio
 import logging
 import signal
 import sys
-import uuid
 
 from sqlalchemy import select
 

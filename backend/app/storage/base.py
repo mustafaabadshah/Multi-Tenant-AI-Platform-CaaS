@@ -1,9 +1,8 @@
 """Storage provider interface for MM AI Platform."""
 
-from abc import ABC, abstractmethod
-from typing import AsyncIterator
 import re
 import uuid
+from abc import ABC, abstractmethod
 
 
 def sanitize_filename(filename: str) -> str:

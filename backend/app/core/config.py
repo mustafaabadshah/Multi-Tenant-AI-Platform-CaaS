@@ -59,6 +59,21 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str | None = None
     LLM_DEFAULT_MODEL: str = "auto"
 
+    # Embeddings & Vector Stores (Milestone 03)
+    DEFAULT_RETRIEVAL_MODE: str = "hybrid"  # "lexical", "semantic", "hybrid"
+    DEFAULT_VECTOR_STORE: str = "pgvector"  # "pgvector", "qdrant", "fts"
+    DEFAULT_EMBEDDING_PROVIDER: str = "omniroute"  # "omniroute", "openai", "local", "mock"
+    DEFAULT_EMBEDDING_MODEL: str = "text-embedding-3-small"
+    DEFAULT_EMBEDDING_DIMENSIONS: int = 1536
+    EMBEDDING_BATCH_SIZE: int = 32
+    EMBEDDING_TIMEOUT_SECONDS: int = 30
+    EMBEDDING_MAX_RETRIES: int = 3
+    RRF_K_CONSTANT: int = 60
+    RERANKING_ENABLED_DEFAULT: bool = False
+    ENCRYPTION_KEY: str | None = None
+    MAX_EMBEDDING_TOKENS_PER_REQUEST: int = 8192
+    MAX_TOP_K: int = 50
+
 
 @lru_cache
 def get_settings() -> Settings:

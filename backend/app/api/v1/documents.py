@@ -20,7 +20,7 @@ from app.schemas.knowledge import (
     IngestionEventResponse,
     IngestionJobResponse,
 )
-from app.services.ingestion.service import IngestionService, run_ingestion_in_background
+from app.services.ingestion.service import run_ingestion_in_background
 from app.storage import get_storage_provider
 
 router = APIRouter(prefix="/documents", tags=["Documents & Extraction"])

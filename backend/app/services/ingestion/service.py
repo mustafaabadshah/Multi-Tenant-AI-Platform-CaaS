@@ -1,19 +1,19 @@
 """Document Ingestion Service orchestrating upload, storage, parsing, OCR, and chunking."""
 
-import asyncio
-from datetime import datetime, timezone
 import hashlib
 import logging
 import time
-from typing import Any
 import uuid
+from datetime import datetime, timezone
+from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.chunking import ChunkingConfig, get_chunking_registry
 from app.core.config import settings
 from app.database.session import async_session_factory
-from app.models.knowledge import Document, DocumentVersion, IngestionJob, KnowledgeBase
+from app.models.knowledge import Document, IngestionJob
 from app.ocr import OCRConfiguration, get_ocr_registry
 from app.parsers import ExtractedDocument, get_parser_registry
 from app.repositories.document_repository import DocumentRepository, IngestionJobRepository
@@ -304,6 +304,95 @@ class IngestionService:
                 latest_version.ocr_provider = ocr_provider_name if ocr_applied else None
                 latest_version.ocr_language = ocr_language if ocr_applied else None
 
+            # 6b. Embedding & Vector Store Indexing Stage (Milestone 03)
+            from app.embeddings.service import EmbeddingService
+            from app.repositories.retrieval_repository import RetrievalRepository
+            from app.vectorstores.base import VectorPoint
+            from app.vectorstores.registry import get_vector_store
+
+            ret_repo = RetrievalRepository(self.session, self.tenant_id)
+            ret_cfg = await ret_repo.get_or_create_config(doc.knowledge_base_id)
+
+            if ret_cfg.vector_store == "fts":
+                job.stage = "INDEXED"
+                job.progress_pct = 95
+                await self.job_repo.record_event(
+                    job_id=job.id,
+                    document_id=doc.id,
+                    stage="INDEXING",
+                    status="COMPLETED",
+                    message="FTS-only mode active. Lexical search indexed immediately without embeddings.",
+                    details={"vector_store": "fts"},
+                )
+            else:
+                job.stage = "EMBEDDING"
+                job.progress_pct = 85
+                await self.job_repo.record_event(
+                    job_id=job.id,
+                    document_id=doc.id,
+                    stage="EMBEDDING",
+                    status="STARTED",
+                    message=f"Generating embeddings using '{ret_cfg.embedding_provider}' ({ret_cfg.embedding_model}).",
+                    details={
+                        "provider": ret_cfg.embedding_provider,
+                        "model": ret_cfg.embedding_model,
+                        "dimensions": ret_cfg.embedding_dimensions,
+                    },
+                )
+
+                try:
+                    emb_service = EmbeddingService(self.session, self.tenant_id)
+                    generated_embeddings = await emb_service.embed_chunks(
+                        knowledge_base_id=doc.knowledge_base_id,
+                        chunks=saved_chunks,
+                        ret_config=ret_cfg,
+                    )
+
+                    if ret_cfg.vector_store == "qdrant":
+                        job.stage = "INDEXING"
+                        job.progress_pct = 95
+                        qdrant_store = get_vector_store("qdrant")
+                        qpoints = [
+                            VectorPoint(
+                                id=str(emb.chunk_id),
+                                vector=emb.vector or [],
+                                dimensions=emb.dimensions,
+                                payload={
+                                    "document_id": str(doc.id),
+                                    "document_version_id": str(job.document_version_id) if job.document_version_id else None,
+                                    "chunk_id": str(emb.chunk_id),
+                                    "embedding_version": ret_cfg.embedding_version,
+                                    "provider": emb.provider,
+                                    "model": emb.model,
+                                    "content": next((c.content for c in saved_chunks if c.id == emb.chunk_id), ""),
+                                    "document_title": doc.filename,
+                                    "department_id": str(doc.department_id) if doc.department_id else None,
+                                    "access_level": doc.access_level,
+                                },
+                            )
+                            for emb in generated_embeddings
+                        ]
+                        await qdrant_store.upsert(qpoints, self.tenant_id, doc.knowledge_base_id)
+
+                    await self.job_repo.record_event(
+                        job_id=job.id,
+                        document_id=doc.id,
+                        stage="INDEXING",
+                        status="COMPLETED",
+                        message=f"Indexed {len(generated_embeddings)} vectors into {ret_cfg.vector_store}.",
+                        details={"vector_store": ret_cfg.vector_store, "vectors_count": len(generated_embeddings)},
+                    )
+                except (TimeoutError, ConnectionError, PermissionError) as emb_err:
+                    logger.warning(f"Embedding generation warning for job {job.id}: {emb_err}")
+                    await self.job_repo.record_event(
+                        job_id=job.id,
+                        document_id=doc.id,
+                        stage="EMBEDDING",
+                        status="WARNING",
+                        message=f"Embedding provider unavailable ({emb_err}). Chunks saved and available for lexical retrieval.",
+                        details={"warning": str(emb_err)},
+                    )
+
             # 7. Complete Job & Document Status
             duration_ms = int((time.perf_counter() - start_time) * 1000)
             doc.status = "COMPLETED"
@@ -363,6 +452,97 @@ class IngestionService:
 
             await self.session.commit()
             return job
+
+    async def reindex_knowledge_base(self, knowledge_base_id: uuid.UUID | str) -> Any:
+        """Trigger re-embedding and re-indexing for all active document chunks in a Knowledge Base."""
+        from app.embeddings.service import EmbeddingService
+        from app.models.knowledge import Document, DocumentChunk
+        from app.repositories.retrieval_repository import RetrievalRepository
+        from app.vectorstores.base import VectorPoint
+        from app.vectorstores.registry import get_vector_store
+
+        kb_id = uuid.UUID(str(knowledge_base_id)) if isinstance(knowledge_base_id, str) else knowledge_base_id
+        ret_repo = RetrievalRepository(self.session, self.tenant_id)
+        ret_cfg = await ret_repo.get_or_create_config(kb_id)
+
+        # 1. Fetch all active chunks in this KB
+        stmt = (
+            select(DocumentChunk)
+            .join(Document, DocumentChunk.document_id == Document.id)
+            .where(
+                DocumentChunk.tenant_id == self.tenant_id,
+                DocumentChunk.knowledge_base_id == kb_id,
+                Document.status != "DELETED",
+            )
+            .order_by(DocumentChunk.document_id, DocumentChunk.chunk_index)
+        )
+        chunks = list((await self.session.execute(stmt)).scalars().all())
+
+        # 2. Create tracked EmbeddingJob
+        emb_job = await ret_repo.create_embedding_job(
+            knowledge_base_id=kb_id,
+            embedding_version=ret_cfg.embedding_version,
+            total_chunks=len(chunks),
+        )
+        emb_job.status = "PROCESSING"
+        emb_job.stage = "EMBEDDING"
+        await self.session.commit()
+
+        if ret_cfg.vector_store == "fts" or not chunks:
+            emb_job.status = "COMPLETED"
+            emb_job.stage = "COMPLETED"
+            emb_job.processed_chunks = len(chunks)
+            emb_job.completed_at = datetime.now(timezone.utc)
+            await self.session.commit()
+            return emb_job
+
+        try:
+            emb_service = EmbeddingService(self.session, self.tenant_id)
+            embeddings = await emb_service.embed_chunks(
+                knowledge_base_id=kb_id,
+                chunks=chunks,
+                ret_config=ret_cfg,
+            )
+
+            if ret_cfg.vector_store == "qdrant":
+                emb_job.stage = "INDEXING"
+                await self.session.commit()
+
+                qdrant_store = get_vector_store("qdrant")
+                qpoints = [
+                    VectorPoint(
+                        id=str(emb.chunk_id),
+                        vector=emb.vector or [],
+                        dimensions=emb.dimensions,
+                        payload={
+                            "document_id": str(emb.document_id),
+                            "chunk_id": str(emb.chunk_id),
+                            "embedding_version": ret_cfg.embedding_version,
+                            "provider": emb.provider,
+                            "model": emb.model,
+                            "content": next((c.content for c in chunks if c.id == emb.chunk_id), ""),
+                        },
+                    )
+                    for emb in embeddings
+                ]
+                await qdrant_store.upsert(qpoints, self.tenant_id, kb_id)
+
+            emb_job.status = "COMPLETED"
+            emb_job.stage = "COMPLETED"
+            emb_job.processed_chunks = len(embeddings)
+            emb_job.completed_at = datetime.now(timezone.utc)
+            await self.session.commit()
+            return emb_job
+
+        except Exception as exc:
+            logger.exception(f"Reindexing failed for KB {kb_id}: {exc}")
+            emb_job.status = "FAILED"
+            emb_job.stage = "FAILED"
+            emb_job.error_message = str(exc)
+            emb_job.completed_at = datetime.now(timezone.utc)
+            await self.session.commit()
+            raise
+
 
 
 async def run_ingestion_in_background(tenant_id: uuid.UUID, job_id: uuid.UUID) -> None:

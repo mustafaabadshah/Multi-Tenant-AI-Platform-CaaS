@@ -21,6 +21,12 @@ from app.schemas.knowledge import (
     KnowledgeBaseCreateRequest,
     KnowledgeBaseResponse,
 )
+from app.schemas.retrieval import (
+    EmbeddingJobRead,
+    IndexStatusResponse,
+    RetrievalConfigRead,
+    RetrievalConfigUpdate,
+)
 from app.services.ingestion.service import IngestionService, run_ingestion_in_background
 
 router = APIRouter(prefix="/knowledge", tags=["Knowledge Base Foundation"])
@@ -307,4 +313,181 @@ async def update_ingestion_config(
     )
 
     return IngestionConfigResponse.model_validate(updated)
+
+
+@router.get("/{kb_id}/retrieval-config", response_model=RetrievalConfigRead)
+async def get_retrieval_config(
+    kb_id: uuid.UUID,
+    ctx: TenantContext = Depends(require_permission(PermissionName.RETRIEVAL_SEARCH.value)),
+    db: AsyncSession = Depends(get_db),
+) -> RetrievalConfigRead:
+    """Fetch retrieval & vector database configuration for a knowledge base."""
+    kb_repo = KnowledgeRepository(db, ctx.tenant.id)
+    kb = await kb_repo.get_by_id(kb_id)
+    if not kb:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Knowledge base not found")
+
+    from app.core.crypto import decrypt_secret, mask_secret
+    from app.repositories.retrieval_repository import RetrievalRepository
+    from app.schemas.retrieval import RetrievalConfigRead
+
+    ret_repo = RetrievalRepository(db, ctx.tenant.id)
+    cfg = await ret_repo.get_or_create_config(kb_id)
+    plain = decrypt_secret(cfg.encrypted_api_key) if cfg.encrypted_api_key else None
+
+    return RetrievalConfigRead(
+        id=cfg.id,
+        knowledge_base_id=cfg.knowledge_base_id,
+        retrieval_mode=cfg.retrieval_mode,
+        vector_store=cfg.vector_store,
+        embedding_provider=cfg.embedding_provider,
+        embedding_model=cfg.embedding_model,
+        embedding_dimensions=cfg.embedding_dimensions,
+        similarity_metric=cfg.similarity_metric,
+        top_k=cfg.top_k,
+        rrf_k=cfg.rrf_k,
+        rerank_enabled=cfg.rerank_enabled,
+        rerank_provider=cfg.rerank_provider,
+        embedding_version=cfg.embedding_version,
+        has_api_key=bool(cfg.encrypted_api_key),
+        masked_api_key=mask_secret(plain) if plain else None,
+        settings_json=cfg.settings_json or {},
+    )
+
+
+@router.patch("/{kb_id}/retrieval-config", response_model=RetrievalConfigRead)
+async def update_retrieval_config(
+    kb_id: uuid.UUID,
+    payload: RetrievalConfigUpdate,
+    ctx: TenantContext = Depends(require_permission(PermissionName.RETRIEVAL_CONFIGURE.value)),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> RetrievalConfigRead:
+    """Update retrieval and vector configuration for a knowledge base."""
+    kb_repo = KnowledgeRepository(db, ctx.tenant.id)
+    kb = await kb_repo.get_by_id(kb_id)
+    if not kb:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Knowledge base not found")
+
+    from app.core.crypto import decrypt_secret, mask_secret
+    from app.repositories.retrieval_repository import RetrievalRepository
+
+    ret_repo = RetrievalRepository(db, ctx.tenant.id)
+    update_data = payload.model_dump(exclude_unset=True)
+
+    updated = await ret_repo.update_config(kb_id, **update_data)
+    await db.commit()
+
+    audit_repo = AuditLogRepository(db, ctx.tenant.id)
+    await audit_repo.log_event(
+        action="retrieval.configure",
+        resource_type="knowledge_base",
+        resource_id=kb_id,
+        actor_id=current_user.id,
+        details={k: v for k, v in update_data.items() if k != "api_key"},
+    )
+
+    plain = decrypt_secret(updated.encrypted_api_key) if updated.encrypted_api_key else None
+    return RetrievalConfigRead(
+        id=updated.id,
+        knowledge_base_id=updated.knowledge_base_id,
+        retrieval_mode=updated.retrieval_mode,
+        vector_store=updated.vector_store,
+        embedding_provider=updated.embedding_provider,
+        embedding_model=updated.embedding_model,
+        embedding_dimensions=updated.embedding_dimensions,
+        similarity_metric=updated.similarity_metric,
+        top_k=updated.top_k,
+        rrf_k=updated.rrf_k,
+        rerank_enabled=updated.rerank_enabled,
+        rerank_provider=updated.rerank_provider,
+        embedding_version=updated.embedding_version,
+        has_api_key=bool(updated.encrypted_api_key),
+        masked_api_key=mask_secret(plain) if plain else None,
+        settings_json=updated.settings_json or {},
+    )
+
+
+@router.get("/{kb_id}/index-status", response_model=IndexStatusResponse)
+async def get_kb_index_status(
+    kb_id: uuid.UUID,
+    ctx: TenantContext = Depends(require_permission(PermissionName.INDEX_READ.value)),
+    db: AsyncSession = Depends(get_db),
+) -> IndexStatusResponse:
+    """Return indexing statistics, chunk counts, and vector store health for a knowledge base."""
+    kb_repo = KnowledgeRepository(db, ctx.tenant.id)
+    kb = await kb_repo.get_by_id(kb_id)
+    if not kb:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Knowledge base not found")
+
+    from app.repositories.retrieval_repository import RetrievalRepository
+
+    ret_repo = RetrievalRepository(db, ctx.tenant.id)
+    status_data = await ret_repo.get_index_status(kb_id)
+    return IndexStatusResponse(**status_data)
+
+
+@router.post("/{kb_id}/reindex")
+async def trigger_kb_reindex(
+    kb_id: uuid.UUID,
+    ctx: TenantContext = Depends(require_permission(PermissionName.INDEX_REINDEX.value)),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Trigger re-embedding and vector store reindexing for all chunks in this knowledge base."""
+    kb_repo = KnowledgeRepository(db, ctx.tenant.id)
+    kb = await kb_repo.get_by_id(kb_id)
+    if not kb:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Knowledge base not found")
+
+    service = IngestionService(db, ctx.tenant.id)
+    job = await service.reindex_knowledge_base(kb_id)
+
+    audit_repo = AuditLogRepository(db, ctx.tenant.id)
+    await audit_repo.log_event(
+        action="index.reindex",
+        resource_type="knowledge_base",
+        resource_id=kb_id,
+        actor_id=current_user.id,
+        details={"job_id": str(job.id), "total_chunks": job.total_chunks},
+    )
+
+    return {
+        "message": "Reindexing completed successfully.",
+        "job_id": str(job.id),
+        "status": job.status,
+        "processed_chunks": job.processed_chunks,
+        "total_chunks": job.total_chunks,
+    }
+
+
+@router.get("/{kb_id}/embedding-jobs", response_model=list[EmbeddingJobRead])
+async def list_kb_embedding_jobs(
+    kb_id: uuid.UUID,
+    ctx: TenantContext = Depends(require_permission(PermissionName.INDEX_READ.value)),
+    db: AsyncSession = Depends(get_db),
+) -> list[EmbeddingJobRead]:
+    """List recent embedding and reindexing jobs for a knowledge base."""
+    from app.repositories.retrieval_repository import RetrievalRepository
+
+    ret_repo = RetrievalRepository(db, ctx.tenant.id)
+    jobs = await ret_repo.list_embedding_jobs(kb_id)
+    return [
+        EmbeddingJobRead(
+            id=j.id,
+            knowledge_base_id=j.knowledge_base_id,
+            document_id=j.document_id,
+            embedding_version=j.embedding_version,
+            status=j.status,
+            stage=j.stage,
+            total_chunks=j.total_chunks,
+            processed_chunks=j.processed_chunks,
+            failed_chunks=j.failed_chunks,
+            error_message=j.error_message,
+            created_at=j.created_at.isoformat(),
+            completed_at=j.completed_at.isoformat() if j.completed_at else None,
+        )
+        for j in jobs
+    ]
+
 

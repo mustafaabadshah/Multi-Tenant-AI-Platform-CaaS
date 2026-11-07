@@ -1,11 +1,12 @@
 """Comprehensive unit tests for all 9 document parsers and registry."""
 
 import io
-import pytest
+
 import docx
 import openpyxl
-from pptx import Presentation
 import pymupdf
+import pytest
+from pptx import Presentation
 
 from app.parsers.csv_parser import CSVParser
 from app.parsers.docx import DOCXParser

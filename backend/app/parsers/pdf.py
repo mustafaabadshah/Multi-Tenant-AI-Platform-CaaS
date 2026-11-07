@@ -1,7 +1,7 @@
 """PDF Document Parser using PyMuPDF (fitz)."""
 
-import io
 import time
+
 import pymupdf
 
 from app.parsers.base import (
