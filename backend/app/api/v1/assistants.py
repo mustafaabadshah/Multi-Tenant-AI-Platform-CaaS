@@ -61,20 +61,26 @@ async def create_assistant(
     db: AsyncSession = Depends(get_db),
 ) -> AssistantResponse:
     repo = AssistantRepository(db, ctx.tenant.id)
-    assistant = await repo.create_assistant(
-        name=payload.name.strip(),
-        slug=payload.slug,
-        description=payload.description,
-        llm_provider=payload.llm_provider,
-        default_model=payload.default_model,
-        temperature=payload.temperature,
-        max_tokens=payload.max_tokens,
-        visibility=payload.visibility,
-        retrieval_mode=payload.retrieval_mode,
-        top_k=payload.top_k,
-        system_prompt=payload.system_prompt,
-        knowledge_base_ids=payload.knowledge_base_ids,
-    )
+    try:
+        assistant = await repo.create_assistant(
+            name=payload.name.strip(),
+            slug=payload.slug,
+            description=payload.description,
+            llm_provider=payload.llm_provider,
+            default_model=payload.default_model,
+            temperature=payload.temperature,
+            max_tokens=payload.max_tokens,
+            visibility=payload.visibility,
+            retrieval_mode=payload.retrieval_mode,
+            top_k=payload.top_k,
+            system_prompt=payload.system_prompt,
+            knowledge_base_ids=payload.knowledge_base_ids,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
 
     audit_repo = AuditLogRepository(db, ctx.tenant.id)
     await audit_repo.log_event(
@@ -151,26 +157,32 @@ async def get_assistant(
 async def update_assistant(
     assistant_id: uuid.UUID,
     payload: AssistantUpdateRequest,
-    ctx: TenantContext = Depends(require_permission(PermissionName.ASSISTANT_CREATE.value)),
+    ctx: TenantContext = Depends(require_permission(PermissionName.ASSISTANT_UPDATE.value)),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> AssistantResponse:
     repo = AssistantRepository(db, ctx.tenant.id)
-    updated = await repo.update_assistant(
-        assistant_id=assistant_id,
-        name=payload.name,
-        description=payload.description,
-        llm_provider=payload.llm_provider,
-        default_model=payload.default_model,
-        temperature=payload.temperature,
-        max_tokens=payload.max_tokens,
-        visibility=payload.visibility,
-        retrieval_mode=payload.retrieval_mode,
-        top_k=payload.top_k,
-        system_prompt=payload.system_prompt,
-        status=payload.status,
-        knowledge_base_ids=payload.knowledge_base_ids,
-    )
+    try:
+        updated = await repo.update_assistant(
+            assistant_id=assistant_id,
+            name=payload.name,
+            description=payload.description,
+            llm_provider=payload.llm_provider,
+            default_model=payload.default_model,
+            temperature=payload.temperature,
+            max_tokens=payload.max_tokens,
+            visibility=payload.visibility,
+            retrieval_mode=payload.retrieval_mode,
+            top_k=payload.top_k,
+            system_prompt=payload.system_prompt,
+            status=payload.status,
+            knowledge_base_ids=payload.knowledge_base_ids,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
     if not updated:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

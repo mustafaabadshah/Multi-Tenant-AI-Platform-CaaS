@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 import time
 import uuid
 from collections.abc import AsyncIterator
@@ -18,13 +19,21 @@ from app.models.knowledge import KnowledgeBase
 from app.retrieval.service import RetrievalService
 from app.vectorstores.base import VectorSearchResult
 
-
 logger = logging.getLogger("mmaip.assistant_runtime")
 
 
 def format_sse(event: str, data: dict[str, Any]) -> str:
     """Format an SSE frame according to the W3C spec."""
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"
+
+
+def sanitize_error_message(err_msg: str) -> str:
+    """Redact sensitive credentials, API keys, and secret tokens from user-facing error messages."""
+    sanitized = re.sub(r"(sk-[a-zA-Z0-9_\-]{8,})", "[REDACTED_API_KEY]", err_msg)
+    sanitized = re.sub(r"(Bearer\s+)[a-zA-Z0-9_\-\.]{8,}", r"\1[REDACTED_TOKEN]", sanitized, flags=re.IGNORECASE)
+    sanitized = re.sub(r"TEST_SECRET_[A-Z0-9_]+", "[REDACTED_SECRET]", sanitized)
+    sanitized = re.sub(r"(password|pwd|secret|api_key|token)\s*=\s*['\"]?[^'\"\s]+['\"]?", r"\1=[REDACTED]", sanitized, flags=re.IGNORECASE)
+    return sanitized
 
 
 class AssistantRuntime:
@@ -58,7 +67,7 @@ class AssistantRuntime:
             Conversation.tenant_id == self.tenant_id,
         )
         conv = (await self.session.execute(conv_stmt)).scalar_one_or_none()
-        if not conv:
+        if not conv or (not self.is_admin and conv.user_id != self.user_id):
             yield format_sse("message_error", {"error": "Conversation not found or unauthorized"})
             return
 
@@ -175,10 +184,15 @@ class AssistantRuntime:
                     yield format_sse("token", {"delta": chunk.content_delta})
         except Exception as e:
             logger.exception("LLM generation stream failed")
-            yield format_sse("message_error", {"error": f"LLM generation failed: {str(e)}"})
+            safe_err = sanitize_error_message(str(e))
+            yield format_sse("message_error", {"error": f"LLM generation failed: {safe_err}"})
             return
 
         final_content = "".join(full_content_chunks)
+        if not final_content.strip():
+            logger.warning("LLM provider returned empty response stream")
+            yield format_sse("message_error", {"error": "LLM generation failed: Empty response stream received"})
+            return
 
         # 7. Persist User Message, Assistant Message, and Citations in Database
         user_msg = Message(

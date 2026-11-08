@@ -1,0 +1,26 @@
+{
+  "lexical": {
+    "count": 25,
+    "avg_ms": 0.322,
+    "median_p50_ms": 0.264,
+    "p95_ms": 0.838,
+    "min_ms": 0.203,
+    "max_ms": 0.897
+  },
+  "semantic": {
+    "count": 25,
+    "avg_ms": 15.497,
+    "median_p50_ms": 12.59,
+    "p95_ms": 24.116,
+    "min_ms": 10.237,
+    "max_ms": 30.743
+  },
+  "hybrid_rrf": {
+    "count": 25,
+    "avg_ms": 0.038,
+    "median_p50_ms": 0.028,
+    "p95_ms": 0.116,
+    "min_ms": 0.023,
+    "max_ms": 0.158
+  }
+}

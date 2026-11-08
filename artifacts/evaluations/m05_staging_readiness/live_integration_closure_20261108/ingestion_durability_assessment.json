@@ -1,0 +1,9 @@
+{
+  "timestamp": "2026-11-07T21:03:51.104439+00:00",
+  "status": "DOCUMENTED_ARCHITECTURAL_LIMITATION",
+  "mechanism": "In-process asyncio.create_task with PostgreSQL job state tracking",
+  "durability_gap": "Process restart during active ingestion leaves job in STARTED or QUEUED state.",
+  "mitigation": "POST /documents/{id}/reprocess endpoint allows re-queuing and executing interrupted jobs.",
+  "staging_suitability": "ACCEPTABLE for staging deployment with documented limitations.",
+  "production_recommendation": "Deploy standalone background worker (e.g. Celery / ARQ / SAQ) for high-volume enterprise production."
+}

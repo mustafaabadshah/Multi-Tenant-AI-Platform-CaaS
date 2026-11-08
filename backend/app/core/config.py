@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,17 +18,42 @@ class Settings(BaseSettings):
 
     FRONTEND_URL: str = "http://localhost:3000"
     BACKEND_URL: str = "http://localhost:8000"
+    ALLOWED_ORIGINS: str = ""
+    CORS_ORIGIN_REGEX: str = r"^https://mmaip-frontend(-[a-zA-Z0-9_-]+)?\.vercel\.app$"
 
     # Security & JWT
     SECRET_KEY: str = "dev-secret-key-change-me-in-production-min-32-bytes-long"
+    PREVIOUS_SECRET_KEYS: str = ""  # Comma-separated previous secret keys for seamless decryption during key rotation
     JWT_SECRET: str = "dev-jwt-secret-key-change-me-in-production-min-32-bytes"
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
-    # Database
+    # Database & Connection Pooling
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/mmaip_dev"
     DATABASE_SYNC_URL: str = "postgresql://postgres:postgres@localhost:5432/mmaip_dev"
+
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def assemble_async_database_url(cls, v: str) -> str:
+        if isinstance(v, str):
+            if v.startswith("postgres://"):
+                return v.replace("postgres://", "postgresql+asyncpg://", 1)
+            elif v.startswith("postgresql://") and not v.startswith("postgresql+"):
+                return v.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return v
+
+    @field_validator("DATABASE_SYNC_URL", mode="before")
+    @classmethod
+    def assemble_sync_database_url(cls, v: str) -> str:
+        if isinstance(v, str) and v.startswith("postgres://"):
+            return v.replace("postgres://", "postgresql://", 1)
+        return v
+
+    DB_POOL_SIZE: int = 5
+    DB_MAX_OVERFLOW: int = 10
+    DB_POOL_TIMEOUT: int = 30
+    DB_POOL_RECYCLE: int = 1800
 
     # Storage & Upload Limits
     STORAGE_BACKEND: str = "local"
@@ -51,6 +77,7 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
     QDRANT_URL: str = "http://localhost:6333"
     QDRANT_API_KEY: str | None = None
+    QDRANT_COLLECTION_NAME: str = "mmaip_knowledge_chunks"
     PHOENIX_ENABLED: bool = False
 
     # OmniRoute Gateway Settings

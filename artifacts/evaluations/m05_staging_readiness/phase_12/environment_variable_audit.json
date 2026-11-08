@@ -1,0 +1,83 @@
+{
+  "milestone": "M05",
+  "phase": 12,
+  "component": "Environment Variable Audit",
+  "timestamp": "2026-11-08T00:58:00Z",
+  "templates_audited": [".env.example", ".env.production.example"],
+  "security_summary": "Zero secrets committed to version control. Client boundary strictly enforced: only NEXT_PUBLIC_API_URL is exposed to client-side frontend code.",
+  "variable_catalog": [
+    {
+      "name": "SECRET_KEY",
+      "required": true,
+      "tier": "backend",
+      "is_secret": true,
+      "purpose": "Application security signing and hashing key"
+    },
+    {
+      "name": "JWT_SECRET",
+      "required": true,
+      "tier": "backend",
+      "is_secret": true,
+      "purpose": "JWT authentication token signing key"
+    },
+    {
+      "name": "SECRET_ENCRYPTION_KEY",
+      "required": true,
+      "tier": "backend",
+      "is_secret": true,
+      "purpose": "Fernet primary key for BYOK provider credential encryption"
+    },
+    {
+      "name": "PREVIOUS_SECRET_KEYS",
+      "required": false,
+      "tier": "backend",
+      "is_secret": true,
+      "purpose": "Comma-separated list of previous Fernet keys for zero-downtime rotation fallback"
+    },
+    {
+      "name": "DATABASE_URL",
+      "required": true,
+      "tier": "backend",
+      "is_secret": true,
+      "purpose": "Asynchronous PostgreSQL connection URI (asyncpg)"
+    },
+    {
+      "name": "DATABASE_SYNC_URL",
+      "required": true,
+      "tier": "backend",
+      "is_secret": true,
+      "purpose": "Synchronous PostgreSQL connection URI (psycopg2) for Alembic migrations"
+    },
+    {
+      "name": "STORAGE_BACKEND",
+      "required": false,
+      "default": "local",
+      "tier": "backend",
+      "is_secret": false,
+      "purpose": "Storage provider type ('local' or 's3')"
+    },
+    {
+      "name": "STORAGE_PATH",
+      "required": false,
+      "default": "./data/storage",
+      "tier": "backend",
+      "is_secret": false,
+      "purpose": "Local directory path for file uploads"
+    },
+    {
+      "name": "CORS_ORIGINS",
+      "required": false,
+      "default": "http://localhost:3000",
+      "tier": "backend",
+      "is_secret": false,
+      "purpose": "Allowed frontend origins; supports regex for Vercel preview URLs"
+    },
+    {
+      "name": "NEXT_PUBLIC_API_URL",
+      "required": true,
+      "tier": "frontend",
+      "is_secret": false,
+      "purpose": "Public URL of the backend API used by browser fetch calls"
+    }
+  ]
+}

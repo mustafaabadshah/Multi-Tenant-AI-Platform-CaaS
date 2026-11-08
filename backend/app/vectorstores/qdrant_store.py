@@ -29,11 +29,11 @@ class QdrantVectorStore(VectorStore):
         self,
         url: Optional[str] = None,
         api_key: Optional[str] = None,
-        collection_name: str = "mmaip_knowledge_chunks",
+        collection_name: Optional[str] = None,
     ):
         self.url = url or settings.QDRANT_URL
         self.api_key = api_key or settings.QDRANT_API_KEY
-        self.collection_name = collection_name
+        self.collection_name = collection_name or getattr(settings, "QDRANT_COLLECTION_NAME", "mmaip_knowledge_chunks")
         self._client: Optional[Any] = None
 
     @property

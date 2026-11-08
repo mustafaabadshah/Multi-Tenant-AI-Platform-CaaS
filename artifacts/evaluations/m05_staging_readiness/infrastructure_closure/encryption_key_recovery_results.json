@@ -1,0 +1,16 @@
+{
+  "milestone": "M05",
+  "component": "Encryption Key Recovery & Multi-Key Rotation",
+  "timestamp": "2026-11-08T00:50:00Z",
+  "crypto_implementation": {
+    "algorithm": "Fernet AES-128-CBC with HMAC-SHA256 authentication",
+    "module": "backend/app/core/crypto.py",
+    "multi_key_rotation": "MultiFernet supports decrypting ciphertexts encrypted with PREVIOUS_SECRET_KEYS and re-encrypting with current SECRET_ENCRYPTION_KEY",
+    "batch_rotation_cli": "backend/app/commands/rotate_encryption_keys.py"
+  },
+  "recovery_verification": {
+    "key_loss_impact": "FATAL if lost without backup — BYOK credentials cannot be decrypted without SECRET_ENCRYPTION_KEY or PREVIOUS_SECRET_KEYS.",
+    "key_backup_procedure": "Store Fernet keys in enterprise secrets vault (AWS Secrets Manager, HashiCorp Vault, or Render Environment Secrets) separate from database dumps.",
+    "status": "PASS — Multi-key rotation and safe error handling verified by test_m05_database_recovery.py"
+  }
+}

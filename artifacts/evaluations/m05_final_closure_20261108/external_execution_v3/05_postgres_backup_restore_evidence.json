@@ -1,0 +1,15 @@
+{
+  "drill_name": "PostgreSQL Backup & Isolated BYOK Recovery Drill",
+  "script": "infrastructure/scripts/drill-live-postgres-backup-restore.sh",
+  "helper": "backend/app/commands/drill_postgres_recovery.py",
+  "status": "NOT_RUN",
+  "blocker_reason": "Requires live containerized PostgreSQL service; host RAM is 1.70 GB (< 4 GB)",
+  "contract_specifications": {
+    "source_database": "m05_integration",
+    "restore_database": "m05_restore_drill_disposable",
+    "encryption_algorithm": "Fernet / MultiFernet (AES-128-CBC + HMAC-SHA256)",
+    "synthetic_test_token": "sk-antigravity-m05-disposable-token-20261108 (in-memory only)",
+    "database_guards_verified": true,
+    "offline_unit_tests_passed": 9
+  }
+}

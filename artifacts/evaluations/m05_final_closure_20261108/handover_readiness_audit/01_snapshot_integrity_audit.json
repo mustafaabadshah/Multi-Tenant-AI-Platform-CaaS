@@ -1,0 +1,27 @@
+{
+  "timestamp": "2026-11-08T03:17:00Z",
+  "audit_phase": "Phase 2 — Snapshot Integrity Audit",
+  "archive_path": "artifacts/evaluations/m05_final_closure_20261108/portable_runner/m05_live_test_snapshot.zip",
+  "manifest_path": "artifacts/evaluations/m05_final_closure_20261108/portable_runner/snapshot_manifest.json",
+  "archive_exists": true,
+  "physical_size_bytes": 710948,
+  "expected_size_bytes": 710948,
+  "size_match": true,
+  "measured_sha256": "3c97b830261542a6a27dd1d0ee93cc76b63cebbb91f99fa9f54e50dcc8eeed6f",
+  "expected_sha256": "3c97b830261542a6a27dd1d0ee93cc76b63cebbb91f99fa9f54e50dcc8eeed6f",
+  "sha256_match": true,
+  "zip_structural_check": {
+    "testzip_error": null,
+    "status": "PASSED"
+  },
+  "extraction_sandbox_audit": {
+    "manifest_total_entries": 406,
+    "archive_extracted_entries": 406,
+    "path_traversal_entries": 0,
+    "duplicate_path_entries": 0,
+    "missing_files_count": 0,
+    "hash_mismatch_count": 0,
+    "overall_integrity_status": "100% MATCH"
+  },
+  "secret_scanner_status": "PASSED (0 exposed credentials detected)"
+}

@@ -1,0 +1,9 @@
+{
+  "capture_timestamp": "2026-11-08T15:28:00+05:00",
+  "docker_service_status": "STOPPED",
+  "containers_created": [],
+  "volumes_created": [],
+  "images_pulled": [],
+  "networks_created": [],
+  "notes": "Zero disposable containers or test volumes created on host."
+}

@@ -1,0 +1,41 @@
+{
+  "test_run": {
+    "suite": "Phase 9 — PDF Citation Highlighting and Bounding Box Geometry",
+    "timestamp": "2026-11-07T13:35:00Z",
+    "framework": "pytest-9.2.0 + Next.js Turbopack 16.4.5",
+    "total_tests": 80,
+    "passed": 79,
+    "skipped": 1,
+    "failed": 0,
+    "duration_seconds": 48.45,
+    "frontend_build": {
+      "status": "PASS",
+      "static_pages_rendered": 15,
+      "total_pages": 15,
+      "typescript_errors": 0,
+      "lint_errors": 0
+    },
+    "phase_9_unit_tests": [
+      {
+        "name": "tests/test_m05_citation_highlighting.py::test_citation_bounding_box_default_generation",
+        "status": "PASSED"
+      },
+      {
+        "name": "tests/test_m05_citation_highlighting.py::test_citation_bounding_box_custom_metadata_preservation",
+        "status": "PASSED"
+      },
+      {
+        "name": "tests/test_m05_citation_highlighting.py::test_multi_chunk_vertical_slot_distribution",
+        "status": "PASSED"
+      },
+      {
+        "name": "tests/test_m05_citation_highlighting.py::test_citation_security_and_anti_spoofing",
+        "status": "PASSED"
+      },
+      {
+        "name": "tests/test_m05_citation_highlighting.py::test_message_citation_pydantic_schema_validation",
+        "status": "PASSED"
+      }
+    ]
+  }
+}

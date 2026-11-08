@@ -1,0 +1,12 @@
+{
+  "service_name": "mmaip-backend",
+  "environment": "staging",
+  "blueprint_file": "render.yaml",
+  "service_type": "web_service",
+  "region": "oregon",
+  "managed_database": "mmaip-postgres",
+  "fastapi_entrypoint": "app.main:app",
+  "health_endpoint": "/health",
+  "readiness_endpoint": "/ready",
+  "status": "PREPARED_AND_CONFIGURED"
+}

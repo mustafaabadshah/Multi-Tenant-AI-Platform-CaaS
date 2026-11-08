@@ -95,6 +95,17 @@ export interface MessageCitationItem {
   chunk_id: string | null;
   document_name: string;
   citation_text: string;
+  page_number?: number | null;
+  heading_path?: string | null;
+  snippet?: string | null;
+  score?: number | null;
+  bounding_box?: {
+    page: number;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null;
 }
 
 export interface MessageItem {

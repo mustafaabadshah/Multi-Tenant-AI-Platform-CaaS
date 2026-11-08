@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
@@ -68,6 +68,11 @@ class MessageCitationResponse(BaseModel):
     chunk_id: Optional[uuid.UUID] = None
     document_name: str
     citation_text: str
+    page_number: Optional[int] = 1
+    heading_path: Optional[str] = None
+    snippet: Optional[str] = None
+    score: Optional[float] = None
+    bounding_box: Optional[dict[str, Any]] = None
 
     model_config = {"from_attributes": True}
 

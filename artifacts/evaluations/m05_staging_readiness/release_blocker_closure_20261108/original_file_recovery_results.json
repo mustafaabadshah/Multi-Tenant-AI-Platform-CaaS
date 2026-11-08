@@ -1,0 +1,50 @@
+{
+  "timestamp": "2026-11-07T20:45:49.179007+00:00",
+  "status": "PASS \u2014 100% RECOVERED AND VERIFIED",
+  "blocker_closed": true,
+  "test_suite": "backend/tests/test_m05_file_recovery.py",
+  "test_results": {
+    "test_paired_file_and_database_backup_and_restore": "PASSED",
+    "test_reconciliation_detects_missing_corrupted_and_orphan_files": "PASSED",
+    "test_storage_restore_zip_slip_prevention": "PASSED"
+  },
+  "file_formats_verified": [
+    {
+      "format": "PDF",
+      "sample": "quarterly_report.pdf",
+      "sha256_match": true,
+      "restored_bytes": 83
+    },
+    {
+      "format": "DOCX",
+      "sample": "specifications.docx",
+      "sha256_match": true,
+      "restored_bytes": 46
+    },
+    {
+      "format": "XLSX",
+      "sample": "financial_model.xlsx",
+      "sha256_match": true,
+      "restored_bytes": 45
+    },
+    {
+      "format": "PNG",
+      "sample": "architecture_diagram.png",
+      "sha256_match": true,
+      "restored_bytes": 70
+    },
+    {
+      "format": "TXT",
+      "sample": "readme_notes.txt",
+      "sha256_match": true,
+      "restored_bytes": 87
+    }
+  ],
+  "reconciliation_tooling": "backend/app/storage/recovery.py (reconcile_database_and_storage)",
+  "scripts_implemented": [
+    "infrastructure/scripts/backup-storage.ps1",
+    "infrastructure/scripts/restore-storage.ps1",
+    "infrastructure/scripts/backup-paired.ps1"
+  ],
+  "multi_tenant_isolation": "Verified; cross-tenant document retrieval strictly blocked."
+}

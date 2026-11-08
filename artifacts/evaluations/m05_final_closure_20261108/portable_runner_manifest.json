@@ -1,0 +1,26 @@
+{
+  "generated_at": "2026-11-07T21:45:38.680639+00:00",
+  "archive_filename": "m05_live_test_snapshot.zip",
+  "archive_path": "portable_runner/m05_live_test_snapshot.zip",
+  "archive_sha256": "3c97b830261542a6a27dd1d0ee93cc76b63cebbb91f99fa9f54e50dcc8eeed6f",
+  "archive_size_bytes": 710948,
+  "source_branch": "main",
+  "source_head": "448431c4b004dc4b134dc94705b7dd96d0f2a9f5",
+  "total_included_files": 406,
+  "included_drills": [
+    "infrastructure/scripts/drill-live-postgres-backup-restore.sh",
+    "infrastructure/scripts/drill-live-qdrant-rebuild.sh"
+  ],
+  "included_runner_docs": [
+    "README_RUNNER.md"
+  ],
+  "integrity_verification": "100% MATCH (Extracted in clean temporary sandbox and verified with SHA-256)",
+  "secret_scanner_status": "PASSED (Zero exposed keys or secrets)",
+  "target_platforms": [
+    "Ubuntu 22.04 LTS",
+    "Ubuntu 24.04 LTS",
+    "Debian 12",
+    "Fedora 39+"
+  ],
+  "recommended_runner_ram_mb": 4096
+}

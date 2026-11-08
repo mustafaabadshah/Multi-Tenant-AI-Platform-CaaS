@@ -1,0 +1,11 @@
+{
+  "blockers": [
+    {
+      "id": "BLK-01",
+      "title": "Live Container Infrastructure Validation on PostgreSQL 16 & Qdrant v1.9.0",
+      "severity": "RELEASE_BLOCKER_FOR_UNCONDITIONAL_PASS",
+      "current_status": "PORTABLE_RUNNER_PACKAGE_READY",
+      "resolution_path": "Execute m05_live_test_snapshot.zip on external Linux runner with >= 4 GB RAM using run-live-integration-tests.sh and return test logs"
+    }
+  ]
+}

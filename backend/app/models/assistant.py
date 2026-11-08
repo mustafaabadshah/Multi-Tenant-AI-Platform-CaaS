@@ -27,6 +27,7 @@ class Assistant(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin):
     top_k: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
     system_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(50), default="ACTIVE", nullable=False)
+    byok_encrypted_key: Mapped[str | None] = mapped_column(String(1024), nullable=True)
 
     # Relationships
     tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="assistants")

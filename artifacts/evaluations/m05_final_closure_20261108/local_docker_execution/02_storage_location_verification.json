@@ -1,0 +1,19 @@
+{
+  "verification_timestamp": "2026-11-08T15:28:00+05:00",
+  "status": "PASS_VERIFIED_ON_DRIVE_E",
+  "storage_mapping": {
+    "docker_data_root": "E:\\MM Office\\DockerData",
+    "docker_active_vhdx": "E:\\MM Office\\DockerData\\ext4.vhdx",
+    "docker_backup_tar": "E:\\MM Office\\DockerData\\docker-desktop-data-backup.tar",
+    "wsl_distribution_dir": "E:\\MM Office\\WSL",
+    "temporary_files_dir": "E:\\MM Office\\Temp",
+    "pip_cache_dir": "E:\\MM Office\\Caches\\pip",
+    "npm_cache_dir": "E:\\MM Office\\Caches\\npm",
+    "test_evidence_dir": "E:\\MM Office\\Multi-Tanant-CaaS\\artifacts\\evaluations\\m05_final_closure_20261108\\local_docker_execution"
+  },
+  "drive_c_isolation": {
+    "unexpected_project_writes": false,
+    "unexpected_container_layers_on_c": false,
+    "drive_c_free_space_gb": 9.34
+  }
+}

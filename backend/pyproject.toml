@@ -63,3 +63,7 @@ testpaths = ["tests"]
 filterwarnings = [
     "ignore::DeprecationWarning",
 ]
+markers = [
+    "postgres_integration: integration tests requiring a live PostgreSQL 16 server with pgvector",
+    "qdrant_integration: integration tests requiring a live Qdrant vector database instance",
+]

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import TenantContext, get_current_user, require_permission
 from app.core.constants import PermissionName
 from app.database.session import get_db
+from app.models.knowledge import Document
 from app.models.user import User
 from app.repositories.audit_repository import AuditLogRepository
 from app.repositories.document_repository import DocumentRepository, IngestionJobRepository
@@ -26,6 +27,22 @@ from app.storage import get_storage_provider
 router = APIRouter(prefix="/documents", tags=["Documents & Extraction"])
 
 
+def _check_document_acl(doc: Document, ctx: TenantContext) -> None:
+    if ctx.is_admin:
+        return
+    user_dept_id = ctx.membership.department_id if ctx.membership else None
+    if doc.department_id and doc.department_id != user_dept_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found in active workspace",
+        )
+    if doc.access_level == "restricted" and not ctx.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found in active workspace",
+        )
+
+
 @router.get("/{document_id}", response_model=DocumentResponse)
 async def get_document(
     document_id: uuid.UUID,
@@ -39,6 +56,7 @@ async def get_document(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Document not found in active workspace",
         )
+    _check_document_acl(doc, ctx)
     return DocumentResponse.model_validate(doc)
 
 
@@ -56,6 +74,7 @@ async def delete_document(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Document not found in active workspace",
         )
+    _check_document_acl(doc, ctx)
 
     # Delete raw file from storage
     storage = get_storage_provider()
@@ -90,6 +109,7 @@ async def list_document_versions(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Document not found in active workspace",
         )
+    _check_document_acl(doc, ctx)
     versions = await repo.list_versions(document_id)
     return [DocumentVersionResponse.model_validate(v) for v in versions]
 
@@ -108,6 +128,7 @@ async def reprocess_document(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Document not found in active workspace",
         )
+    _check_document_acl(doc, ctx)
 
     job_repo = IngestionJobRepository(db, ctx.tenant.id)
     job = await job_repo.create(
@@ -149,6 +170,7 @@ async def get_document_content(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Document not found in active workspace",
         )
+    _check_document_acl(doc, ctx)
 
     latest_version = await repo.get_latest_version(document_id)
     return DocumentContentResponse(
@@ -178,6 +200,7 @@ async def list_document_chunks(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Document not found in active workspace",
         )
+    _check_document_acl(doc, ctx)
 
     chunks = await repo.list_chunks(document_id, limit=limit, offset=offset)
     return [DocumentChunkResponse.model_validate(c) for c in chunks]
@@ -196,6 +219,7 @@ async def get_document_processing_history(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Document not found in active workspace",
         )
+    _check_document_acl(doc, ctx)
 
     job_repo = IngestionJobRepository(db, ctx.tenant.id)
     events = await job_repo.get_document_events(document_id)

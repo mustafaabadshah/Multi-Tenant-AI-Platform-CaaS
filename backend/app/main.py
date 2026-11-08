@@ -49,10 +49,16 @@ origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
 ]
+if settings.ALLOWED_ORIGINS:
+    for o in settings.ALLOWED_ORIGINS.split(","):
+        cleaned = o.strip()
+        if cleaned and cleaned not in origins:
+            origins.append(cleaned)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
+    allow_origin_regex=settings.CORS_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -42,10 +42,10 @@ class LLMProviderRegistry:
         self._providers[name] = provider
         logger.debug(f"Registered LLM provider: {name}")
 
-    def get_provider(self, name: Optional[str]) -> LLMProvider:
+    def get_provider(self, name: Optional[str], strict: bool = False) -> LLMProvider:
         key = (name or "omniroute").lower()
         if key not in self._providers:
-            if "mock" in self._providers:
+            if not strict and "mock" in self._providers:
                 return self._providers["mock"]
             raise KeyError(f"LLM provider '{key}' is not registered. Available: {list(self._providers.keys())}")
         return self._providers[key]

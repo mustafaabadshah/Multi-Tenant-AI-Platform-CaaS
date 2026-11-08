@@ -54,7 +54,7 @@ class RetrievalAuthorizer:
             raise PermissionError(f"Unauthorized or non-existent knowledge bases: {missing}")
 
         # Enforce department restriction on knowledge bases
-        if not is_admin and user_department_id:
+        if not is_admin:
             for kb in kbs:
                 if kb.department_id and kb.department_id != user_department_id:
                     raise PermissionError(
@@ -97,7 +97,7 @@ class RetrievalAuthorizer:
                 continue
 
             # 2. Filter out unauthorized department documents
-            if not is_admin and user_department_id:
+            if not is_admin:
                 if doc.department_id and doc.department_id != user_department_id:
                     logger.debug(f"Candidate {c.chunk_id} rejected: department mismatch")
                     continue

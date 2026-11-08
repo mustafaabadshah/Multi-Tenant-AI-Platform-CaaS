@@ -1,0 +1,62 @@
+{
+  "milestone": "M05",
+  "phase": 12,
+  "component": "Documentation Inventory",
+  "timestamp": "2026-11-08T00:58:00Z",
+  "documents": [
+    {
+      "path": "docs/architecture/system-architecture.md",
+      "category": "Architecture",
+      "status": "IMPLEMENTED AND VERIFIED",
+      "description": "System overview, high-level Mermaid diagram, backend modular monolith layout, vector store adapters, and frontend Next.js App Router architecture."
+    },
+    {
+      "path": "docs/architecture/tenant-isolation.md",
+      "category": "Architecture",
+      "status": "IMPLEMENTED AND VERIFIED",
+      "description": "Multi-layer isolation model, TenantContext dependency flow, explicit SQL scoping, relational retrieval authorization, and path containment."
+    },
+    {
+      "path": "docs/api/api-overview.md",
+      "category": "API Reference",
+      "status": "IMPLEMENTED AND VERIFIED",
+      "description": "Endpoint matrix, authentication, headers, and SSE streaming event protocol specification."
+    },
+    {
+      "path": "docs/runbooks/local-development.md",
+      "category": "Runbook",
+      "status": "IMPLEMENTED AND VERIFIED",
+      "description": "Prerequisites, Python virtualenv, migrations, Next.js frontend setup, and test commands for Windows PowerShell."
+    },
+    {
+      "path": "docs/runbooks/staging-deployment.md",
+      "category": "Runbook",
+      "status": "IMPLEMENTED AND VERIFIED",
+      "description": "Render blueprint, Vercel frontend, secret generation commands, CORS setup, and rollback instructions."
+    },
+    {
+      "path": "docs/runbooks/backup-and-recovery.md",
+      "category": "Runbook",
+      "status": "IMPLEMENTED AND VERIFIED",
+      "description": "PostgreSQL backup/restore scripts, checksum verification, paired STORAGE_PATH volume backup requirement, and Qdrant rebuild pattern."
+    },
+    {
+      "path": "docs/runbooks/security-operations.md",
+      "category": "Runbook",
+      "status": "IMPLEMENTED AND VERIFIED",
+      "description": "BYOK MultiFernet key rotation, tenant suspension incident response, and prompt injection defense monitoring."
+    },
+    {
+      "path": "docs/runbooks/troubleshooting.md",
+      "category": "Runbook",
+      "status": "IMPLEMENTED AND VERIFIED",
+      "description": "Practical failure modes: database startup delays, missing migrations, SSE stream disconnects, and Docker Desktop memory constraints."
+    },
+    {
+      "path": "docs/runbooks/staging-readiness-checklist.md",
+      "category": "Runbook",
+      "status": "IMPLEMENTED AND VERIFIED",
+      "description": "Mandatory checklist covering memory, live container integration tests, backups, and user authorization."
+    }
+  ]
+}

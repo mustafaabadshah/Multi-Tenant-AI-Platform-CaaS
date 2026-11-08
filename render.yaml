@@ -1,0 +1,102 @@
+# Render Infrastructure as Code Blueprint
+# Multi-Tenant AI Platform / CaaS Staging Deployment
+services:
+  # -----------------------------------------------------------------------------
+  # BACKEND FASTAPI WEB SERVICE
+  # -----------------------------------------------------------------------------
+  - type: web
+    name: mmaip-backend
+    env: python
+    region: oregon
+    plan: starter
+    rootDir: backend
+    buildCommand: "pip install -e ."
+    preDeployCommand: "alembic upgrade head"
+    startCommand: "uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 2"
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: ENVIRONMENT
+        value: staging
+      - key: DEBUG
+        value: "false"
+      - key: PROJECT_NAME
+        value: "Multi-Tenant AI Platform-CaaS"
+      - key: API_V1_STR
+        value: /api/v1
+
+      # Database Configuration (Linked to Managed PostgreSQL)
+      - key: DATABASE_SYNC_URL
+        fromDatabase:
+          name: mmaip-postgres
+          property: connectionString
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mmaip-postgres
+          property: connectionString
+
+      # Security & JWT Tokens (Auto-generated secure strings)
+      - key: SECRET_KEY
+        generateValue: true
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_ALGORITHM
+        value: HS256
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "60"
+      - key: REFRESH_TOKEN_EXPIRE_DAYS
+        value: "7"
+
+      # BYOK Key Encryption (Must be configured by operator or generated)
+      - key: SECRET_ENCRYPTION_KEY
+        generateValue: true
+      - key: PREVIOUS_SECRET_KEYS
+        value: ""
+
+      # CORS & Frontend Origins
+      - key: FRONTEND_URL
+        sync: false
+        value: "https://multi-tenant-ai-platform.vercel.app"
+
+      # Retrieval & Vector Store Configuration
+      - key: DEFAULT_RETRIEVAL_MODE
+        value: hybrid
+      - key: DEFAULT_VECTOR_STORE
+        value: pgvector
+      - key: DEFAULT_EMBEDDING_PROVIDER
+        value: sentence-transformers
+      - key: DEFAULT_EMBEDDING_MODEL
+        value: sentence-transformers/all-MiniLM-L6-v2
+      - key: DEFAULT_EMBEDDING_DIMENSIONS
+        value: "384"
+      - key: EMBEDDING_BATCH_SIZE
+        value: "32"
+      - key: RRF_K_CONSTANT
+        value: "60"
+
+      # AI Gateway Settings
+      - key: LLM_BASE_URL
+        value: "https://api.openai.com/v1"
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OMNIROUTE_API_KEY
+        sync: false
+      - key: LLM_DEFAULT_MODEL
+        value: auto
+
+      # Storage Backend
+      - key: STORAGE_BACKEND
+        value: local
+      - key: STORAGE_PATH
+        value: /app/data/storage
+
+# -----------------------------------------------------------------------------
+# MANAGED POSTGRESQL DATABASE (v16 with pgvector)
+# -----------------------------------------------------------------------------
+databases:
+  - name: mmaip-postgres
+    databaseName: mmaip_staging
+    user: mmaip_user
+    region: oregon
+    plan: starter
+    postgresMajorVersion: "16"

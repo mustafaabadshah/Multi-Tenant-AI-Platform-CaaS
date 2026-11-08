@@ -1,0 +1,16 @@
+{
+  "status": "NOT_RUN",
+  "reason": "PENDING_EXTERNAL_LINUX_RUNNER",
+  "drill_script": "infrastructure/scripts/drill-live-postgres-backup-restore.sh",
+  "source_db": "m05_integration",
+  "target_isolated_db": "m05_restore_drill_disposable",
+  "verified_properties": [
+    "pg_dump -Fc custom format backup creation",
+    "SHA-256 hash manifest creation",
+    "pg_restore into isolated disposable database",
+    "Schema and composite foreign key constraint validation",
+    "Encrypted BYOK credential decryption fidelity using disposable Fernet key",
+    "Zero plaintext keys in logs or console output",
+    "Source database remains unmodified"
+  ]
+}

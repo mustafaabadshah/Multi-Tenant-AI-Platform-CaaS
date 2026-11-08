@@ -1,0 +1,151 @@
+{
+  "timestamp": "2026-11-07T14:45:00+05:00",
+  "milestone": "M05",
+  "phase": "Phase 6",
+  "streaming_contract": {
+    "protocol": "Server-Sent Events (text/event-stream)",
+    "lifecycle_order": [
+      "message_start",
+      "retrieval_start (optional)",
+      "retrieval_complete (optional, with citations)",
+      "token (repeated deltas)",
+      "usage",
+      "message_complete"
+    ],
+    "error_frame": "message_error"
+  },
+  "test_cases": [
+    {
+      "test_id": "STREAM-01",
+      "scenario": "Successful end-to-end streaming response lifecycle",
+      "expected_behavior": "Emits message_start, tokens, usage, message_complete in order; commits user and assistant messages to database",
+      "actual_behavior": "Ordered SSE sequence matches exact contract; user and assistant message persisted",
+      "result": "PASS",
+      "execution_method": "Deterministic offline mock streaming via AssistantRuntime",
+      "evidence": "tests/test_m05_provider_reliability.py::test_sse_streaming_successful_lifecycle_and_ordering",
+      "error_category": null,
+      "persistence_outcome": "PERSISTED_SUCCESSFULLY",
+      "cancellation_occurred": false
+    },
+    {
+      "test_id": "STREAM-02",
+      "scenario": "Upstream provider connection timeout",
+      "expected_behavior": "Catches httpx.ConnectTimeout, normalizes to LLMTimeoutError, redacts internal details",
+      "actual_behavior": "LLMTimeoutError raised with message 'Connection to LLM provider timed out after 45.0s'",
+      "result": "PASS",
+      "execution_method": "httpx mock transport raising ConnectTimeout",
+      "evidence": "tests/test_m05_provider_reliability.py::test_openai_provider_handles_connect_timeout",
+      "error_category": "LLMTimeoutError",
+      "persistence_outcome": "NO_PERSISTENCE",
+      "cancellation_occurred": false
+    },
+    {
+      "test_id": "STREAM-03",
+      "scenario": "Upstream provider connection refused / network error",
+      "expected_behavior": "Catches httpx.ConnectError, normalizes to LLMConnectionError, redacts internal socket info",
+      "actual_behavior": "LLMConnectionError raised with message 'Failed to connect to LLM provider: Connection refused'",
+      "result": "PASS",
+      "execution_method": "httpx mock transport raising ConnectError",
+      "evidence": "tests/test_m05_provider_reliability.py::test_openai_provider_handles_connect_error",
+      "error_category": "LLMConnectionError",
+      "persistence_outcome": "NO_PERSISTENCE",
+      "cancellation_occurred": false
+    },
+    {
+      "test_id": "STREAM-04",
+      "scenario": "Upstream provider returns HTTP 401 Unauthorized / 403 Forbidden",
+      "expected_behavior": "Normalizes to LLMAuthenticationError, prevents secret leakage",
+      "actual_behavior": "LLMAuthenticationError raised with message 'LLM provider authentication failed (401)'",
+      "result": "PASS",
+      "execution_method": "httpx mock transport returning 401 and 403 status codes",
+      "evidence": "tests/test_m05_provider_reliability.py::test_openai_provider_handles_http_401_and_403_authentication",
+      "error_category": "LLMAuthenticationError",
+      "persistence_outcome": "NO_PERSISTENCE",
+      "cancellation_occurred": false
+    },
+    {
+      "test_id": "STREAM-05",
+      "scenario": "Upstream provider returns HTTP 429 Rate Limit Exceeded",
+      "expected_behavior": "Normalizes to LLMRateLimitError with retry hint",
+      "actual_behavior": "LLMRateLimitError raised with message 'LLM provider rate limit exceeded (429)'",
+      "result": "PASS",
+      "execution_method": "httpx mock transport returning 429 status code",
+      "evidence": "tests/test_m05_provider_reliability.py::test_openai_provider_handles_http_429_rate_limiting",
+      "error_category": "LLMRateLimitError",
+      "persistence_outcome": "NO_PERSISTENCE",
+      "cancellation_occurred": false
+    },
+    {
+      "test_id": "STREAM-06",
+      "scenario": "Upstream provider returns HTTP 500 Internal Server Error",
+      "expected_behavior": "Normalizes to LLMProviderError without leaking upstream stack trace",
+      "actual_behavior": "LLMProviderError raised with message 'LLM provider server error (500)'",
+      "result": "PASS",
+      "execution_method": "httpx mock transport returning 500 status code",
+      "evidence": "tests/test_m05_provider_reliability.py::test_openai_provider_handles_http_500_provider_error",
+      "error_category": "LLMProviderError",
+      "persistence_outcome": "NO_PERSISTENCE",
+      "cancellation_occurred": false
+    },
+    {
+      "test_id": "STREAM-07",
+      "scenario": "Provider failure emits sanitized error frame through SSE stream",
+      "expected_behavior": "Emits message_error frame, redacts any API key or secret token, suppresses message_complete",
+      "actual_behavior": "Single message_error emitted with redacted error message; no message_complete emitted; no DB commit",
+      "result": "PASS",
+      "execution_method": "Failing mock provider streaming through AssistantRuntime",
+      "evidence": "tests/test_m05_provider_reliability.py::test_sse_streaming_provider_failure_emits_sanitized_error_frame",
+      "error_category": "RuntimeFailureRedaction",
+      "persistence_outcome": "CLEAN_ROLLBACK",
+      "cancellation_occurred": false
+    },
+    {
+      "test_id": "STREAM-08",
+      "scenario": "Empty response stream from provider",
+      "expected_behavior": "Rejects empty generation; emits message_error; prevents blank message persistence",
+      "actual_behavior": "message_error emitted with 'LLM generation yielded an empty response'; 0 assistant messages persisted",
+      "result": "PASS",
+      "execution_method": "Empty iterator mock provider through AssistantRuntime",
+      "evidence": "tests/test_m05_provider_reliability.py::test_sse_streaming_empty_response_stream_fails_safely",
+      "error_category": "EmptyStreamGuard",
+      "persistence_outcome": "ZERO_EMPTY_MESSAGES_PERSISTED",
+      "cancellation_occurred": false
+    },
+    {
+      "test_id": "STREAM-09",
+      "scenario": "Client disconnect / cancellation during token streaming",
+      "expected_behavior": "Generation stops early; upstream connection closed; no message_complete emitted; database session rolled back",
+      "actual_behavior": "Async generator broke after 2 tokens; message_complete not emitted; no partial assistant message persisted",
+      "result": "PASS",
+      "execution_method": "Early generator break simulation in async consumer loop",
+      "evidence": "tests/test_m05_provider_reliability.py::test_sse_streaming_cancellation_cleans_up_without_completion",
+      "error_category": "CancellationCleanup",
+      "persistence_outcome": "NO_PARTIAL_PERSISTENCE",
+      "cancellation_occurred": true
+    },
+    {
+      "test_id": "STREAM-10",
+      "scenario": "Atomic persistence of user message, assistant message, and citations",
+      "expected_behavior": "All entities committed together only upon verified generation completion",
+      "actual_behavior": "User message and assistant message both stored; citation tied directly to verified chunk and document",
+      "result": "PASS",
+      "execution_method": "Full assistant runtime flow with vector retrieval candidate",
+      "evidence": "tests/test_m05_provider_reliability.py::test_persistence_atomic_user_and_assistant_messages_with_citations",
+      "error_category": null,
+      "persistence_outcome": "PERSISTED_ATOMICALLY",
+      "cancellation_occurred": false
+    },
+    {
+      "test_id": "STREAM-11",
+      "scenario": "Failure midway leaves database in completely clean state",
+      "expected_behavior": "No orphaned messages, dangling citations, or corrupted conversation records",
+      "actual_behavior": "Conversation message count remains exactly 0 following failed streaming attempt",
+      "result": "PASS",
+      "execution_method": "AssistantRuntime failure test querying Message table after failure",
+      "evidence": "tests/test_m05_provider_reliability.py::test_persistence_failure_leaves_clean_database_state",
+      "error_category": null,
+      "persistence_outcome": "CLEAN_ZERO_STATE",
+      "cancellation_occurred": false
+    }
+  ]
+}

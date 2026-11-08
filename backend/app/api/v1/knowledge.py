@@ -8,6 +8,7 @@ from app.api.deps import TenantContext, get_current_user, require_permission
 from app.core.config import settings
 from app.core.constants import PermissionName
 from app.database.session import get_db
+from app.models.knowledge import KnowledgeBase
 from app.models.user import User
 from app.repositories.audit_repository import AuditLogRepository
 from app.repositories.document_repository import DocumentRepository
@@ -32,6 +33,17 @@ from app.services.ingestion.service import IngestionService, run_ingestion_in_ba
 router = APIRouter(prefix="/knowledge", tags=["Knowledge Base Foundation"])
 
 
+def _check_kb_acl(kb: KnowledgeBase, ctx: TenantContext) -> None:
+    if ctx.is_admin:
+        return
+    user_dept_id = ctx.membership.department_id if ctx.membership else None
+    if kb.department_id and kb.department_id != user_dept_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Knowledge base not found in active workspace",
+        )
+
+
 @router.get("", response_model=list[KnowledgeBaseResponse])
 async def list_knowledge_bases(
     ctx: TenantContext = Depends(require_permission(PermissionName.KNOWLEDGE_READ.value)),
@@ -39,20 +51,25 @@ async def list_knowledge_bases(
 ) -> list[KnowledgeBaseResponse]:
     repo = KnowledgeRepository(db, ctx.tenant.id)
     items = await repo.list_with_counts()
+    user_dept_id = ctx.membership.department_id if ctx.membership else None
 
-    return [
-        KnowledgeBaseResponse(
-            id=kb.id,
-            tenant_id=kb.tenant_id,
-            name=kb.name,
-            description=kb.description,
-            status=kb.status,
-            document_count=doc_count,
-            created_at=kb.created_at,
-            updated_at=kb.updated_at,
+    responses = []
+    for kb, doc_count in items:
+        if not ctx.is_admin and kb.department_id and kb.department_id != user_dept_id:
+            continue
+        responses.append(
+            KnowledgeBaseResponse(
+                id=kb.id,
+                tenant_id=kb.tenant_id,
+                name=kb.name,
+                description=kb.description,
+                status=kb.status,
+                document_count=doc_count,
+                created_at=kb.created_at,
+                updated_at=kb.updated_at,
+            )
         )
-        for kb, doc_count in items
-    ]
+    return responses
 
 
 @router.post("", response_model=KnowledgeBaseResponse, status_code=status.HTTP_201_CREATED)
@@ -103,6 +120,7 @@ async def get_knowledge_base(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Knowledge base not found in active workspace",
         )
+    _check_kb_acl(kb, ctx)
 
     return KnowledgeBaseResponse(
         id=kb.id,
@@ -124,6 +142,13 @@ async def delete_knowledge_base(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     repo = KnowledgeRepository(db, ctx.tenant.id)
+    kb = await repo.get_by_id(kb_id)
+    if not kb:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Knowledge base not found in active workspace",
+        )
+    _check_kb_acl(kb, ctx)
     deleted = await repo.delete(kb_id)
     if not deleted:
         raise HTTPException(
@@ -163,6 +188,7 @@ async def upload_documents(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Knowledge base not found in active workspace",
         )
+    _check_kb_acl(kb, ctx)
 
     if not files:
         raise HTTPException(

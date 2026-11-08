@@ -30,6 +30,41 @@ class LLMResponse:
     raw_response: dict[str, Any] = field(default_factory=dict)
 
 
+class LLMException(Exception):
+    """Base exception for all LLM provider errors."""
+    pass
+
+
+class LLMConnectionError(LLMException):
+    """Raised when connection to LLM provider endpoint fails."""
+    pass
+
+
+class LLMTimeoutError(LLMException):
+    """Raised when provider connection or streaming read times out."""
+    pass
+
+
+class LLMAuthenticationError(LLMException):
+    """Raised when provider authentication or API key verification fails (HTTP 401/403)."""
+    pass
+
+
+class LLMRateLimitError(LLMException):
+    """Raised when provider rate limit is exceeded (HTTP 429)."""
+    pass
+
+
+class LLMProviderError(LLMException):
+    """Raised when provider returns an upstream server error (HTTP 5xx or unhandled status)."""
+    pass
+
+
+class LLMConfigurationError(LLMException):
+    """Raised when provider configuration, model, or endpoint is invalid."""
+    pass
+
+
 @dataclass
 class LLMConfig:
     """Configuration for an LLM generation call."""

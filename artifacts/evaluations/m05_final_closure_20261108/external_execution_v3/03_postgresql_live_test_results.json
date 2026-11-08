@@ -1,0 +1,61 @@
+{
+  "test_suite": "PostgreSQL 16 + pgvector Live Integration Tests",
+  "target_database": "m05_integration (disposable)",
+  "status": "NOT_RUN",
+  "blocker_reason": "Host memory limit (< 4 GB) and inactive Docker daemon on Windows",
+  "total_tests": 12,
+  "passed": 0,
+  "failed": 0,
+  "skipped": 0,
+  "blocked_not_run": 12,
+  "test_cases": [
+    {
+      "node_id": "tests/integration/test_postgres_connection.py::test_postgres_version_is_16",
+      "status": "NOT_RUN"
+    },
+    {
+      "node_id": "tests/integration/test_postgres_connection.py::test_pgvector_extension_loaded_and_functional",
+      "status": "NOT_RUN"
+    },
+    {
+      "node_id": "tests/integration/test_postgres_connection.py::test_transaction_rollback_and_commit_behavior",
+      "status": "NOT_RUN"
+    },
+    {
+      "node_id": "tests/integration/test_postgres_migrations.py::test_migration_head_and_schema_tables",
+      "status": "NOT_RUN"
+    },
+    {
+      "node_id": "tests/integration/test_postgres_migrations.py::test_vector_column_data_type_in_postgresql",
+      "status": "NOT_RUN"
+    },
+    {
+      "node_id": "tests/integration/test_postgres_migrations.py::test_foreign_key_and_tenant_composite_constraints",
+      "status": "NOT_RUN"
+    },
+    {
+      "node_id": "tests/integration/test_postgres_fts.py::test_native_postgresql_fts_query_and_ranking",
+      "status": "NOT_RUN"
+    },
+    {
+      "node_id": "tests/integration/test_postgres_fts.py::test_native_postgresql_fts_sql_injection_safety",
+      "status": "NOT_RUN"
+    },
+    {
+      "node_id": "tests/integration/test_pgvector_operations.py::test_real_pgvector_insert_and_cosine_distance_ranking",
+      "status": "NOT_RUN"
+    },
+    {
+      "node_id": "tests/integration/test_pgvector_operations.py::test_pgvector_rejects_dimension_mismatch",
+      "status": "NOT_RUN"
+    },
+    {
+      "node_id": "tests/integration/test_postgres_tenant_isolation.py::test_cross_tenant_isolation_on_real_postgresql",
+      "status": "NOT_RUN"
+    },
+    {
+      "node_id": "tests/integration/test_postgres_tenant_isolation.py::test_department_isolation_on_real_postgresql",
+      "status": "NOT_RUN"
+    }
+  ]
+}

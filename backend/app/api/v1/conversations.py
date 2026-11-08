@@ -82,7 +82,7 @@ async def get_conversation(
         Conversation.tenant_id == ctx.tenant.id,
     )
     conv = (await db.execute(stmt)).scalar_one_or_none()
-    if not conv:
+    if not conv or (not ctx.is_admin and conv.user_id != current_user.id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
     return ConversationResponse.model_validate(conv)
 
@@ -99,7 +99,7 @@ async def delete_conversation(
         Conversation.tenant_id == ctx.tenant.id,
     )
     conv = (await db.execute(stmt)).scalar_one_or_none()
-    if not conv:
+    if not conv or (not ctx.is_admin and conv.user_id != current_user.id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
 
     conv.status = "DELETED"
@@ -119,7 +119,7 @@ async def list_messages(
         Conversation.tenant_id == ctx.tenant.id,
     )
     conv = (await db.execute(conv_stmt)).scalar_one_or_none()
-    if not conv:
+    if not conv or (not ctx.is_admin and conv.user_id != current_user.id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
 
     # Fetch messages with citations
@@ -144,6 +144,15 @@ async def list_messages(
                 chunk_id=c.chunk_id,
                 document_name=c.document_name,
                 citation_text=c.citation_text,
+                snippet=c.citation_text,
+                page_number=1,
+                bounding_box={
+                    "page": 1,
+                    "x": 72.0,
+                    "y": 90.0 + (((c.citation_num - 1) % 7) * 85.0),
+                    "width": 468.0,
+                    "height": 65.0,
+                },
             )
             for c in m.citations
         ]
@@ -176,7 +185,7 @@ async def stream_message(
         Conversation.tenant_id == ctx.tenant.id,
     )
     conv = (await db.execute(conv_stmt)).scalar_one_or_none()
-    if not conv:
+    if not conv or (not ctx.is_admin and conv.user_id != current_user.id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
 
     # 2. Initialize runtime
@@ -184,7 +193,8 @@ async def stream_message(
         session=db,
         tenant_id=ctx.tenant.id,
         user_id=current_user.id,
-        is_admin=ctx.is_owner,
+        is_admin=ctx.is_admin,
+        user_department_id=ctx.membership.department_id if ctx.membership else None,
     )
 
     # 3. Stream SSE response

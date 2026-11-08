@@ -1,0 +1,64 @@
+{
+  "milestone": "M05",
+  "phase": 11,
+  "component": "Architecture Inventory",
+  "timestamp": "2026-11-08T00:50:00Z",
+  "backend_subsystems": {
+    "framework": "FastAPI 0.110.0+ on Python 3.12",
+    "architecture_pattern": "Modular Monolith",
+    "entrypoint": "backend/app/main.py",
+    "routers": [
+      { "prefix": "/api/v1/auth", "module": "app.api.v1.auth", "purpose": "User authentication, registration, JWT refresh" },
+      { "prefix": "/api/v1/tenants", "module": "app.api.v1.tenants", "purpose": "Workspace and tenant lifecycle management" },
+      { "prefix": "/api/v1/members", "module": "app.api.v1.members", "purpose": "Tenant membership and role assignment" },
+      { "prefix": "/api/v1/organizations", "module": "app.api.v1.organizations", "purpose": "Enterprise organization and department hierarchy" },
+      { "prefix": "/api/v1/departments", "module": "app.api.v1.departments", "purpose": "Department CRUD and access control scoping" },
+      { "prefix": "/api/v1/groups", "module": "app.api.v1.groups", "purpose": "Employee grouping and team membership" },
+      { "prefix": "/api/v1/knowledge", "module": "app.api.v1.knowledge", "purpose": "Knowledge base management and assistant linking" },
+      { "prefix": "/api/v1/documents", "module": "app.api.v1.documents", "purpose": "File ingestion, parsing, chunking, and version tracking" },
+      { "prefix": "/api/v1/assistants", "module": "app.api.v1.assistants", "purpose": "AI assistant CRUD and BYOK configuration" },
+      { "prefix": "/api/v1/conversations", "module": "app.api.v1.conversations", "purpose": "Conversational RAG streaming and citation persistence" },
+      { "prefix": "/api/v1/audit", "module": "app.api.v1.audit", "purpose": "Compliance audit logging" }
+    ],
+    "persistence": {
+      "orm": "SQLAlchemy 2.0 (Async)",
+      "database_engines": ["PostgreSQL 16 (Source of Truth)", "SQLite (Fast Offline Test Suite)"],
+      "migrations": "Alembic (4 linear revisions: 0001 -> 0002 -> 0003 -> 0004_head)"
+    },
+    "storage": {
+      "factory": "app.storage.get_storage_provider",
+      "providers": ["LocalStorageProvider (path-contained)", "S3StorageProvider (S3/MinIO)"]
+    },
+    "vectorstores": {
+      "factory": "app.vectorstores.get_vector_store",
+      "providers": ["PGVectorStore (PostgreSQL pgvector)", "QdrantVectorStore (Qdrant gRPC/HTTP)", "FTSStore (PostgreSQL Lexical)"]
+    },
+    "llm_runtime": {
+      "gateway": "OmniRoute / OpenAI-compatible standard client",
+      "providers": ["OpenAIProvider", "MockLLMProvider"],
+      "streaming": "Server-Sent Events (SSE) with token, retrieval_complete, usage frames"
+    }
+  },
+  "frontend_subsystems": {
+    "framework": "Next.js 16.4.5 (App Router, Turbopack)",
+    "runtime": "Node 24 / React 19.3.0",
+    "state_management": "React Context (AuthContext) + Local Component State",
+    "api_client": "frontend/lib/api.ts (Token injection, X-Tenant-ID header, SSE reader)",
+    "ui_system": "Tailwind CSS v4 + Lucide React icons",
+    "pages": [
+      "/",
+      "/login",
+      "/register",
+      "/dashboard",
+      "/dashboard/assistants",
+      "/dashboard/audit",
+      "/dashboard/departments",
+      "/dashboard/employees",
+      "/dashboard/groups",
+      "/dashboard/knowledge",
+      "/dashboard/settings",
+      "/dashboard/workspace",
+      "/_not-found"
+    ]
+  }
+}

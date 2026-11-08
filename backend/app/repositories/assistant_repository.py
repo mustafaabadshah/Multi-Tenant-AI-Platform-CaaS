@@ -5,6 +5,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.assistant import Assistant, AssistantKnowledgeBase
+from app.models.knowledge import KnowledgeBase
 from app.repositories.base import TenantScopedRepository
 from app.repositories.tenant_repository import slugify
 
@@ -36,6 +37,12 @@ class AssistantRepository(TenantScopedRepository[Assistant]):
         system_prompt: Optional[str] = None,
         knowledge_base_ids: Optional[list[uuid.UUID]] = None,
     ) -> Assistant:
+        if not default_model or not default_model.strip():
+            raise ValueError("default_model cannot be empty")
+        valid_providers = {"omniroute", "openai", "mock"}
+        if llm_provider.lower() not in valid_providers:
+            raise ValueError(f"Unsupported LLM provider '{llm_provider}'. Supported: {sorted(valid_providers)}")
+
         base_slug = slug or slugify(name)
         candidate_slug = base_slug
         count = 1
@@ -48,8 +55,8 @@ class AssistantRepository(TenantScopedRepository[Assistant]):
             name=name,
             slug=candidate_slug,
             description=description,
-            llm_provider=llm_provider,
-            default_model=default_model,
+            llm_provider=llm_provider.lower(),
+            default_model=default_model.strip(),
             temperature=temperature,
             max_tokens=max_tokens,
             visibility=visibility,
@@ -62,6 +69,15 @@ class AssistantRepository(TenantScopedRepository[Assistant]):
         await self.session.flush()
 
         if knowledge_base_ids:
+            valid_kb_stmt = select(KnowledgeBase.id).where(
+                KnowledgeBase.id.in_(knowledge_base_ids),
+                KnowledgeBase.tenant_id == self.tenant_id,
+            )
+            valid_ids = set((await self.session.execute(valid_kb_stmt)).scalars().all())
+            invalid_ids = set(knowledge_base_ids) - valid_ids
+            if invalid_ids:
+                raise ValueError(f"Knowledge bases not found in this workspace: {invalid_ids}")
+
             for kb_id in knowledge_base_ids:
                 assoc = AssistantKnowledgeBase(
                     id=uuid.uuid4(),
@@ -99,9 +115,14 @@ class AssistantRepository(TenantScopedRepository[Assistant]):
         if description is not None:
             assistant.description = description
         if llm_provider is not None:
-            assistant.llm_provider = llm_provider
+            valid_providers = {"omniroute", "openai", "mock"}
+            if llm_provider.lower() not in valid_providers:
+                raise ValueError(f"Unsupported LLM provider '{llm_provider}'. Supported: {sorted(valid_providers)}")
+            assistant.llm_provider = llm_provider.lower()
         if default_model is not None:
-            assistant.default_model = default_model
+            if not default_model or not default_model.strip():
+                raise ValueError("default_model cannot be empty")
+            assistant.default_model = default_model.strip()
         if temperature is not None:
             assistant.temperature = temperature
         if max_tokens is not None:
@@ -118,6 +139,16 @@ class AssistantRepository(TenantScopedRepository[Assistant]):
             assistant.status = status
 
         if knowledge_base_ids is not None:
+            if knowledge_base_ids:
+                valid_kb_stmt = select(KnowledgeBase.id).where(
+                    KnowledgeBase.id.in_(knowledge_base_ids),
+                    KnowledgeBase.tenant_id == self.tenant_id,
+                )
+                valid_ids = set((await self.session.execute(valid_kb_stmt)).scalars().all())
+                invalid_ids = set(knowledge_base_ids) - valid_ids
+                if invalid_ids:
+                    raise ValueError(f"Knowledge bases not found in this workspace: {invalid_ids}")
+
             # Delete existing links
             del_stmt = delete(AssistantKnowledgeBase).where(
                 AssistantKnowledgeBase.assistant_id == assistant.id,

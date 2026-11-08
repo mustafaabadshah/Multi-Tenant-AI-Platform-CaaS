@@ -1,0 +1,32 @@
+{
+  "audit_timestamp": "2026-11-08T14:06:00Z",
+  "git_branch": "main",
+  "git_head": "448431c4b004dc4b134dc94705b7dd96d0f2a9f5",
+  "tracked_modified_files_count": 26,
+  "untracked_paths_count": 34,
+  "snapshot_preservation": {
+    "snapshot_v1": {
+      "relative_path": "artifacts/evaluations/m05_final_closure_20261108/portable_runner/m05_live_test_snapshot.zip",
+      "size_bytes": 710948,
+      "sha256": "3c97b830261542a6a27dd1d0ee93cc76b63cebbb91f99fa9f54e50dcc8eeed6f",
+      "status": "PRESERVED_IMMUTABLE",
+      "matches_authoritative_hash": true
+    },
+    "snapshot_v2": {
+      "relative_path": "artifacts/evaluations/m05_final_closure_20261108/portable_runner_v2/m05_live_test_snapshot_v2.zip",
+      "size_bytes": 755050,
+      "sha256": "24aa3baebfcabbd22d62cca967376f2b2469dc9b1c6798c316c91c1465fb77f4",
+      "status": "PRESERVED_IMMUTABLE",
+      "matches_authoritative_hash": true
+    },
+    "snapshot_v3": {
+      "relative_path": "artifacts/evaluations/m05_final_closure_20261108/portable_runner_v3/m05_live_test_snapshot_v3.zip",
+      "size_bytes": 760423,
+      "sha256": "6776cf077941c913d794076bcd076340211c00c2d263291791169170a609f64e",
+      "total_files": 434,
+      "status": "STANDALONE_VERIFIED",
+      "extraction_integrity": "PASS",
+      "secret_scan": "PASS"
+    }
+  }
+}

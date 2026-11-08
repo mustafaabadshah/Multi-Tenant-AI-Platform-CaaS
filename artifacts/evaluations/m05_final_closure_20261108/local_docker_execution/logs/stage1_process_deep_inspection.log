@@ -1,0 +1,44 @@
+Stage 1 — Deep Process & Memory Audit (psutil + WMI):
+Total Visible Memory: 8008.68 MB (~7.82 GB)
+Free Physical Memory: 1525.46 MB (~1.49 GB)
+Safety Threshold:     2048.00 MB (2.00 GB)
+Decision Gate:        STOP (Below 2 GB)
+
+Target Process Groups:
+1. Google Chrome (chrome.exe):
+   - Count: 21 processes
+   - Root Parent: chrome.exe (PID 11884)
+   - Exe: C:\Program Files\Google\Chrome\Application\chrome.exe
+   - Total Working Set: 1250.41 MB
+   - Total Private Memory: 1652.42 MB
+   - Category: User Web Browser
+   - Recommendation: Priority #1 candidate for manual closure by user (+1.5 GB RAM).
+
+2. Microsoft Edge & WebViews (msedge.exe + msedgewebview2.exe):
+   - Count: 14 processes
+   - Parents: msedge.exe (PID 10396) & SearchApp.exe (PID 2568)
+   - Exe: C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe
+   - Total Working Set: 277.15 MB
+   - Total Private Memory: 417.79 MB
+   - Category: Browser & Windows Search WebViews
+   - Recommendation: Close Edge browser tabs manually (+300-400 MB RAM).
+
+3. Pyrefly LSP (pyrefly.exe):
+   - Count: 1 process (PID 5448)
+   - Parent: Antigravity IDE.exe (PID 2784)
+   - Exe: C:\Users\Mustafa Badshah\.antigravity-ide\extensions\meta.pyrefly-1.4.1-win32-x64\bin\pyrefly.exe
+   - Cmd: pyrefly.exe lsp
+   - Working Set: 51.33 MB
+   - Private Memory: 1170.66 MB (Committed Virtual Memory)
+   - Category: Active IDE Language Server (Pyrefly Python LSP)
+   - Recommendation: Belongs to active IDE. Terminating externally would kill Python LSP in the editor. Disabling or reloading Pyrefly inside IDE can recover 1.17 GB virtual/private memory.
+
+4. Microsoft SQL Server (sqlservr.exe):
+   - Count: 1 process (PID 14340)
+   - Parent: services.exe (PID 896)
+   - Exe: C:\Program Files\Microsoft SQL Server\MSSQL16.MSSQLSERVER\MSSQL\Binn\sqlservr.exe
+   - Service: MSSQLSERVER (Automatic)
+   - Working Set: 74.78 MB
+   - Private Memory: 449.70 MB
+   - Port 1433: Listening on 0.0.0.0:1433 and [::]:1433 with ZERO active client connections.
+   - Recommendation: Service is completely idle. Can be safely stopped via 'Stop-Service MSSQLSERVER' if not needed by user (+450 MB private memory).

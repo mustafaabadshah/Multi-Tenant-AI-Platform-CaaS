@@ -1,0 +1,8 @@
+{
+  "classification": "CONTROLLED_STAGING_ACCEPTABLE",
+  "execution_mechanism": "In-process asyncio.create_task coroutines",
+  "process_restart_impact": "In-flight jobs are terminated if process restarts; job records remain in STARTED/QUEUED state in PostgreSQL",
+  "recovery_path": "Operator or UI can trigger re-processing via POST /documents/{id}/reprocess",
+  "idempotency": "Ingestion safely purges old chunks and vectors before inserting newly parsed chunks",
+  "production_recommendation": "For enterprise production scaling, migrate from asyncio.create_task to Celery / ARQ / BullMQ with dedicated worker instances"
+}

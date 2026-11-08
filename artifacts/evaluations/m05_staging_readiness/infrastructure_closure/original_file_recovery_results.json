@@ -1,0 +1,27 @@
+{
+  "milestone": "M05",
+  "component": "Original Uploaded File Persistence & Disaster Recovery",
+  "timestamp": "2026-11-08T00:50:00Z",
+  "storage_architecture": {
+    "local_filesystem": {
+      "provider": "LocalStorageProvider",
+      "path_pattern": "{STORAGE_PATH}/tenants/{tenant_id}/{relative_key}",
+      "containment_check": "resolve_tenant_path validates path does not escape tenant_root (PermissionError on traversal)",
+      "atomic_writes": "Writes to .tmp file then replaces target atomically"
+    },
+    "s3_object_storage": {
+      "provider": "S3StorageProvider",
+      "bucket_pattern": "s3://{STORAGE_BUCKET_NAME}/tenants/{tenant_id}/{relative_key}",
+      "credentials": "Server-side only (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)"
+    }
+  },
+  "disaster_recovery_analysis": {
+    "critical_distinction": "PostgreSQL backups capture documents, document_versions, document_chunks, and chunk_embeddings. However, PostgreSQL pg_dump does NOT contain the raw uploaded PDF/DOCX/image binaries.",
+    "recovery_risk": "Restoring only PostgreSQL without restoring the storage volume leaves document records referencing missing disk files, breaking raw document downloads and binary re-parsing.",
+    "mandatory_staging_procedure": {
+      "option_a_local": "Snapshot the persistent volume mounted at STORAGE_PATH concurrently with pg_dump; restore storage directory before starting application services.",
+      "option_b_s3": "Enable S3 bucket versioning and multi-region replication; point staging to the restored bucket."
+    },
+    "status": "OPERATIONAL_REQUIREMENT_DOCUMENTED"
+  }
+}

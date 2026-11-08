@@ -23,6 +23,7 @@ class VectorStoreRegistry:
         session: Optional[AsyncSession] = None,
         custom_endpoint: Optional[str] = None,
         custom_api_key: Optional[str] = None,
+        custom_collection_name: Optional[str] = None,
     ) -> VectorStore:
         """Instantiate the requested vector store adapter."""
         st = (store_type or settings.DEFAULT_VECTOR_STORE).lower()
@@ -36,6 +37,7 @@ class VectorStoreRegistry:
             return QdrantVectorStore(
                 url=custom_endpoint or settings.QDRANT_URL,
                 api_key=custom_api_key or settings.QDRANT_API_KEY,
+                collection_name=custom_collection_name or getattr(settings, "QDRANT_COLLECTION_NAME", "mmaip_knowledge_chunks"),
             )
 
         if st in ("fts", "full_text_search", "lexical"):
@@ -46,7 +48,9 @@ class VectorStoreRegistry:
         # Default fallback to pgvector if session available, else FTS
         if session:
             return PgVectorStore(session)
-        return QdrantVectorStore()
+        return QdrantVectorStore(
+            collection_name=custom_collection_name or getattr(settings, "QDRANT_COLLECTION_NAME", "mmaip_knowledge_chunks")
+        )
 
     @staticmethod
     def list_available_stores() -> list[dict[str, Any]]:
@@ -84,6 +88,7 @@ def get_vector_store(
     session: Optional[AsyncSession] = None,
     custom_endpoint: Optional[str] = None,
     custom_api_key: Optional[str] = None,
+    custom_collection_name: Optional[str] = None,
 ) -> VectorStore:
     """Convenience factory function."""
     return VectorStoreRegistry.get_store(
@@ -91,4 +96,5 @@ def get_vector_store(
         session=session,
         custom_endpoint=custom_endpoint,
         custom_api_key=custom_api_key,
+        custom_collection_name=custom_collection_name,
     )

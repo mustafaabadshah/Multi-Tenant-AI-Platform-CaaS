@@ -69,6 +69,13 @@ async def invite_member(
             detail=f"Role '{payload.role}' does not exist",
         )
 
+    # Restrict owner and superadmin assignment
+    if payload.role in (SystemRole.TENANT_OWNER.value, SystemRole.PLATFORM_SUPERADMIN.value) and not ctx.is_owner:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only workspace owners can assign owner privileges",
+        )
+
     # Validate department if provided
     if payload.department_id:
         dept = await dept_repo.get_by_id(payload.department_id)
@@ -155,8 +162,20 @@ async def update_member(
             detail="Member not found in active workspace",
         )
 
+    # Prevent self-role modification
+    if target_member.user_id == current_user.id and payload.role and payload.role != target_member.role.name:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Users cannot modify their own role",
+        )
+
     new_role_id = None
     if payload.role:
+        if payload.role in (SystemRole.TENANT_OWNER.value, SystemRole.PLATFORM_SUPERADMIN.value) and not ctx.is_owner:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only workspace owners can assign owner privileges",
+            )
         role_obj = await role_repo.get_by_name(payload.role)
         if not role_obj:
             raise HTTPException(

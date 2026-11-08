@@ -1,0 +1,10 @@
+{
+  "timestamp": "2026-11-07T21:03:51.104439+00:00",
+  "status": "PASS (OFFLINE & SQL SPECIFICATION) / NOT RUN (LIVE CONTAINER)",
+  "ranking_algorithm": "Native PostgreSQL ts_rank_cd Full-Text Search Cover Density",
+  "clarification": "The lexical ranking mechanism is native PostgreSQL ts_rank_cd, not Apache Lucene BM25.",
+  "offline_tests_passed": [
+    "test_vector_stores.py::test_fts_store_lexical_search_and_ranking",
+    "test_retrieval_security.py::test_cross_tenant_fts_isolation"
+  ]
+}
