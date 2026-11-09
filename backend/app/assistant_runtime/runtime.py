@@ -148,13 +148,17 @@ class AssistantRuntime:
                 )
                 retrieved_results = search_resp.results
 
-        # 5. Assemble Context & Citations
+        # 5. Assemble Context & Citations with 4-Tier Trust Hierarchy
         messages, citations_data = build_rag_context(
             system_prompt=asst.system_prompt,
             conversation_history=conversation_history,
             current_user_message=user_message,
             retrieved_results=retrieved_results,
             max_context_tokens=asst.max_tokens * 3,
+            audience_level=getattr(asst, "audience_level", "general"),
+            response_style=getattr(asst, "response_style", "balanced"),
+            uncertainty_behavior=getattr(asst, "uncertainty_behavior", "admit"),
+            citation_style=getattr(asst, "citation_style", "strict"),
         )
 
         yield format_sse(
@@ -244,5 +248,124 @@ class AssistantRuntime:
                 "message_id": str(assistant_msg.id),
                 "conversation_id": str(conversation_id),
                 "status": "COMPLETED",
+            },
+        )
+
+    async def stream_preview(
+        self,
+        user_message: str,
+        system_prompt: Optional[str] = None,
+        audience_level: str = "general",
+        response_style: str = "balanced",
+        uncertainty_behavior: str = "admit",
+        citation_style: str = "strict",
+        llm_provider: str = "omniroute",
+        default_model: str = "auto",
+        temperature: float = 0.7,
+        max_tokens: int = 1024,
+        retrieval_mode: str = "hybrid",
+        top_k: int = 5,
+        knowledge_base_ids: Optional[list[uuid.UUID]] = None,
+    ) -> AsyncIterator[str]:
+        """Stream a live test preview using real retrieval and LLM inference without persisting conversations."""
+        start_time = time.perf_counter()
+
+        yield format_sse("message_start", {"preview": True, "model": default_model})
+
+        retrieved_results: list[VectorSearchResult] = []
+        citations_data: list[dict[str, Any]] = []
+
+        candidate_kb_ids = knowledge_base_ids or []
+        if candidate_kb_ids:
+            yield format_sse("retrieval_start", {"connected_kb_count": len(candidate_kb_ids)})
+
+            valid_kb_stmt = select(KnowledgeBase.id).where(
+                KnowledgeBase.id.in_(candidate_kb_ids),
+                KnowledgeBase.tenant_id == self.tenant_id,
+                KnowledgeBase.status == "ACTIVE",
+            )
+            authorized_kb_ids = (await self.session.execute(valid_kb_stmt)).scalars().all()
+
+            if authorized_kb_ids:
+                retrieval_svc = RetrievalService(
+                    session=self.session,
+                    tenant_id=self.tenant_id,
+                    user_id=self.user_id,
+                    is_admin=self.is_admin,
+                    user_department_id=self.user_department_id,
+                )
+                search_resp = await retrieval_svc.search(
+                    query=user_message,
+                    knowledge_base_ids=list(authorized_kb_ids),
+                    mode=retrieval_mode or "hybrid",
+                    top_k=top_k or 5,
+                )
+                retrieved_results = search_resp.results
+
+        messages, citations_data = build_rag_context(
+            system_prompt=system_prompt,
+            conversation_history=[],
+            current_user_message=user_message,
+            retrieved_results=retrieved_results,
+            max_context_tokens=max_tokens * 3,
+            audience_level=audience_level,
+            response_style=response_style,
+            uncertainty_behavior=uncertainty_behavior,
+            citation_style=citation_style,
+        )
+
+        yield format_sse(
+            "retrieval_complete",
+            {
+                "citation_count": len(citations_data),
+                "citations": citations_data,
+            },
+        )
+
+        llm_registry = get_llm_registry()
+        try:
+            provider = llm_registry.get_provider(llm_provider)
+        except Exception:
+            provider = llm_registry.get_provider("omniroute")
+
+        llm_config = LLMConfig(
+            provider=llm_provider,
+            model=default_model or "auto",
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+
+        full_content_chunks: list[str] = []
+        try:
+            async for chunk in provider.generate_stream(messages, llm_config):
+                if chunk.content_delta:
+                    full_content_chunks.append(chunk.content_delta)
+                    yield format_sse("token", {"delta": chunk.content_delta})
+        except Exception as e:
+            logger.exception("Preview LLM generation stream failed")
+            safe_err = sanitize_error_message(str(e))
+            yield format_sse("message_error", {"error": f"LLM generation failed: {safe_err}"})
+            return
+
+        final_content = "".join(full_content_chunks)
+        if not final_content.strip():
+            yield format_sse("message_error", {"error": "LLM generation failed: Empty response stream received"})
+            return
+
+        duration = round((time.perf_counter() - start_time) * 1000, 2)
+        yield format_sse(
+            "usage",
+            {
+                "input_tokens": sum(len(m.content.split()) for m in messages),
+                "output_tokens": len(final_content.split()),
+                "duration_ms": duration,
+                "model": default_model,
+            },
+        )
+        yield format_sse(
+            "message_complete",
+            {
+                "status": "COMPLETED",
+                "preview": True,
             },
         )

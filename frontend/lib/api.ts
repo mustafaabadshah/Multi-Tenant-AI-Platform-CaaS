@@ -58,12 +58,55 @@ export interface EmployeeGroup {
   updated_at: string;
 }
 
+export interface AssistantTemplate {
+  id: string;
+  name: string;
+  description: string;
+  category: "Education" | "Business" | "Personal" | "Domain";
+  version: string;
+  intended_audience: string;
+  default_instructions: string;
+  default_response_style: string;
+  default_uncertainty_behavior: string;
+  default_citation_style: string;
+  suggested_knowledge: string[];
+  suggested_starter_questions: string[];
+  default_retrieval_mode: string;
+  default_top_k: number;
+  default_temperature: number;
+  requires_knowledge: boolean;
+}
+
+export interface TemplateListResponse {
+  templates: AssistantTemplate[];
+  total: number;
+  categories: string[];
+}
+
+export interface AssistantVersionItem {
+  id: string;
+  tenant_id: string;
+  assistant_id: string;
+  version_num: number;
+  model_name: string;
+  system_prompt: string | null;
+  config_snapshot: Record<string, any>;
+  actor_id: string | null;
+  change_summary: string | null;
+  created_at: string;
+}
+
 export interface AssistantItem {
   id: string;
   tenant_id: string;
   name: string;
   slug: string;
   description: string | null;
+  template_id?: string | null;
+  audience_level?: string;
+  response_style?: string;
+  uncertainty_behavior?: string;
+  citation_style?: string;
   llm_provider: string;
   default_model: string;
   temperature: number;
@@ -73,6 +116,7 @@ export interface AssistantItem {
   top_k: number;
   system_prompt: string | null;
   status: string;
+  current_version_num?: number;
   connected_kb_ids: string[];
   created_at: string;
   updated_at: string;
@@ -717,6 +761,18 @@ class ApiClient {
   }
 
   // =========================================================================
+  // TEMPLATES API
+  // =========================================================================
+
+  async listTemplates(): Promise<TemplateListResponse> {
+    return this.request<TemplateListResponse>("/templates", { method: "GET" }, false);
+  }
+
+  async getTemplate(templateId: string): Promise<AssistantTemplate> {
+    return this.request<AssistantTemplate>(`/templates/${templateId}`, { method: "GET" }, false);
+  }
+
+  // =========================================================================
   // ASSISTANTS API
   // =========================================================================
 
@@ -731,6 +787,11 @@ class ApiClient {
   async createAssistant(payload: {
     name: string;
     description?: string;
+    template_id?: string;
+    audience_level?: string;
+    response_style?: string;
+    uncertainty_behavior?: string;
+    citation_style?: string;
     llm_provider?: string;
     default_model?: string;
     temperature?: number;
@@ -752,6 +813,11 @@ class ApiClient {
     payload: {
       name?: string;
       description?: string;
+      template_id?: string;
+      audience_level?: string;
+      response_style?: string;
+      uncertainty_behavior?: string;
+      citation_style?: string;
       llm_provider?: string;
       default_model?: string;
       temperature?: number;
@@ -762,6 +828,7 @@ class ApiClient {
       system_prompt?: string;
       status?: string;
       knowledge_base_ids?: string[];
+      change_summary?: string;
     }
   ): Promise<AssistantItem> {
     return this.request<AssistantItem>(`/assistants/${assistantId}`, {
@@ -772,6 +839,94 @@ class ApiClient {
 
   async deleteAssistant(assistantId: string): Promise<void> {
     await this.request<void>(`/assistants/${assistantId}`, { method: "DELETE" }, true);
+  }
+
+  async listAssistantVersions(assistantId: string): Promise<AssistantVersionItem[]> {
+    return this.request<AssistantVersionItem[]>(`/assistants/${assistantId}/versions`, { method: "GET" }, true);
+  }
+
+  async getAssistantVersion(assistantId: string, versionNum: number): Promise<AssistantVersionItem> {
+    return this.request<AssistantVersionItem>(`/assistants/${assistantId}/versions/${versionNum}`, { method: "GET" }, true);
+  }
+
+  async rollbackAssistantVersion(
+    assistantId: string,
+    targetVersionNum: number,
+    changeSummary?: string
+  ): Promise<AssistantItem> {
+    return this.request<AssistantItem>(`/assistants/${assistantId}/rollback`, {
+      method: "POST",
+      body: JSON.stringify({
+        target_version_num: targetVersionNum,
+        change_summary: changeSummary,
+      }),
+    }, true);
+  }
+
+  async streamPreviewTest(
+    payload: {
+      message: string;
+      system_prompt?: string;
+      llm_provider?: string;
+      default_model?: string;
+      temperature?: number;
+      max_tokens?: number;
+      retrieval_mode?: string;
+      top_k?: number;
+      knowledge_base_ids?: string[];
+    },
+    onEvent: (event: string, data: any) => void,
+    signal?: AbortSignal
+  ): Promise<void> {
+    const token = typeof window !== "undefined" ? localStorage.getItem("mmaip_token") : null;
+    const tenantId = typeof window !== "undefined" ? localStorage.getItem("mmaip_active_tenant_id") : null;
+
+    const res = await fetch(`${API_V1}/assistants/preview-test`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(tenantId ? { "X-Tenant-ID": tenantId } : {}),
+      },
+      body: JSON.stringify(payload),
+      signal,
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Preview request failed" }));
+      throw new Error(err.detail || `HTTP ${res.status}`);
+    }
+
+    const reader = res.body?.getReader();
+    if (!reader) return;
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n\n");
+      buffer = lines.pop() || "";
+
+      for (const block of lines) {
+        if (!block.trim()) continue;
+        const eventMatch = block.match(/event:\s*([^\n]+)/);
+        const dataMatch = block.match(/data:\s*([^\n]+)/);
+
+        if (eventMatch && dataMatch) {
+          const eventType = eventMatch[1].trim();
+          try {
+            const dataObj = JSON.parse(dataMatch[1].trim());
+            onEvent(eventType, dataObj);
+          } catch {
+            onEvent(eventType, { raw: dataMatch[1] });
+          }
+        }
+      }
+    }
   }
 
   // =========================================================================

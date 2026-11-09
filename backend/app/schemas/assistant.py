@@ -9,6 +9,11 @@ class AssistantCreateRequest(BaseModel):
     name: str = Field(min_length=2, max_length=255)
     slug: Optional[str] = Field(default=None, max_length=255)
     description: Optional[str] = Field(default=None, max_length=1000)
+    template_id: Optional[str] = Field(default=None, max_length=100)
+    audience_level: str = Field(default="general", max_length=50)
+    response_style: str = Field(default="balanced", max_length=50)
+    uncertainty_behavior: str = Field(default="admit", max_length=50)
+    citation_style: str = Field(default="strict", max_length=50)
     llm_provider: str = Field(default="omniroute")
     default_model: str = Field(default="auto")
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
@@ -23,6 +28,11 @@ class AssistantCreateRequest(BaseModel):
 class AssistantUpdateRequest(BaseModel):
     name: Optional[str] = Field(default=None, min_length=2, max_length=255)
     description: Optional[str] = None
+    template_id: Optional[str] = None
+    audience_level: Optional[str] = None
+    response_style: Optional[str] = None
+    uncertainty_behavior: Optional[str] = None
+    citation_style: Optional[str] = None
     llm_provider: Optional[str] = None
     default_model: Optional[str] = None
     temperature: Optional[float] = Field(default=None, ge=0.0, le=2.0)
@@ -33,6 +43,7 @@ class AssistantUpdateRequest(BaseModel):
     system_prompt: Optional[str] = None
     status: Optional[str] = None
     knowledge_base_ids: Optional[list[uuid.UUID]] = None
+    change_summary: Optional[str] = Field(default=None, max_length=500)
 
 
 class AssistantResponse(BaseModel):
@@ -41,6 +52,11 @@ class AssistantResponse(BaseModel):
     name: str
     slug: str
     description: Optional[str] = None
+    template_id: Optional[str] = None
+    audience_level: str = "general"
+    response_style: str = "balanced"
+    uncertainty_behavior: str = "admit"
+    citation_style: str = "strict"
     llm_provider: str = "omniroute"
     default_model: str = "auto"
     temperature: float = 0.7
@@ -50,11 +66,46 @@ class AssistantResponse(BaseModel):
     top_k: int = 5
     system_prompt: Optional[str] = None
     status: str
+    current_version_num: int = 1
     connected_kb_ids: list[uuid.UUID] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class AssistantVersionResponse(BaseModel):
+    id: uuid.UUID
+    tenant_id: uuid.UUID
+    assistant_id: uuid.UUID
+    version_num: int
+    model_name: str
+    system_prompt: Optional[str] = None
+    config_snapshot: dict[str, Any] = Field(default_factory=dict)
+    actor_id: Optional[uuid.UUID] = None
+    change_summary: Optional[str] = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class AssistantRollbackRequest(BaseModel):
+    target_version_num: int = Field(ge=1, description="Version number to roll back to")
+    change_summary: Optional[str] = Field(
+        default=None, max_length=500, description="Optional explanation for rollback"
+    )
+
+
+class AssistantTestPreviewRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=4000)
+    system_prompt: Optional[str] = None
+    llm_provider: Optional[str] = "mock"
+    default_model: Optional[str] = "mock-model"
+    temperature: Optional[float] = Field(default=0.7, ge=0.0, le=2.0)
+    max_tokens: Optional[int] = Field(default=1024, ge=64, le=4096)
+    retrieval_mode: Optional[str] = Field(default="hybrid")
+    top_k: Optional[int] = Field(default=5, ge=1, le=20)
+    knowledge_base_ids: list[uuid.UUID] = Field(default_factory=list)
 
 
 class ConversationCreateRequest(BaseModel):

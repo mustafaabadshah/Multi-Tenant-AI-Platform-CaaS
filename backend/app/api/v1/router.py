@@ -14,6 +14,7 @@ from app.api.v1.members import router as members_router
 from app.api.v1.organizations import router as organizations_router
 from app.api.v1.retrieval import router as retrieval_router
 from app.api.v1.roles import router as roles_router
+from app.api.v1.templates import router as templates_router
 from app.api.v1.tenants import router as tenants_router
 from app.api.v1.vector_stores import router as vector_stores_router
 
@@ -26,6 +27,7 @@ api_v1_router.include_router(members_router)
 api_v1_router.include_router(departments_router)
 api_v1_router.include_router(groups_router)
 api_v1_router.include_router(roles_router)
+api_v1_router.include_router(templates_router)
 api_v1_router.include_router(assistant_router)
 api_v1_router.include_router(conversations_router)
 api_v1_router.include_router(knowledge_router)

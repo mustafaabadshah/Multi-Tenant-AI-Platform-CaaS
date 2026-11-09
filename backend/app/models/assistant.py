@@ -1,7 +1,7 @@
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import Base, TenantScopedMixin, TimestampMixin, UUIDPrimaryKeyMixin
@@ -9,6 +9,7 @@ from app.database.base import Base, TenantScopedMixin, TimestampMixin, UUIDPrima
 if TYPE_CHECKING:
     from app.models.conversation import Conversation
     from app.models.tenant import Tenant
+    from app.models.user import User
 
 
 class Assistant(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin):
@@ -18,6 +19,11 @@ class Assistant(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     slug: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     description: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    template_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    audience_level: Mapped[str] = mapped_column(String(50), default="general", nullable=False)
+    response_style: Mapped[str] = mapped_column(String(50), default="balanced", nullable=False)
+    uncertainty_behavior: Mapped[str] = mapped_column(String(50), default="admit", nullable=False)
+    citation_style: Mapped[str] = mapped_column(String(50), default="strict", nullable=False)
     default_model: Mapped[str] = mapped_column(String(100), default="auto", nullable=False)
     llm_provider: Mapped[str] = mapped_column(String(50), default="omniroute", nullable=False)
     temperature: Mapped[float] = mapped_column(default=0.7, nullable=False)
@@ -27,12 +33,16 @@ class Assistant(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin):
     top_k: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
     system_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(50), default="ACTIVE", nullable=False)
+    current_version_num: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     byok_encrypted_key: Mapped[str | None] = mapped_column(String(1024), nullable=True)
 
     # Relationships
     tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="assistants")
     versions: Mapped[list["AssistantVersion"]] = relationship(
-        "AssistantVersion", back_populates="assistant", cascade="all, delete-orphan"
+        "AssistantVersion",
+        back_populates="assistant",
+        cascade="all, delete-orphan",
+        order_by="AssistantVersion.version_num.desc()",
     )
     prompts: Mapped[list["AssistantPrompt"]] = relationship(
         "AssistantPrompt", back_populates="assistant", cascade="all, delete-orphan"
@@ -46,8 +56,11 @@ class Assistant(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin):
 
 
 
-class AssistantVersion(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+class AssistantVersion(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin):
     __tablename__ = "assistant_versions"
+    __table_args__ = (
+        UniqueConstraint("assistant_id", "version_num", name="uq_assistant_version_num"),
+    )
 
     assistant_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("assistants.id", ondelete="CASCADE"),
@@ -57,6 +70,13 @@ class AssistantVersion(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     version_num: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     model_name: Mapped[str] = mapped_column(String(100), nullable=False)
     system_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    config_snapshot: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    actor_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    change_summary: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     assistant: Mapped["Assistant"] = relationship("Assistant", back_populates="versions")
 
