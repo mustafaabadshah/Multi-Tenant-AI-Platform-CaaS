@@ -25,7 +25,9 @@ import {
   ChevronRight,
   Send,
   MessageSquare,
+  Globe,
 } from "lucide-react";
+import PublishTab from "./PublishTab";
 
 interface AssistantWorkspaceViewProps {
   assistant: AssistantItem;
@@ -43,7 +45,7 @@ export default function AssistantWorkspaceView({
   onStartChat,
 }: AssistantWorkspaceViewProps) {
   const [activeTab, setActiveTab] = useState<
-    "overview" | "instructions" | "config" | "knowledge" | "versions"
+    "overview" | "instructions" | "config" | "knowledge" | "versions" | "publish"
   >("overview");
 
   // Form State
@@ -291,6 +293,18 @@ export default function AssistantWorkspaceView({
           <History className="w-3.5 h-3.5" />
           <span>Version History</span>
         </button>
+
+        <button
+          onClick={() => setActiveTab("publish")}
+          className={`py-3 px-3 font-semibold border-b-2 transition cursor-pointer flex items-center gap-2 ${
+            activeTab === "publish"
+              ? "border-sky-500 text-white"
+              : "border-transparent text-slate-400 hover:text-white"
+          }`}
+        >
+          <Globe className="w-3.5 h-3.5 text-emerald-400" />
+          <span>Publish & Embed</span>
+        </button>
       </div>
 
       {/* Tab Panels */}
@@ -353,6 +367,28 @@ export default function AssistantWorkspaceView({
                   />
                 </div>
               </div>
+            </div>
+
+            {/* Publishing & Distribution Card */}
+            <div className="p-5 rounded-2xl bg-slate-900/40 border border-slate-800 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                  <Globe className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-white">Public Publishing & Website Embed</h4>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Generate secure public links, floating chat embed scripts, or iframe widgets.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveTab("publish")}
+                className="px-3.5 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold transition cursor-pointer shrink-0"
+              >
+                Configure Publishing
+              </button>
             </div>
           </div>
         )}
@@ -733,6 +769,19 @@ export default function AssistantWorkspaceView({
               </div>
             )}
           </div>
+        )}
+
+        {/* ================================================================= */}
+        {/* PUBLISH TAB                                                       */}
+        {/* ================================================================= */}
+        {activeTab === "publish" && (
+          <PublishTab
+            assistantId={assistant.id}
+            assistantName={assistant.name}
+            connectedKbCount={selectedKBIds.length}
+            hasSystemPrompt={Boolean(systemPrompt.trim())}
+            defaultModel={defaultModel}
+          />
         )}
       </div>
     </div>

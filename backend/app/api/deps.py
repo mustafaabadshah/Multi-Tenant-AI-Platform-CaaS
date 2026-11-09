@@ -27,6 +27,10 @@ class TenantContext:
     permissions: set[str]
 
     @property
+    def user_id(self) -> uuid.UUID:
+        return self.membership.user_id
+
+    @property
     def is_admin(self) -> bool:
         return self.role.name in (
             SystemRole.PLATFORM_SUPERADMIN.value,

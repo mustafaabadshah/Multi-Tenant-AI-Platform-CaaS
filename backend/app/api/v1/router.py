@@ -19,6 +19,10 @@ from app.api.v1.templates import router as templates_router
 from app.api.v1.tenants import router as tenants_router
 from app.api.v1.vector_stores import router as vector_stores_router
 
+from app.api.v1.developer import router as developer_router
+from app.api.v1.public_chat import router as public_chat_router
+from app.api.v1.publishing import router as publishing_router
+
 api_v1_router = APIRouter(prefix="/api/v1")
 
 api_v1_router.include_router(auth_router)
@@ -30,6 +34,9 @@ api_v1_router.include_router(groups_router)
 api_v1_router.include_router(roles_router)
 api_v1_router.include_router(templates_router)
 api_v1_router.include_router(assistant_router)
+api_v1_router.include_router(publishing_router)
+api_v1_router.include_router(developer_router)
+api_v1_router.include_router(public_chat_router)
 api_v1_router.include_router(conversations_router)
 api_v1_router.include_router(knowledge_router)
 api_v1_router.include_router(documents_router)

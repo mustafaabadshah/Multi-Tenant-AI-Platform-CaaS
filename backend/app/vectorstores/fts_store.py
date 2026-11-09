@@ -58,6 +58,9 @@ class PostgresFTSStore(VectorStore):
         if not cleaned_query:
             return []
 
+        if filter_criteria.document_ids is not None and len(filter_criteria.document_ids) == 0:
+            return []
+
         bind = self.session.bind
         dialect_name = bind.dialect.name if bind else "postgresql"
 

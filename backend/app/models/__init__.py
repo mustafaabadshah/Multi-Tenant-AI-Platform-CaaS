@@ -13,6 +13,7 @@ from app.models.config import (
     VectorStoreConfig,
 )
 from app.models.provider import ProviderCredential, ProviderUsageLog
+from app.models.publishing import APIKey, AssistantPublication, PublicChatSession
 from app.models.conversation import Conversation, Message, MessageAttachment, MessageCitation
 from app.models.department import Department
 from app.models.group import EmployeeGroup, GroupMembership
@@ -36,10 +37,12 @@ from app.models.tenant import Tenant
 from app.models.user import User
 
 __all__ = [
+    "APIKey",
     "Assistant",
     "AssistantKnowledgeBase",
     "AssistantMembership",
     "AssistantPrompt",
+    "AssistantPublication",
     "AssistantVersion",
     "AuditLog",
     "Base",
@@ -66,6 +69,7 @@ __all__ = [
     "ProviderConnection",
     "ProviderCredential",
     "ProviderUsageLog",
+    "PublicChatSession",
     "ResourcePermission",
     "RetrievalConfig",
     "Role",

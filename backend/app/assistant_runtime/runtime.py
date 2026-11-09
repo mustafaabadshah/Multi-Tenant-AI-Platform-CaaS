@@ -59,6 +59,8 @@ class AssistantRuntime:
         self,
         conversation_id: uuid.UUID,
         user_message: str,
+        is_public: bool = False,
+        traffic_type: str = "internal",
     ) -> AsyncIterator[str]:
         """Stream an assistant response with citations via Server-Sent Events."""
         start_time = time.perf_counter()
@@ -69,7 +71,7 @@ class AssistantRuntime:
             Conversation.tenant_id == self.tenant_id,
         )
         conv = (await self.session.execute(conv_stmt)).scalar_one_or_none()
-        if not conv or (not self.is_admin and conv.user_id != self.user_id):
+        if not conv or (not is_public and not self.is_admin and conv.user_id != self.user_id):
             yield format_sse("message_error", {"error": "Conversation not found or unauthorized"})
             return
 
@@ -142,11 +144,24 @@ class AssistantRuntime:
                     is_admin=self.is_admin,
                     user_department_id=self.user_department_id,
                 )
+                target_doc_ids = None
+                if is_public:
+                    # Public access boundary: only retrieve chunks from documents with access_level == "PUBLIC"
+                    from app.models.knowledge import Document
+                    pub_doc_stmt = select(Document.id).where(
+                        Document.knowledge_base_id.in_(authorized_kb_ids),
+                        Document.tenant_id == self.tenant_id,
+                        Document.access_level == "PUBLIC",
+                        Document.status != "DELETED",
+                    )
+                    target_doc_ids = list((await self.session.execute(pub_doc_stmt)).scalars().all())
+
                 search_resp = await retrieval_svc.search(
                     query=user_message,
                     knowledge_base_ids=list(authorized_kb_ids),
                     mode=asst.retrieval_mode or "hybrid",
                     top_k=asst.top_k or 5,
+                    document_ids=target_doc_ids,
                 )
                 retrieved_results = search_resp.results
 
@@ -260,6 +275,7 @@ class AssistantRuntime:
             assistant_id=asst.id,
             user_id=self.user_id,
             is_preview=False,
+            traffic_type=traffic_type,
         )
 
         duration = round((time.perf_counter() - start_time) * 1000, 2)

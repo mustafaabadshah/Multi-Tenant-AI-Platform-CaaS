@@ -1,28 +1,63 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { API_BASE } from "@/lib/api";
-import { Server, Cpu, HardDrive } from "lucide-react";
+import { Server, Cpu, HardDrive, Key, Sliders } from "lucide-react";
+import DeveloperApiKeysSection from "./DeveloperApiKeysSection";
 
 export default function SettingsPage() {
   const { activeWorkspace } = useAuth();
+  const [activeTab, setActiveTab] = useState<"infrastructure" | "developer">("infrastructure");
 
   return (
     <div className="space-y-6 max-w-4xl">
       <div>
-        <h1 className="text-xl font-bold text-white tracking-tight">Workspace Settings & Quotas</h1>
+        <h1 className="text-xl font-bold text-white tracking-tight">Workspace Settings & API Access</h1>
         <p className="text-xs text-slate-400 mt-1">
-          Infrastructure parameters, active limits, and AI Gateway configurations.
+          Infrastructure parameters, active limits, developer keys, and AI Gateway configurations.
         </p>
       </div>
 
-      {/* Quotas & Capacity */}
-      <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 backdrop-blur-xl space-y-5">
-        <h2 className="text-sm font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
-          <HardDrive className="w-4 h-4 text-blue-400" />
-          <span>Tenant Quotas & Usage Capacity</span>
-        </h2>
+      {/* Settings Navigation Tabs */}
+      <div className="flex items-center gap-2 border-b border-slate-800 text-xs">
+        <button
+          type="button"
+          onClick={() => setActiveTab("infrastructure")}
+          className={`py-2.5 px-3 font-semibold border-b-2 transition cursor-pointer flex items-center gap-2 ${
+            activeTab === "infrastructure"
+              ? "border-sky-500 text-white"
+              : "border-transparent text-slate-400 hover:text-white"
+          }`}
+        >
+          <Sliders className="w-3.5 h-3.5" />
+          <span>Infrastructure & Quotas</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("developer")}
+          className={`py-2.5 px-3 font-semibold border-b-2 transition cursor-pointer flex items-center gap-2 ${
+            activeTab === "developer"
+              ? "border-sky-500 text-white"
+              : "border-transparent text-slate-400 hover:text-white"
+          }`}
+        >
+          <Key className="w-3.5 h-3.5 text-sky-400" />
+          <span>Developer API Keys</span>
+        </button>
+      </div>
+
+      {activeTab === "developer" ? (
+        <DeveloperApiKeysSection />
+      ) : (
+        <div className="space-y-6">
+          {/* Quotas & Capacity */}
+          <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 backdrop-blur-xl space-y-5">
+            <h2 className="text-sm font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
+              <HardDrive className="w-4 h-4 text-blue-400" />
+              <span>Tenant Quotas & Usage Capacity</span>
+            </h2>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
           <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
@@ -121,6 +156,8 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
+    </div>
+      )}
     </div>
   );
 }

@@ -152,6 +152,8 @@ export interface MessageCitationItem {
   } | null;
 }
 
+export type CitationItem = MessageCitationItem;
+
 export interface MessageItem {
   id: string;
   conversation_id: string;
@@ -219,6 +221,28 @@ export interface DocumentVersionItem {
   created_at: string;
 }
 
+export interface DocumentContentItem {
+  document_id: string;
+  version_num: number;
+  filename: string;
+  mime_type: string;
+  total_pages: number;
+  extracted_text: string | null;
+  structured_data: Record<string, unknown>;
+  extraction_stats: Record<string, unknown>;
+}
+
+export interface IngestionEventItem {
+  id: string;
+  job_id: string;
+  event_type: string;
+  stage: string;
+  level: string;
+  message: string;
+  event_metadata: Record<string, unknown>;
+  created_at: string;
+}
+
 export interface DocumentChunkItem {
   id: string;
   knowledge_base_id: string;
@@ -232,6 +256,72 @@ export interface DocumentChunkItem {
   chunking_strategy: string;
   metadata_json: Record<string, unknown>;
   created_at: string;
+}
+
+export interface AssistantPublication {
+  id: string;
+  tenant_id: string;
+  assistant_id: string;
+  public_id: string;
+  visibility: "PRIVATE" | "WORKSPACE" | "PUBLIC";
+  is_active: boolean;
+  allowed_domains: string[];
+  custom_greeting: string | null;
+  brand_color: string;
+  published_version_id: string | null;
+  created_by: string | null;
+  published_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AssistantPublicationCreate {
+  visibility: "PRIVATE" | "WORKSPACE" | "PUBLIC";
+  allowed_domains?: string[];
+  custom_greeting?: string | null;
+  brand_color?: string;
+  published_version_id?: string | null;
+}
+
+export interface APIKeyItem {
+  id: string;
+  tenant_id: string;
+  name: string;
+  key_prefix: string;
+  scopes: string[];
+  expires_at: string | null;
+  last_used_at: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface APIKeyCreatedResponse extends APIKeyItem {
+  raw_key: string;
+}
+
+export interface APIKeyCreateRequest {
+  name: string;
+  scopes: string[];
+  expires_days?: number | null;
+}
+
+export interface PublicAssistantMetadata {
+  public_id: string;
+  name: string;
+  description: string | null;
+  custom_greeting: string | null;
+  brand_color: string;
+  citation_style: string;
+  is_active: boolean;
+}
+
+export interface PublicEmbedConfig {
+  public_id: string;
+  name: string;
+  brand_color: string;
+  custom_greeting: string | null;
+  embed_url: string;
+  script_url: string;
 }
 
 export interface IngestionJobItem {
@@ -1216,6 +1306,146 @@ class ApiClient {
             }
           } catch {
             // Ignore parse errors on partial frames
+          }
+        }
+      }
+    }
+  }
+
+  // Assistant Publishing
+  async getAssistantPublication(assistantId: string): Promise<AssistantPublication> {
+    return this.request<AssistantPublication>(`/assistants/${assistantId}/publication`);
+  }
+
+  async publishAssistant(assistantId: string, payload: AssistantPublicationCreate): Promise<AssistantPublication> {
+    return this.request<AssistantPublication>(`/assistants/${assistantId}/publish`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async unpublishAssistant(assistantId: string): Promise<AssistantPublication> {
+    return this.request<AssistantPublication>(`/assistants/${assistantId}/unpublish`, {
+      method: "POST",
+    });
+  }
+
+  async updateAssistantPublication(
+    assistantId: string,
+    payload: Partial<AssistantPublicationCreate>
+  ): Promise<AssistantPublication> {
+    return this.request<AssistantPublication>(`/assistants/${assistantId}/publication`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  // Developer API Keys
+  async listApiKeys(): Promise<APIKeyItem[]> {
+    return this.request<APIKeyItem[]>("/developer/api-keys");
+  }
+
+  async createApiKey(payload: APIKeyCreateRequest): Promise<APIKeyCreatedResponse> {
+    return this.request<APIKeyCreatedResponse>("/developer/api-keys", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async revokeApiKey(keyId: string): Promise<{ success: boolean; message: string }> {
+    return this.request<{ success: boolean; message: string }>(`/developer/api-keys/${keyId}`, {
+      method: "DELETE",
+    });
+  }
+
+  // Public Chat Endpoints (Zero Auth / Anonymous Visitor)
+  async getPublicAssistant(publicId: string): Promise<PublicAssistantMetadata> {
+    const res = await fetch(`${API_V1}/public/assistants/${publicId}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || "Assistant not found or publication is inactive");
+    }
+    return res.json();
+  }
+
+  async getPublicEmbedConfig(publicId: string): Promise<PublicEmbedConfig> {
+    const res = await fetch(`${API_V1}/public/assistants/${publicId}/embed-config`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || "Failed to load embed configuration");
+    }
+    return res.json();
+  }
+
+  async streamPublicChat(
+    publicId: string,
+    message: string,
+    sessionToken: string | undefined,
+    callbacks: {
+      onToken: (delta: string) => void;
+      onCitation?: (citation: MessageCitationItem) => void;
+      onCitations?: (citations: MessageCitationItem[]) => void;
+      onComplete?: (metadata: { messageId: string }) => void;
+      onError?: (error: string) => void;
+    }
+  ): Promise<void> {
+    const res = await fetch(`${API_V1}/public/assistants/${publicId}/chat`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ message, session_token: sessionToken }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Chat request failed: ${res.status}`);
+    }
+
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error("Response body is not readable");
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const frames = buffer.split("\n\n");
+      buffer = frames.pop() || "";
+
+      for (const frame of frames) {
+        if (!frame.trim()) continue;
+        const lines = frame.split("\n");
+        let event = "";
+        let dataStr = "";
+
+        for (const line of lines) {
+          if (line.startsWith("event: ")) {
+            event = line.slice(7).trim();
+          } else if (line.startsWith("data: ")) {
+            dataStr = line.slice(6).trim();
+          }
+        }
+
+        if (event && dataStr) {
+          try {
+            const data = JSON.parse(dataStr);
+            if (event === "token" && data.delta) {
+              callbacks.onToken(data.delta);
+            } else if (event === "retrieval_complete" && data.citations) {
+              callbacks.onCitations?.(data.citations);
+            } else if (event === "citation" && data.citation) {
+              callbacks.onCitation?.(data.citation);
+            } else if (event === "message_complete") {
+              callbacks.onComplete?.({ messageId: data.message_id });
+            } else if (event === "message_error") {
+              callbacks.onError?.(data.error || "Unknown stream error");
+            }
+          } catch {
+            // Ignore partial frames
           }
         }
       }

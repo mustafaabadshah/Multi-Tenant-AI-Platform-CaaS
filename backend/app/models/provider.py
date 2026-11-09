@@ -65,6 +65,8 @@ class ProviderUsageLog(Base, UUIDPrimaryKeyMixin, TenantScopedMixin):
     completion_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     total_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     is_estimated: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    credential_source: Mapped[str] = mapped_column(String(50), default="byok", nullable=False)
+    traffic_type: Mapped[str] = mapped_column(String(50), default="internal", nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),

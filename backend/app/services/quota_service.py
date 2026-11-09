@@ -112,6 +112,8 @@ class QuotaService:
         provider_name: Optional[str] = None,
         model_name: Optional[str] = None,
         is_preview: bool = False,
+        credential_source: str = "byok",
+        traffic_type: str = "internal",
     ) -> ProviderUsageLog:
         """Atomically persist fine-grained usage consumption."""
         p = (provider or provider_name or "omniroute").lower()
@@ -127,6 +129,8 @@ class QuotaService:
             completion_tokens=completion_tokens,
             total_tokens=total,
             is_estimated=is_estimated,
+            credential_source=credential_source,
+            traffic_type=traffic_type,
         )
         self.session.add(usage_log)
         await self.session.commit()
@@ -180,6 +184,25 @@ class QuotaService:
             for row in p_res.all()
         ]
 
+        # Breakdown by traffic_type
+        traffic_breakdown_stmt = (
+            select(
+                ProviderUsageLog.traffic_type,
+                func.sum(ProviderUsageLog.total_tokens),
+                func.count(ProviderUsageLog.id),
+            )
+            .where(
+                ProviderUsageLog.tenant_id == self.tenant_id,
+                ProviderUsageLog.created_at >= start_of_month,
+            )
+            .group_by(ProviderUsageLog.traffic_type)
+        )
+        t_res = await self.session.execute(traffic_breakdown_stmt)
+        by_traffic_type = [
+            {"traffic_type": row[0], "tokens": int(row[1] or 0), "requests": int(row[2] or 0)}
+            for row in t_res.all()
+        ]
+
         daily_limit = getattr(quota, "daily_request_limit", DEFAULT_DAILY_REQUEST_LIMIT)
         pct_used = (month_total / quota.monthly_token_limit * 100) if quota.monthly_token_limit > 0 else 0
 
@@ -192,4 +215,5 @@ class QuotaService:
             "today_requests": today_req_count,
             "daily_request_limit": daily_limit,
             "by_provider": by_provider,
+            "by_traffic_type": by_traffic_type,
         }

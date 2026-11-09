@@ -65,6 +65,11 @@ class PermissionName(str, Enum):
     ASSISTANT_UPDATE = "assistant.update"
     ASSISTANT_DELETE = "assistant.delete"
     ASSISTANT_EXECUTE = "assistant.execute"
+    ASSISTANT_PUBLISH = "assistant.publish"
+
+    # API Keys & Integration (M08)
+    API_KEY_MANAGE = "api_key.manage"
+    API_KEY_READ = "api_key.read"
 
     # Knowledge & Documents
     KNOWLEDGE_CREATE = "knowledge.create"
@@ -150,6 +155,9 @@ ROLE_PERMISSIONS_MAP: dict[SystemRole, list[PermissionName]] = {
         PermissionName.CONVERSATION_DELETE,
         PermissionName.AUDIT_READ,
         PermissionName.USAGE_READ,
+        PermissionName.ASSISTANT_PUBLISH,
+        PermissionName.API_KEY_MANAGE,
+        PermissionName.API_KEY_READ,
     ],
     SystemRole.ORG_ADMIN: [
         PermissionName.TENANT_READ,
@@ -193,6 +201,9 @@ ROLE_PERMISSIONS_MAP: dict[SystemRole, list[PermissionName]] = {
         PermissionName.CONVERSATION_DELETE,
         PermissionName.AUDIT_READ,
         PermissionName.USAGE_READ,
+        PermissionName.ASSISTANT_PUBLISH,
+        PermissionName.API_KEY_MANAGE,
+        PermissionName.API_KEY_READ,
     ],
     SystemRole.DEPT_ADMIN: [
         PermissionName.TENANT_READ,

@@ -94,6 +94,9 @@ class PgVectorStore(VectorStore):
                 f"Query vector dimension mismatch: expected {filter_criteria.expected_dimensions}, got {query_dim}"
             )
 
+        if filter_criteria.document_ids is not None and len(filter_criteria.document_ids) == 0:
+            return []
+
         bind = self.session.bind
         dialect_name = bind.dialect.name if bind else "postgresql"
 
