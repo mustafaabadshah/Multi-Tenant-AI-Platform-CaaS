@@ -55,11 +55,17 @@ def validate_provider_endpoint(url: str, allow_local: bool = True) -> str:
 
 
 class OpenAICompatibleLLMProvider(LLMProvider):
-    """Universal OpenAI-compatible provider adapter for OmniRoute and OpenAI BYOK."""
+    """Universal OpenAI-compatible provider adapter for OmniRoute, Groq, and OpenAI BYOK."""
 
-    def __init__(self, name: str = "omniroute", default_base_url: Optional[str] = None):
+    def __init__(
+        self,
+        name: str = "omniroute",
+        default_base_url: Optional[str] = None,
+        default_api_key_env: Optional[str] = None,
+    ):
         self._name = name
         self._default_base_url = default_base_url
+        self._default_api_key_env = default_api_key_env
 
     @property
     def provider_name(self) -> str:
@@ -73,6 +79,8 @@ class OpenAICompatibleLLMProvider(LLMProvider):
             raw_url = self._default_base_url
         elif self._name == "omniroute":
             raw_url = os.environ.get("LLM_BASE_URL", "http://localhost:20128/v1")
+        elif self._name == "groq":
+            raw_url = "https://api.groq.com/openai/v1"
         else:
             raw_url = "https://api.openai.com/v1"
 
@@ -81,6 +89,10 @@ class OpenAICompatibleLLMProvider(LLMProvider):
     def _resolve_api_key(self, config: LLMConfig) -> str:
         if config.api_key:
             return config.api_key
+        if self._default_api_key_env:
+            env_val = os.environ.get(self._default_api_key_env)
+            if env_val:
+                return env_val
         if self._name == "omniroute":
             return os.environ.get("OMNIROUTE_API_KEY") or os.environ.get("OPENAI_API_KEY") or ""
         return os.environ.get("OPENAI_API_KEY", "")

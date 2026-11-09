@@ -21,6 +21,7 @@ import {
   FileCode,
   FileSpreadsheet,
   FileText,
+  Globe,
   History,
   Layers,
   Loader2,
@@ -63,6 +64,13 @@ export default function KnowledgePage() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // URL Ingestion State
+  const [showUrlModal, setShowUrlModal] = useState(false);
+  const [urlInput, setUrlInput] = useState("");
+  const [urlSubmitting, setUrlSubmitting] = useState(false);
+  const [urlError, setUrlError] = useState<string | null>(null);
+  const [urlSuccess, setUrlSuccess] = useState<string | null>(null);
 
   // Document Details & Inspection Modal
   const [inspectedDoc, setInspectedDoc] = useState<DocumentItem | null>(null);
@@ -608,15 +616,30 @@ export default function KnowledgePage() {
                 <FileText className="w-4 h-4 text-amber-400" />
                 <span>Documents ({documents.length})</span>
               </h2>
-              <div className="relative max-w-xs w-full">
-                <Search className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
-                <input
-                  type="text"
-                  placeholder="Filter documents..."
-                  value={docSearch}
-                  onChange={(e) => setDocSearch(e.target.value)}
-                  className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 text-xs focus:border-amber-500 outline-none"
-                />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUrlInput("");
+                    setUrlError(null);
+                    setUrlSuccess(null);
+                    setShowUrlModal(true);
+                  }}
+                  className="px-3 py-1.5 rounded-xl border border-slate-800 hover:border-slate-700 bg-slate-900 text-slate-200 text-xs font-medium transition flex items-center gap-1.5 cursor-pointer shrink-0"
+                >
+                  <Globe className="w-3.5 h-3.5 text-blue-400" />
+                  <span>Ingest Web Page</span>
+                </button>
+                <div className="relative max-w-xs w-full">
+                  <Search className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
+                  <input
+                    type="text"
+                    placeholder="Filter documents..."
+                    value={docSearch}
+                    onChange={(e) => setDocSearch(e.target.value)}
+                    className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 text-xs focus:border-amber-500 outline-none"
+                  />
+                </div>
               </div>
             </div>
 
@@ -1139,6 +1162,106 @@ export default function KnowledgePage() {
                   className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-medium transition cursor-pointer disabled:opacity-50"
                 >
                   {submittingKB ? "Creating..." : "Save Container"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Safe URL Ingestion Modal */}
+      {showUrlModal && selectedKB && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-md w-full shadow-2xl animate-fadeIn space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-blue-600/20 text-blue-400 flex items-center justify-center">
+                  <Globe className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Ingest Public Web Page</h3>
+                  <p className="text-xs text-slate-400">Extracts documentation with strict SSRF defenses</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowUrlModal(false)}
+                className="text-slate-400 hover:text-white transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {urlSuccess && (
+              <div className="p-3 rounded-xl bg-emerald-950/60 border border-emerald-800 text-emerald-300 text-xs flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>{urlSuccess}</span>
+              </div>
+            )}
+
+            {urlError && (
+              <div className="p-3 rounded-xl bg-red-950/60 border border-red-800 text-red-300 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                <span>{urlError}</span>
+              </div>
+            )}
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!selectedKB || !urlInput.trim()) return;
+                setUrlSubmitting(true);
+                setUrlError(null);
+                setUrlSuccess(null);
+                try {
+                  await api.ingestDocumentUrl(selectedKB.id, urlInput.trim());
+                  setUrlSuccess("Web page fetched and scheduled for ingestion!");
+                  setUrlInput("");
+                  setTimeout(() => {
+                    setShowUrlModal(false);
+                    setUrlSuccess(null);
+                  }, 1200);
+                  await loadDocuments(selectedKB.id);
+                } catch (err) {
+                  setUrlError(err instanceof Error ? err.message : "Failed to ingest URL");
+                } finally {
+                  setUrlSubmitting(false);
+                }
+              }}
+              className="space-y-3.5 text-xs"
+            >
+              <div>
+                <label className="block text-slate-300 font-medium mb-1">Target URL</label>
+                <input
+                  type="url"
+                  required
+                  placeholder="https://docs.example.com/api/v1/overview"
+                  value={urlInput}
+                  onChange={(e) => setUrlInput(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 font-mono text-xs focus:border-blue-500 outline-none"
+                />
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800/80 text-[11px] text-slate-400 space-y-1">
+                <span className="font-semibold text-slate-300 block">Security Guardrails:</span>
+                <p>Private IP ranges (RFC 1918), link-local addresses, and cloud metadata (169.254.169.254) are strictly blocked.</p>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowUrlModal(false)}
+                  className="px-3.5 py-2 rounded-xl border border-slate-800 hover:border-slate-700 bg-slate-900 text-slate-300 text-xs font-medium cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={urlSubmitting || !urlInput.trim()}
+                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-lg shadow-blue-600/20 transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {urlSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>{urlSubmitting ? "Fetching..." : "Fetch & Ingest"}</span>
                 </button>
               </div>
             </form>

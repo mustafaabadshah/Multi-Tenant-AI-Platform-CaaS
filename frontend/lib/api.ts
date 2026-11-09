@@ -348,6 +348,101 @@ export interface VectorStoreItem {
   is_configured: boolean;
 }
 
+export interface ProviderModelInfo {
+  model_id: string;
+  display_name: string;
+  context_window: number;
+  max_output_tokens: number;
+  supports_streaming: boolean;
+  supports_tools: boolean;
+  supports_vision: boolean;
+  supports_audio: boolean;
+  description: string;
+}
+
+export interface ProviderDirectoryItem {
+  name: string;
+  display_name: string;
+  description: string;
+  requires_api_key: boolean;
+  default_base_url: string | null;
+  models: ProviderModelInfo[];
+}
+
+export interface ProviderCredential {
+  id: string;
+  tenant_id: string;
+  provider_name: string;
+  display_name: string;
+  api_key_masked: string;
+  base_url: string | null;
+  is_active: boolean;
+  is_default: boolean;
+  status: "HEALTHY" | "UNHEALTHY" | "REVOKED";
+  error_message: string | null;
+  last_tested_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProviderUsageSummary {
+  monthly_tokens_used: number;
+  monthly_tokens_limit: number;
+  monthly_prompt_tokens: number;
+  monthly_completion_tokens: number;
+  percentage_used: number;
+  today_requests: number;
+  daily_request_limit: number;
+  by_provider: Array<{
+    provider: string;
+    total_tokens: number;
+    prompt_tokens: number;
+    completion_tokens: number;
+    requests: number;
+  }>;
+}
+
+export interface DocumentChunk {
+  id: string;
+  knowledge_base_id: string;
+  document_id: string;
+  document_version_id?: string | null;
+  chunk_index: number;
+  content: string;
+  character_count: number;
+  token_count: number;
+  page_number?: number | null;
+  heading_path?: string | null;
+  chunk_hash?: string | null;
+  chunking_strategy: string;
+  metadata_json?: Record<string, any>;
+  created_at: string;
+}
+
+export interface PlaygroundChunkResult {
+  chunk_id: string;
+  document_id: string;
+  document_title: string;
+  rank: number;
+  sparse_score?: number | null;
+  dense_score?: number | null;
+  score: number;
+  retrieval_source: string;
+  content: string;
+  page_number?: number | null;
+  heading_path?: string | null;
+}
+
+export interface PlaygroundSearchResponse {
+  query: string;
+  knowledge_base_id: string;
+  retrieval_mode: string;
+  vector_store: string;
+  latency_ms: number;
+  total_results: number;
+  results: PlaygroundChunkResult[];
+}
+
 export interface SearchCitationItem {
   citation_id: string;
   document_id: string;
@@ -951,6 +1046,94 @@ class ApiClient {
 
   async listMessages(conversationId: string): Promise<MessageItem[]> {
     return this.request<MessageItem[]>(`/conversations/${conversationId}/messages`, { method: "GET" }, true);
+  }
+
+  // ---------------------------------------------------------------------------
+  // M07: Provider Directory, BYOK Key Vault & Quotas
+  // ---------------------------------------------------------------------------
+
+  async getProviderDirectory(): Promise<ProviderDirectoryItem[]> {
+    return this.request<ProviderDirectoryItem[]>("/providers/directory", { method: "GET" }, true);
+  }
+
+  async listProviderCredentials(): Promise<ProviderCredential[]> {
+    return this.request<ProviderCredential[]>("/providers/credentials", { method: "GET" }, true);
+  }
+
+  async createProviderCredential(data: {
+    provider_name: string;
+    display_name: string;
+    api_key: string;
+    base_url?: string;
+    is_default?: boolean;
+  }): Promise<ProviderCredential> {
+    return this.request<ProviderCredential>("/providers/credentials", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }, true);
+  }
+
+  async testProviderCredential(id: string): Promise<{ valid: boolean; error: string | null }> {
+    return this.request<{ valid: boolean; error: string | null }>(`/providers/credentials/${id}/test`, {
+      method: "POST",
+    }, true);
+  }
+
+  async rotateProviderCredential(id: string, new_api_key: string): Promise<ProviderCredential> {
+    return this.request<ProviderCredential>(`/providers/credentials/${id}/rotate`, {
+      method: "POST",
+      body: JSON.stringify({ new_api_key }),
+    }, true);
+  }
+
+  async revokeProviderCredential(id: string): Promise<ProviderCredential> {
+    return this.request<ProviderCredential>(`/providers/credentials/${id}/revoke`, {
+      method: "POST",
+    }, true);
+  }
+
+  async deleteProviderCredential(id: string): Promise<void> {
+    return this.request<void>(`/providers/credentials/${id}`, {
+      method: "DELETE",
+    }, true);
+  }
+
+  async getProviderUsageSummary(): Promise<ProviderUsageSummary> {
+    return this.request<ProviderUsageSummary>("/providers/usage/summary", { method: "GET" }, true);
+  }
+
+  // ---------------------------------------------------------------------------
+  // M07: Safe URL Ingestion & Chunk Inspector
+  // ---------------------------------------------------------------------------
+
+  async ingestDocumentUrl(knowledge_base_id: string, url: string): Promise<any> {
+    return this.request<any>("/documents/ingest-url", {
+      method: "POST",
+      body: JSON.stringify({ knowledge_base_id, url }),
+    }, true);
+  }
+
+  async listDocumentChunks(document_id: string, limit = 100, offset = 0): Promise<DocumentChunk[]> {
+    return this.request<DocumentChunk[]>(`/documents/${document_id}/chunks?limit=${limit}&offset=${offset}`, {
+      method: "GET",
+    }, true);
+  }
+
+  // ---------------------------------------------------------------------------
+  // M07: Retrieval Playground
+  // ---------------------------------------------------------------------------
+
+  async searchRetrievalPlayground(data: {
+    knowledge_base_id: string;
+    query: string;
+    mode?: string;
+    top_k?: number;
+    similarity_threshold?: number;
+  }): Promise<PlaygroundSearchResponse> {
+    return this.request<PlaygroundSearchResponse>("/retrieval/playground", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }, true);
   }
 
   async streamChatMessage(

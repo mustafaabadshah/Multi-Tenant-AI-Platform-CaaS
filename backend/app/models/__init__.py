@@ -12,6 +12,7 @@ from app.models.config import (
     ProviderConnection,
     VectorStoreConfig,
 )
+from app.models.provider import ProviderCredential, ProviderUsageLog
 from app.models.conversation import Conversation, Message, MessageAttachment, MessageCitation
 from app.models.department import Department
 from app.models.group import EmployeeGroup, GroupMembership
@@ -63,6 +64,8 @@ __all__ = [
     "Organization",
     "Permission",
     "ProviderConnection",
+    "ProviderCredential",
+    "ProviderUsageLog",
     "ResourcePermission",
     "RetrievalConfig",
     "Role",

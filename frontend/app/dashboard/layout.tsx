@@ -13,6 +13,7 @@ import {
   Bot,
   Database,
   History,
+  Key,
   Settings,
   ChevronDown,
   PlusCircle,
@@ -85,6 +86,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       items: [
         { label: "Assistants", href: "/dashboard/assistants", icon: Bot },
         { label: "Knowledge Bases", href: "/dashboard/knowledge", icon: Database },
+        { label: "Providers & Keys", href: "/dashboard/providers", icon: Key },
       ],
     },
     {

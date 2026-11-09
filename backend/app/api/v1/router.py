@@ -12,6 +12,7 @@ from app.api.v1.ingestion import router as ingestion_router
 from app.api.v1.knowledge import router as knowledge_router
 from app.api.v1.members import router as members_router
 from app.api.v1.organizations import router as organizations_router
+from app.api.v1.providers import router as providers_router
 from app.api.v1.retrieval import router as retrieval_router
 from app.api.v1.roles import router as roles_router
 from app.api.v1.templates import router as templates_router
@@ -36,6 +37,7 @@ api_v1_router.include_router(ingestion_router)
 api_v1_router.include_router(retrieval_router)
 api_v1_router.include_router(embedding_providers_router)
 api_v1_router.include_router(vector_stores_router)
+api_v1_router.include_router(providers_router)
 api_v1_router.include_router(audit_router)
 
 

@@ -13,16 +13,20 @@ from app.models.knowledge import Document
 from app.models.user import User
 from app.repositories.audit_repository import AuditLogRepository
 from app.repositories.document_repository import DocumentRepository, IngestionJobRepository
+from app.repositories.knowledge_repository import KnowledgeRepository
 from app.schemas.knowledge import (
     DocumentChunkResponse,
     DocumentContentResponse,
     DocumentResponse,
+    DocumentUploadResponse,
     DocumentVersionResponse,
     IngestionEventResponse,
     IngestionJobResponse,
 )
-from app.services.ingestion.service import run_ingestion_in_background
-from app.storage import get_storage_provider
+from app.schemas.provider import URLIngestRequest
+from app.services.ingestion.service import IngestionService, run_ingestion_in_background
+from app.services.ingestion.url_ingestion import SSRFValidationError, fetch_url_content_safe
+from app.storage import get_storage_provider, sanitize_filename
 
 router = APIRouter(prefix="/documents", tags=["Documents & Extraction"])
 
@@ -224,3 +228,68 @@ async def get_document_processing_history(
     job_repo = IngestionJobRepository(db, ctx.tenant.id)
     events = await job_repo.get_document_events(document_id)
     return [IngestionEventResponse.model_validate(e) for e in events]
+
+
+@router.post("/ingest-url", response_model=DocumentUploadResponse)
+async def ingest_url(
+    payload: URLIngestRequest,
+    ctx: TenantContext = Depends(require_permission(PermissionName.DOCUMENT_UPLOAD.value)),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> DocumentUploadResponse:
+    kb_repo = KnowledgeRepository(db, ctx.tenant.id)
+    kb = await kb_repo.get_by_id(payload.knowledge_base_id)
+    if not kb:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Knowledge base not found in active workspace",
+        )
+
+    try:
+        title, content_bytes, mime_type = await fetch_url_content_safe(payload.url)
+    except SSRFValidationError as ssrf_err:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Security error: {str(ssrf_err)}",
+        )
+    except Exception as err:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to fetch content from URL: {str(err)}",
+        )
+
+    ext = ".html" if "html" in mime_type else ".txt"
+    cleaned_title = sanitize_filename(title[:40].strip()) or f"web_page_{uuid.uuid4().hex[:6]}"
+    filename = f"{cleaned_title}{ext}"
+
+    service = IngestionService(db, ctx.tenant.id)
+    try:
+        doc, job, is_dup = await service.upload_document(
+            knowledge_base_id=kb.id,
+            filename=filename,
+            content=content_bytes,
+            mime_type=mime_type,
+        )
+    except ValueError as err:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(err),
+        )
+
+    # Spawn background ingestion task
+    asyncio.create_task(run_ingestion_in_background(ctx.tenant.id, job.id))
+
+    audit_repo = AuditLogRepository(db, ctx.tenant.id)
+    await audit_repo.log_event(
+        action="document.ingest_url",
+        resource_type="document",
+        resource_id=doc.id,
+        actor_id=current_user.id,
+        details={"url": payload.url, "filename": filename, "is_duplicate": is_dup, "job_id": str(job.id)},
+    )
+
+    return DocumentUploadResponse(
+        document=DocumentResponse.model_validate(doc),
+        job=IngestionJobResponse.model_validate(job),
+        is_duplicate=is_dup,
+    )

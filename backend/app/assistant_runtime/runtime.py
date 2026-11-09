@@ -17,6 +17,8 @@ from app.models.assistant import Assistant, AssistantKnowledgeBase
 from app.models.conversation import Conversation, Message, MessageCitation
 from app.models.knowledge import KnowledgeBase
 from app.retrieval.service import RetrievalService
+from app.services.byok_vault import BYOKVaultService
+from app.services.quota_service import QuotaService
 from app.vectorstores.base import VectorSearchResult
 
 logger = logging.getLogger("mmaip.assistant_runtime")
@@ -169,7 +171,21 @@ class AssistantRuntime:
             },
         )
 
-        # 6. Stream tokens via LLM Provider
+        # 6. Quota Check & Key Resolution
+        quota_svc = QuotaService(self.session, self.tenant_id)
+        byok_svc = BYOKVaultService(self.session, self.tenant_id)
+
+        input_token_estimate = sum(len(m.content.split()) for m in messages)
+        try:
+            await quota_svc.check_quota(estimated_tokens=input_token_estimate)
+        except Exception as q_err:
+            detail_msg = getattr(q_err, "detail", str(q_err))
+            yield format_sse("message_error", {"error": f"Quota exceeded: {detail_msg}"})
+            return
+
+        resolved_key, resolved_base_url = await byok_svc.resolve_plaintext_key(asst.llm_provider)
+
+        # 7. Stream tokens via LLM Provider
         llm_registry = get_llm_registry()
         provider = llm_registry.get_provider(asst.llm_provider)
 
@@ -178,6 +194,8 @@ class AssistantRuntime:
             model=asst.default_model or "auto",
             temperature=asst.temperature,
             max_tokens=asst.max_tokens,
+            api_key=resolved_key,
+            base_url=resolved_base_url,
         )
 
         full_content_chunks: list[str] = []
@@ -198,7 +216,7 @@ class AssistantRuntime:
             yield format_sse("message_error", {"error": "LLM generation failed: Empty response stream received"})
             return
 
-        # 7. Persist User Message, Assistant Message, and Citations in Database
+        # 8. Persist User Message, Assistant Message, and Citations in Database
         user_msg = Message(
             id=uuid.uuid4(),
             tenant_id=self.tenant_id,
@@ -231,6 +249,18 @@ class AssistantRuntime:
             self.session.add(citation_obj)
 
         await self.session.commit()
+
+        # 9. Record Atomic Usage
+        output_token_estimate = len(final_content.split())
+        await quota_svc.record_usage(
+            provider_name=asst.llm_provider,
+            model_name=asst.default_model or "auto",
+            prompt_tokens=input_token_estimate,
+            completion_tokens=output_token_estimate,
+            assistant_id=asst.id,
+            user_id=self.user_id,
+            is_preview=False,
+        )
 
         duration = round((time.perf_counter() - start_time) * 1000, 2)
         yield format_sse(
@@ -322,6 +352,20 @@ class AssistantRuntime:
             },
         )
 
+        # Quota Check & Key Resolution
+        quota_svc = QuotaService(self.session, self.tenant_id)
+        byok_svc = BYOKVaultService(self.session, self.tenant_id)
+
+        input_token_estimate = sum(len(m.content.split()) for m in messages)
+        try:
+            await quota_svc.check_quota(estimated_tokens=input_token_estimate)
+        except Exception as q_err:
+            detail_msg = getattr(q_err, "detail", str(q_err))
+            yield format_sse("message_error", {"error": f"Quota exceeded: {detail_msg}"})
+            return
+
+        resolved_key, resolved_base_url = await byok_svc.resolve_plaintext_key(llm_provider)
+
         llm_registry = get_llm_registry()
         try:
             provider = llm_registry.get_provider(llm_provider)
@@ -333,6 +377,8 @@ class AssistantRuntime:
             model=default_model or "auto",
             temperature=temperature,
             max_tokens=max_tokens,
+            api_key=resolved_key,
+            base_url=resolved_base_url,
         )
 
         full_content_chunks: list[str] = []
@@ -351,6 +397,16 @@ class AssistantRuntime:
         if not final_content.strip():
             yield format_sse("message_error", {"error": "LLM generation failed: Empty response stream received"})
             return
+
+        output_token_estimate = len(final_content.split())
+        await quota_svc.record_usage(
+            provider_name=llm_provider,
+            model_name=default_model or "auto",
+            prompt_tokens=input_token_estimate,
+            completion_tokens=output_token_estimate,
+            user_id=self.user_id,
+            is_preview=True,
+        )
 
         duration = round((time.perf_counter() - start_time) * 1000, 2)
         yield format_sse(
