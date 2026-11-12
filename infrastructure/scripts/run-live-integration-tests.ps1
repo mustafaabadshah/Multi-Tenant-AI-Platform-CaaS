@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Automated sequential live integration test runner for MM AI Platform (M05 BLK-01).
 
@@ -47,7 +47,7 @@ if (-not (Test-Path $OutputDir)) {
 }
 
 Write-Host "=========================================================="
-Write-Host "  MM AI Platform — Live Infrastructure Integration Runner"
+Write-Host "  MM AI Platform -- Live Infrastructure Integration Runner"
 Write-Host "  Execution Mode: $Mode"
 Write-Host "  Output Directory: $OutputDir"
 Write-Host "=========================================================="
@@ -221,7 +221,7 @@ if ($Mode -eq "qdrant" -or $Mode -eq "all") {
 }
 
 Write-Host "`n=========================================================="
-Write-Host "  MM AI Platform — Live Test Execution Summary"
+Write-Host "  MM AI Platform -- Live Test Execution Summary"
 Write-Host "=========================================================="
 Write-Host "Mode: $Mode"
 if ($Mode -eq "postgres" -or $Mode -eq "all") {
