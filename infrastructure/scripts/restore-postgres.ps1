@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Restores a PostgreSQL database from a verified custom-format backup.
 
@@ -16,7 +16,7 @@
     Mandatory switch to confirm restoration intent.
 
 .EXAMPLE
-    .\restore-postgres.ps1 -BackupFilePath "./backups/mmaip_backup_20261107_164500.dump" -TargetDatabaseUrl "postgresql://postgres:postgres@localhost:5432/mmaip_disposable_test" -ConfirmRestore
+    .\restore-postgres.ps1 -BackupFilePath "./backups/mmaip_backup_20261107_164500.dump" -TargetDatabaseUrl "postgresql://<user>:<password>@localhost:5432/mmaip_disposable_test" -ConfirmRestore
 #>
 
 [CmdletBinding()]
@@ -44,12 +44,20 @@ if (-not (Test-Path -Path $BackupFilePath)) {
 }
 
 Write-Host "=========================================================="
-Write-Host "  MM AI Platform — PostgreSQL Disaster Recovery Restore"
+Write-Host "  MM AI Platform - PostgreSQL Disaster Recovery Restore"
 Write-Host "  Source: $BackupFilePath"
-Write-Host "  Target: $TargetDatabaseUrl"
+Write-Host "  Target: [REDACTED]"
 Write-Host "=========================================================="
 
-# 1. Verify Checksum
+# 1. Check pg_restore availability before verification or restore work
+$PgRestoreCmd = Get-Command "pg_restore" -ErrorAction SilentlyContinue
+if (-not $PgRestoreCmd) {
+    Write-Warning "pg_restore binary not found in PATH. No restore was executed."
+    Write-Warning "SIMULATION MODE: nothing was restored. This run is NOT a successful restore."
+    exit 2
+}
+
+# 2. Verify Checksum
 $VerifyScript = Join-Path -Path $PSScriptRoot -ChildPath "verify-backup.ps1"
 if (Test-Path -Path $VerifyScript) {
     Write-Host "Verifying archive integrity before restoration..."
@@ -58,14 +66,6 @@ if (Test-Path -Path $VerifyScript) {
         Write-Error "Backup integrity verification failed. Aborting restore."
         exit 1
     }
-}
-
-# 2. Check pg_restore
-$PgRestoreCmd = Get-Command "pg_restore" -ErrorAction SilentlyContinue
-if (-not $PgRestoreCmd) {
-    Write-Warning "pg_restore binary not found in PATH. Skipping actual restore execution."
-    Write-Host "Simulation Mode / Script syntax validated."
-    exit 0
 }
 
 try {

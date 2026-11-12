@@ -161,3 +161,40 @@ class S3StorageProvider(StorageProvider):
         ) as s3_client:
             resp = await s3_client.head_object(Bucket=self.bucket_name, Key=full_key)
             return int(resp.get("ContentLength", 0))
+
+    async def list_keys(self, tenant_id: str, prefix: str = "") -> list[str]:
+        """List object keys under the tenant prefix, relative to the storage root.
+
+        S3 stores objects as ``{tenant_id}/{relative_key}``; this method strips
+        that tenant prefix so returned keys match ``Document.file_path``.
+        """
+        self._check_configured()
+        try:
+            import aioboto3
+        except ImportError:
+            raise ImportError(
+                "aioboto3 is required for S3StorageProvider. Install it via `pip install aioboto3`."
+            )
+
+        tenant_prefix = f"{tenant_id}/"
+        session = aioboto3.Session()
+        keys: list[str] = []
+        async with session.client(
+            "s3",
+            endpoint_url=self.endpoint_url,
+            aws_access_key_id=self.access_key_id,
+            aws_secret_access_key=self.secret_access_key,
+            region_name=self.region_name,
+        ) as s3_client:
+            paginator = s3_client.get_paginator("list_objects_v2")
+            async for page in paginator.paginate(Bucket=self.bucket_name, Prefix=tenant_prefix):
+                for item in page.get("Contents") or []:
+                    full_key = item.get("Key", "")
+                    if not full_key.startswith(tenant_prefix):
+                        continue
+                    relative = full_key[len(tenant_prefix):]
+                    if prefix and not relative.startswith(prefix):
+                        continue
+                    keys.append(relative)
+
+        return sorted(keys)

@@ -50,6 +50,17 @@ class StorageProvider(ABC):
         """Return the size in bytes of the stored file."""
         pass
 
+    @abstractmethod
+    async def list_keys(self, tenant_id: str, prefix: str = "") -> list[str]:
+        """List stored keys for a tenant, relative to the storage root.
+
+        Returned keys use the same format as ``Document.file_path`` (for example
+        ``tenants/{tenant_id}/kbs/...``). Providers that cannot enumerate
+        objects must raise ``NotImplementedError`` rather than return an empty
+        list, so reconciliation can report the capability as unsupported.
+        """
+        pass
+
     def build_storage_key(
         self,
         tenant_id: str,

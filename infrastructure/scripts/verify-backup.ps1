@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Verifies the integrity and TOC archive structure of a PostgreSQL backup file.
 
@@ -27,7 +27,7 @@ if (-not (Test-Path -Path $BackupFilePath)) {
 }
 
 Write-Host "=========================================================="
-Write-Host "  MM AI Platform — Backup Integrity Verification"
+Write-Host "  MM AI Platform - Backup Integrity Verification"
 Write-Host "  Target: $BackupFilePath"
 Write-Host "=========================================================="
 
@@ -52,8 +52,9 @@ if (Test-Path -Path $ChecksumFile) {
 # 2. Check pg_restore --list
 $PgRestoreCmd = Get-Command "pg_restore" -ErrorAction SilentlyContinue
 if (-not $PgRestoreCmd) {
-    Write-Warning "pg_restore binary not found in PATH. Skipping TOC table listing check."
-    exit 0
+    Write-Warning "pg_restore binary not found in PATH. Archive TOC check was not performed."
+    Write-Warning "PARTIAL VERIFICATION: checksum-only result. This is NOT a full backup verification."
+    exit 2
 }
 
 try {

@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Creates a verified, timestamped custom-format PostgreSQL backup for MM AI Platform.
 
@@ -7,14 +7,14 @@
     calculates SHA-256 checksum, and saves a metadata manifest without printing passwords.
 
 .PARAMETER DatabaseUrl
-    PostgreSQL connection string (e.g. postgresql://user:password@localhost:5432/dbname).
+    PostgreSQL connection string (e.g. postgresql://<user>:<password>@localhost:5432/dbname).
     Defaults to $env:DATABASE_SYNC_URL or $env:DATABASE_URL.
 
 .PARAMETER BackupDir
     Target directory for backup artifacts. Defaults to ./backups.
 
 .EXAMPLE
-    .\backup-postgres.ps1 -DatabaseUrl "postgresql://postgres:postgres@localhost:5432/mmaip_dev"
+    .\backup-postgres.ps1 -DatabaseUrl "postgresql://<user>:<password>@localhost:5432/mmaip_dev"
 #>
 
 [CmdletBinding()]
@@ -45,7 +45,7 @@ $ChecksumFilePath = "${BackupFilePath}.sha256"
 $ManifestFilePath = "${BackupFilePath}.manifest.json"
 
 Write-Host "=========================================================="
-Write-Host "  MM AI Platform — PostgreSQL Backup Procedure"
+Write-Host "  MM AI Platform - PostgreSQL Backup Procedure"
 Write-Host "  Timestamp: $Timestamp"
 Write-Host "  Destination: $BackupFilePath"
 Write-Host "=========================================================="
@@ -54,8 +54,8 @@ Write-Host "=========================================================="
 $PgDumpCmd = Get-Command "pg_dump" -ErrorAction SilentlyContinue
 if (-not $PgDumpCmd) {
     Write-Warning "pg_dump binary not found in PATH. Ensure PostgreSQL client tools are installed."
-    Write-Host "Simulation Mode / Script syntax validated."
-    exit 0
+    Write-Warning "SIMULATION MODE: no backup was created. This run is NOT a successful backup."
+    exit 2
 }
 
 try {

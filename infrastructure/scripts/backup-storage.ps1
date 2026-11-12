@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Creates a verified, timestamped archive backup of the MM AI Platform storage directory.
 
@@ -50,7 +50,7 @@ $ChecksumFilePath = "${ArchiveFilePath}.sha256"
 $ManifestFilePath = "${ArchiveFilePath}.manifest.json"
 
 Write-Host "=========================================================="
-Write-Host "  MM AI Platform — Storage Disaster Recovery Backup"
+Write-Host "  MM AI Platform - Storage Disaster Recovery Backup"
 Write-Host "  Timestamp:    $Timestamp"
 Write-Host "  Source:       $StoragePath"
 Write-Host "  Destination:  $ArchiveFilePath"

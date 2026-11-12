@@ -1,6 +1,7 @@
 """Document management, versioning, content, chunk inspection, and reprocessing endpoints."""
 
 import asyncio
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -27,6 +28,8 @@ from app.schemas.provider import URLIngestRequest
 from app.services.ingestion.service import IngestionService, run_ingestion_in_background
 from app.services.ingestion.url_ingestion import SSRFValidationError, fetch_url_content_safe
 from app.storage import get_storage_provider, sanitize_filename
+
+logger = logging.getLogger("mmaip.documents")
 
 router = APIRouter(prefix="/documents", tags=["Documents & Extraction"])
 
@@ -80,15 +83,49 @@ async def delete_document(
         )
     _check_document_acl(doc, ctx)
 
-    # Delete raw file from storage
+    # Delete the object first. A storage failure must not be reported as a
+    # successful deletion: keep the DB record so the document remains visible
+    # and retryable. ``delete`` returning False means the object was already
+    # absent, which is the desired end state.
     storage = get_storage_provider()
     try:
         await storage.delete(str(ctx.tenant.id), doc.file_path)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.error(
+            "Document storage deletion failed for tenant %s document %s (%s)",
+            ctx.tenant.id,
+            document_id,
+            type(exc).__name__,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Document storage deletion failed; the document was not deleted.",
+        )
 
-    # Delete document record (cascades to versions, chunks, jobs, and events)
-    await repo.delete(document_id)
+    # Object is gone (or already absent); now remove DB records atomically.
+    try:
+        deleted = await repo.delete(document_id)
+        if not deleted:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Document not found in active workspace",
+            )
+        await db.commit()
+    except HTTPException:
+        await db.rollback()
+        raise
+    except Exception as exc:
+        await db.rollback()
+        logger.error(
+            "Document database deletion failed after object removal for tenant %s document %s (%s)",
+            ctx.tenant.id,
+            document_id,
+            type(exc).__name__,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Document deletion could not be completed.",
+        )
 
     audit_repo = AuditLogRepository(db, ctx.tenant.id)
     await audit_repo.log_event(

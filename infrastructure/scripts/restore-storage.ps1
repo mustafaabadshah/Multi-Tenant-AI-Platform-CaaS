@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Restores the MM AI Platform storage directory from a verified backup archive.
 
@@ -45,7 +45,7 @@ if (-not (Test-Path -Path $ArchiveFilePath)) {
 }
 
 Write-Host "=========================================================="
-Write-Host "  MM AI Platform — Storage Disaster Recovery Restore"
+Write-Host "  MM AI Platform - Storage Disaster Recovery Restore"
 Write-Host "  Source Archive: $ArchiveFilePath"
 Write-Host "  Target Storage: $TargetStoragePath"
 Write-Host "=========================================================="

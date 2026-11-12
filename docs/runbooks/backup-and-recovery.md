@@ -7,21 +7,24 @@
 
 ## 1. Relational Database Backup Procedure
 
-Database backups are automated via `infrastructure/scripts/backup-postgres.ps1` using PostgreSQL's custom archive format (`pg_dump -Fc`):
+Database backups are automated via `infrastructure/scripts/backup-postgres.ps1` using PostgreSQL's custom archive format (`pg_dump -Fc`). Prerequisite: `pg_dump`, `pg_restore`, and `psql` must be on `PATH`; when they are missing the scripts report simulation or partial verification and exit non-zero.
 
 ```powershell
-# Create automated timestamped backup:
-.\infrastructure\scripts\backup-postgres.ps1 -Host "localhost" -Port 5432 -Database "mmaip_db" -User "postgres" -OutputDir "./backups"
+# Preferred: set DATABASE_SYNC_URL (or DATABASE_URL) in the environment, then:
+.\infrastructure\scripts\backup-postgres.ps1 -BackupDir "./backups"
+
+# Or pass an explicit connection string (contains credentials; avoid shell history):
+.\infrastructure\scripts\backup-postgres.ps1 -DatabaseUrl "postgresql://<user>:<password>@<host>:5432/<database>" -BackupDir "./backups"
 ```
 
 The script produces:
-1. `mmaip_db_YYYYMMDD_HHMMSS.dump` (Compressed binary archive)
-2. `mmaip_db_YYYYMMDD_HHMMSS.manifest.json` (Record metadata, schema version, checksum)
-3. `mmaip_db_YYYYMMDD_HHMMSS.sha256` (SHA-256 verification hash)
+1. `mmaip_backup_YYYYMMDD_HHMMSS.dump` (compressed custom-format archive)
+2. `mmaip_backup_YYYYMMDD_HHMMSS.dump.manifest.json` (metadata, size, SHA-256)
+3. `mmaip_backup_YYYYMMDD_HHMMSS.dump.sha256` (SHA-256 verification sidecar)
 
 Verify archive integrity before storing:
 ```powershell
-.\infrastructure\scripts\verify-backup.ps1 -DumpFile "./backups/mmaip_db_YYYYMMDD_HHMMSS.dump"
+.\infrastructure\scripts\verify-backup.ps1 -BackupFilePath "./backups/mmaip_backup_YYYYMMDD_HHMMSS.dump"
 ```
 
 ---
@@ -32,10 +35,15 @@ Verify archive integrity before storing:
 > PostgreSQL backups capture document metadata, extracted text, and vector chunk records. However, PostgreSQL `pg_dump` does NOT contain the raw uploaded PDF/DOCX/image binaries.
 
 * **Local Storage (`STORAGE_BACKEND=local`):**
-  Snapshot or archive the persistent volume mounted at `STORAGE_PATH`:
+  Archive the persistent volume mounted at `STORAGE_PATH` with the repository script:
   ```powershell
-  # Create storage directory archive
-  tar -czf "./backups/storage_tenants_YYYYMMDD.tar.gz" -C "$env:STORAGE_PATH" tenants/
+  # Create a timestamped ZIP plus manifest and SHA-256 sidecar
+  .\infrastructure\scripts\backup-storage.ps1 -StoragePath $env:STORAGE_PATH -BackupDir "./backups"
+  ```
+  Artifacts: `mmaip_storage_backup_YYYYMMDD_HHMMSS.zip`, `.zip.manifest.json`, `.zip.sha256`.
+  Restore into a target directory with:
+  ```powershell
+  .\infrastructure\scripts\restore-storage.ps1 -ArchiveFilePath "./backups/mmaip_storage_backup_YYYYMMDD_HHMMSS.zip" -TargetStoragePath $env:STORAGE_PATH -ConfirmRestore
   ```
 * **Object Storage (`STORAGE_BACKEND=s3`):**
   Enable S3 Bucket Versioning and Cross-Region Replication on `STORAGE_BUCKET_NAME`.
@@ -44,10 +52,11 @@ Verify archive integrity before storing:
 
 ## 3. Database Restore Procedure
 
-To restore into a fresh database:
+The target database must already exist. The connection URL is redacted from script output. Restore requires the explicit `-ConfirmRestore` safety switch:
 
 ```powershell
-.\infrastructure\scripts\restore-postgres.ps1 -DumpFile "./backups/mmaip_db_YYYYMMDD_HHMMSS.dump" -TargetDatabase "mmaip_db" -Host "localhost" -Port 5432 -User "postgres"
+$env:TARGET_DATABASE_URL = "postgresql://<user>:<password>@<host>:5432/<target_database>"
+.\infrastructure\scripts\restore-postgres.ps1 -BackupFilePath "./backups/mmaip_backup_YYYYMMDD_HHMMSS.dump" -TargetDatabaseUrl $env:TARGET_DATABASE_URL -ConfirmRestore
 ```
 
 ---
