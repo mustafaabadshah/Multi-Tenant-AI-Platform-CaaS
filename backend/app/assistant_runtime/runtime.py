@@ -11,11 +11,12 @@ from typing import Any, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.assistant_runtime.context import build_rag_context
+from app.assistant_runtime.context import build_rag_context, normalize_markdown
 from app.llm import LLMConfig, get_llm_registry
 from app.models.assistant import Assistant, AssistantKnowledgeBase
 from app.models.conversation import Conversation, Message, MessageCitation
 from app.models.knowledge import KnowledgeBase
+from app.observability.tracer import get_tracer
 from app.retrieval.service import RetrievalService
 from app.services.byok_vault import BYOKVaultService
 from app.services.quota_service import QuotaService
@@ -85,14 +86,49 @@ class AssistantRuntime:
             yield format_sse("message_error", {"error": "Assistant not found or unauthorized"})
             return
 
+        tracer = get_tracer()
+        trace = tracer.start_trace(
+            tenant_id=self.tenant_id,
+            assistant_id=asst.id,
+            assistant_name=asst.name,
+            conversation_id=conversation_id,
+            traffic_type=traffic_type,
+        )
+        trace.provider = asst.llm_provider
+        trace.model = asst.default_model or "auto"
+        trace.retrieval_mode = asst.retrieval_mode or "hybrid"
+
         yield format_sse(
             "message_start",
             {
                 "conversation_id": str(conversation_id),
                 "assistant_id": str(asst.id),
                 "assistant_name": asst.name,
+                "trace_id": trace.trace_id,
             },
         )
+
+        # Auto-update conversation title if default, and immediately persist user message to history
+        conv_stmt = select(Conversation).where(
+            Conversation.id == conversation_id,
+            Conversation.tenant_id == self.tenant_id,
+        )
+        conv_res = await self.session.execute(conv_stmt)
+        conv = conv_res.scalar_one_or_none()
+        if conv and (not conv.title or conv.title in ("New Conversation", "New Chat")):
+            clean_title = user_message.strip().replace("\n", " ")
+            conv.title = clean_title[:45] + ("..." if len(clean_title) > 45 else "")
+
+        user_msg = Message(
+            id=uuid.uuid4(),
+            tenant_id=self.tenant_id,
+            conversation_id=conversation_id,
+            sender_type="user",
+            content=user_message,
+            token_count=len(user_message.split()),
+        )
+        self.session.add(user_msg)
+        await self.session.commit()
 
         # 3. Retrieve conversation history (up to last 10 messages)
         hist_stmt = (
@@ -128,6 +164,7 @@ class AssistantRuntime:
                 {"connected_kb_count": len(candidate_kb_ids)},
             )
 
+            retrieval_span = trace.start_span("retrieval")
             # Execution-time check: Filter to active KBs belonging to this tenant
             valid_kb_stmt = select(KnowledgeBase.id).where(
                 KnowledgeBase.id.in_(candidate_kb_ids),
@@ -164,8 +201,14 @@ class AssistantRuntime:
                     document_ids=target_doc_ids,
                 )
                 retrieved_results = search_resp.results
+            
+            retrieval_span.set_attribute("candidate_kbs", len(authorized_kb_ids) if authorized_kb_ids else 0)
+            retrieval_span.set_attribute("results_count", len(retrieved_results))
+            retrieval_span.finish()
+            trace.retrieved_chunk_count = len(retrieved_results)
 
         # 5. Assemble Context & Citations with 4-Tier Trust Hierarchy
+        ctx_span = trace.start_span("context_assembly")
         messages, citations_data = build_rag_context(
             system_prompt=asst.system_prompt,
             conversation_history=conversation_history,
@@ -177,6 +220,9 @@ class AssistantRuntime:
             uncertainty_behavior=getattr(asst, "uncertainty_behavior", "admit"),
             citation_style=getattr(asst, "citation_style", "strict"),
         )
+        ctx_span.set_attribute("citations", len(citations_data))
+        ctx_span.finish()
+        trace.citation_count = len(citations_data)
 
         yield format_sse(
             "retrieval_complete",
@@ -186,19 +232,52 @@ class AssistantRuntime:
             },
         )
 
-        # 6. Quota Check & Key Resolution
+        # 6. Quota Check, Reservation & Key Resolution
         quota_svc = QuotaService(self.session, self.tenant_id)
         byok_svc = BYOKVaultService(self.session, self.tenant_id)
 
         input_token_estimate = sum(len(m.content.split()) for m in messages)
+        reservation_id = None
         try:
-            await quota_svc.check_quota(estimated_tokens=input_token_estimate)
+            reservation_id = await quota_svc.reserve_quota(estimated_tokens=input_token_estimate)
         except Exception as q_err:
             detail_msg = getattr(q_err, "detail", str(q_err))
-            yield format_sse("message_error", {"error": f"Quota exceeded: {detail_msg}"})
+            err_msg = f"Quota exceeded: {detail_msg}"
+            trace.finish(status="FAILED", error=err_msg)
+            err_msg_obj = Message(
+                id=uuid.uuid4(),
+                tenant_id=self.tenant_id,
+                conversation_id=conversation_id,
+                sender_type="assistant",
+                content=f"⚠️ {err_msg}",
+                token_count=0,
+            )
+            self.session.add(err_msg_obj)
+            await self.session.commit()
+            yield format_sse("message_error", {"error": err_msg})
             return
 
+        # Strict BYOK policy: Never silently fall back to platform keys for commercial providers
         resolved_key, resolved_base_url = await byok_svc.resolve_plaintext_key(asst.llm_provider)
+        if asst.llm_provider in ("openai", "anthropic", "gemini", "groq") and not resolved_key:
+            quota_svc.release_reservation(reservation_id)
+            err_msg = (
+                f"Provider '{asst.llm_provider}' is not configured with an active BYOK credential for this workspace. "
+                f"Please add your API key under Providers & Keys."
+            )
+            trace.finish(status="FAILED", error=err_msg)
+            err_msg_obj = Message(
+                id=uuid.uuid4(),
+                tenant_id=self.tenant_id,
+                conversation_id=conversation_id,
+                sender_type="assistant",
+                content=f"⚠️ {err_msg}",
+                token_count=0,
+            )
+            self.session.add(err_msg_obj)
+            await self.session.commit()
+            yield format_sse("message_error", {"error": err_msg})
+            return
 
         # 7. Stream tokens via LLM Provider
         llm_registry = get_llm_registry()
@@ -214,41 +293,64 @@ class AssistantRuntime:
         )
 
         full_content_chunks: list[str] = []
+        gen_span = trace.start_span("provider_generation")
+        gen_span.set_attribute("provider", asst.llm_provider)
+        gen_span.set_attribute("model", asst.default_model or "auto")
         try:
             async for chunk in provider.generate_stream(messages, llm_config):
                 if chunk.content_delta:
+                    trace.mark_first_token()
                     full_content_chunks.append(chunk.content_delta)
                     yield format_sse("token", {"delta": chunk.content_delta})
+            gen_span.finish(status="COMPLETED")
         except Exception as e:
+            quota_svc.release_reservation(reservation_id)
             logger.exception("LLM generation stream failed")
             safe_err = sanitize_error_message(str(e))
+            gen_span.finish(status="FAILED", error=safe_err)
+            trace.finish(status="FAILED", error=safe_err)
+            err_msg_obj = Message(
+                id=uuid.uuid4(),
+                tenant_id=self.tenant_id,
+                conversation_id=conversation_id,
+                sender_type="assistant",
+                content=f"⚠️ LLM generation failed: {safe_err}",
+                token_count=0,
+            )
+            self.session.add(err_msg_obj)
+            await self.session.commit()
             yield format_sse("message_error", {"error": f"LLM generation failed: {safe_err}"})
             return
 
         final_content = "".join(full_content_chunks)
         if not final_content.strip():
+            quota_svc.release_reservation(reservation_id)
             logger.warning("LLM provider returned empty response stream")
+            trace.finish(status="FAILED", error="Empty response stream received")
+            err_msg_obj = Message(
+                id=uuid.uuid4(),
+                tenant_id=self.tenant_id,
+                conversation_id=conversation_id,
+                sender_type="assistant",
+                content="⚠️ LLM generation failed: Empty response stream received",
+                token_count=0,
+            )
+            self.session.add(err_msg_obj)
+            await self.session.commit()
             yield format_sse("message_error", {"error": "LLM generation failed: Empty response stream received"})
             return
 
-        # 8. Persist User Message, Assistant Message, and Citations in Database
-        user_msg = Message(
-            id=uuid.uuid4(),
-            tenant_id=self.tenant_id,
-            conversation_id=conversation_id,
-            sender_type="user",
-            content=user_message,
-            token_count=len(user_message.split()),
-        )
+        # 8. Persist Assistant Message and Citations in Database
+        final_normalized_content = normalize_markdown(final_content)
         assistant_msg = Message(
             id=uuid.uuid4(),
             tenant_id=self.tenant_id,
             conversation_id=conversation_id,
             sender_type="assistant",
-            content=final_content,
-            token_count=len(final_content.split()),
+            content=final_normalized_content,
+            token_count=len(final_normalized_content.split()),
         )
-        self.session.add_all([user_msg, assistant_msg])
+        self.session.add(assistant_msg)
         await self.session.flush()
 
         for c in citations_data:
@@ -276,9 +378,17 @@ class AssistantRuntime:
             user_id=self.user_id,
             is_preview=False,
             traffic_type=traffic_type,
+            reservation_id=reservation_id,
         )
 
         duration = round((time.perf_counter() - start_time) * 1000, 2)
+
+        # Complete Observability Trace
+        trace.input_tokens = input_token_estimate
+        trace.output_tokens = output_token_estimate
+        trace.total_tokens = input_token_estimate + output_token_estimate
+        trace.finish(status="COMPLETED")
+
         yield format_sse(
             "usage",
             {
@@ -286,6 +396,7 @@ class AssistantRuntime:
                 "output_tokens": len(final_content.split()),
                 "duration_ms": duration,
                 "model": asst.default_model,
+                "trace_id": trace.trace_id,
             },
         )
         yield format_sse(
@@ -294,6 +405,7 @@ class AssistantRuntime:
                 "message_id": str(assistant_msg.id),
                 "conversation_id": str(conversation_id),
                 "status": "COMPLETED",
+                "trace_id": trace.trace_id,
             },
         )
 
@@ -381,6 +493,13 @@ class AssistantRuntime:
             return
 
         resolved_key, resolved_base_url = await byok_svc.resolve_plaintext_key(llm_provider)
+        if llm_provider in ("openai", "anthropic", "gemini", "groq") and not resolved_key:
+            err_msg = (
+                f"Provider '{llm_provider}' is not configured with an active BYOK credential for this workspace. "
+                f"Please add your API key under Providers & Keys."
+            )
+            yield format_sse("message_error", {"error": err_msg})
+            return
 
         llm_registry = get_llm_registry()
         try:

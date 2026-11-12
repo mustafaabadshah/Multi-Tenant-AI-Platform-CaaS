@@ -7,6 +7,7 @@ import {
   PublicAssistantMetadata,
   MessageCitationItem,
 } from "@/lib/api";
+import { dedupeCitations } from "@/lib/citations";
 import {
   Bot,
   Send,
@@ -18,6 +19,8 @@ import {
   X,
   Minimize2,
 } from "lucide-react";
+import MarkdownRenderer from "@/components/chat/MarkdownRenderer";
+
 
 interface ChatMessage {
   id: string;
@@ -117,7 +120,11 @@ function EmbedChatWidgetContent() {
             );
           },
           onCitations: (citations: MessageCitationItem[]) => {
-            activeCitations.push(...citations);
+            activeCitations.splice(
+              0,
+              activeCitations.length,
+              ...dedupeCitations(activeCitations, citations)
+            );
             setMessages((prev) =>
               prev.map((msg) =>
                 msg.id === assistantMsgId ? { ...msg, citations: [...activeCitations] } : msg
@@ -125,7 +132,11 @@ function EmbedChatWidgetContent() {
             );
           },
           onCitation: (citation: MessageCitationItem) => {
-            activeCitations.push(citation);
+            activeCitations.splice(
+              0,
+              activeCitations.length,
+              ...dedupeCitations(activeCitations, [citation])
+            );
             setMessages((prev) =>
               prev.map((msg) =>
                 msg.id === assistantMsgId ? { ...msg, citations: [...activeCitations] } : msg
@@ -169,34 +180,34 @@ function EmbedChatWidgetContent() {
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-slate-900 text-slate-200">
-        <Loader2 className="h-6 w-6 animate-spin text-sky-500" />
+      <div className="flex h-screen items-center justify-center bg-white text-gray-700">
+        <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
       </div>
     );
   }
 
   if (error || !assistant) {
     return (
-      <div className="flex h-screen items-center justify-center bg-slate-900 p-4 text-center text-slate-200">
+      <div className="flex h-screen items-center justify-center bg-white p-4 text-center text-gray-700">
         <div className="flex flex-col items-center gap-2">
-          <AlertCircle className="h-6 w-6 text-rose-400" />
-          <p className="text-xs text-slate-400">{error || "Assistant unavailable"}</p>
+          <AlertCircle className="h-6 w-6 text-rose-500" />
+          <p className="text-xs text-gray-500">{error || "Assistant unavailable"}</p>
         </div>
       </div>
     );
   }
 
-  const brandColor = assistant.brand_color || "#0284c7";
+  const brandColor = assistant.brand_color || "#2563eb";
 
   return (
-    <div className="flex h-screen flex-col bg-slate-950 text-slate-100 antialiased select-none">
+    <div className="flex h-screen flex-col bg-gray-50 text-gray-900 antialiased select-none">
       {/* Widget Header */}
       <header
-        className="flex h-14 shrink-0 items-center justify-between px-4 text-white shadow-md"
+        className="flex h-14 shrink-0 items-center justify-between px-4 text-white shadow-xs"
         style={{ backgroundColor: brandColor }}
       >
         <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/20 backdrop-blur-sm">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/20 backdrop-blur-sm shadow-xs">
             <Bot className="h-4 w-4 text-white" />
           </div>
           <div>
@@ -219,7 +230,7 @@ function EmbedChatWidgetContent() {
       </header>
 
       {/* Widget Messages */}
-      <main className="flex-1 overflow-y-auto p-3 space-y-3 bg-slate-950 text-xs">
+      <main className="flex-1 overflow-y-auto p-3 space-y-3 bg-gray-50 text-xs">
         {messages.map((msg, i) => (
           <div
             key={msg.id || i}
@@ -227,7 +238,7 @@ function EmbedChatWidgetContent() {
           >
             {msg.role === "assistant" && (
               <div
-                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-white shadow-sm mt-0.5"
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-white shadow-xs mt-0.5"
                 style={{ backgroundColor: brandColor }}
               >
                 <Bot className="h-3 w-3" />
@@ -235,17 +246,32 @@ function EmbedChatWidgetContent() {
             )}
 
             <div
-              className={`max-w-[85%] rounded-xl px-3 py-2 leading-relaxed ${
+              className={`max-w-[85%] rounded-xl px-3 py-2 leading-relaxed shadow-xs ${
                 msg.role === "user"
-                  ? "bg-sky-600 text-white rounded-tr-none"
-                  : "bg-slate-900 border border-slate-800 text-slate-200 rounded-tl-none shadow-sm"
+                  ? "bg-blue-600 text-white rounded-tr-none"
+                  : "bg-white border border-gray-200 text-gray-800 rounded-tl-none"
               }`}
             >
-              <div className="whitespace-pre-wrap break-words">{msg.content || (isStreaming && i === messages.length - 1 ? "..." : "")}</div>
+              <div className="break-words">
+                {msg.role === "user" ? (
+                  <p className="whitespace-pre-wrap text-sm">{msg.content}</p>
+                ) : (
+                  <MarkdownRenderer
+                    content={msg.content}
+                    citations={msg.citations}
+                    onCitationClick={(cit) => {
+                      const idx = (msg.citations || []).indexOf(cit);
+                      setExpandedCitationIndex(idx === expandedCitationIndex ? null : idx);
+                    }}
+                    className="text-sm"
+                  />
+                )}
+                {!msg.content && isStreaming && i === messages.length - 1 && "..."}
+              </div>
 
               {/* Citations */}
               {msg.citations && msg.citations.length > 0 && (
-                <div className="mt-2 pt-2 border-t border-slate-800 text-[10px]">
+                <div className="mt-2 pt-2 border-t border-gray-100 text-[10px]">
                   <div className="flex flex-wrap gap-1">
                     {msg.citations.map((c, cIdx) => (
                       <button
@@ -256,14 +282,14 @@ function EmbedChatWidgetContent() {
                             expandedCitationIndex === cIdx ? null : cIdx
                           )
                         }
-                        className="inline-flex items-center gap-0.5 rounded bg-slate-800 px-1.5 py-0.5 text-slate-300 hover:bg-slate-700"
+                        className="inline-flex items-center gap-0.5 rounded bg-gray-100 px-1.5 py-0.5 text-gray-700 hover:bg-gray-200 cursor-pointer"
                       >
                         [{c.citation_num || (c as any).citation_number || cIdx + 1}] {c.document_name || (c as any).document_title || "Document"}
                       </button>
                     ))}
                   </div>
                   {expandedCitationIndex !== null && msg.citations[expandedCitationIndex] && (
-                    <div className="mt-1.5 rounded bg-slate-950 p-2 text-[10px] text-slate-400 italic">
+                    <div className="mt-1.5 rounded bg-gray-50 border border-gray-200 p-2 text-[10px] text-gray-600 italic">
                       &ldquo;{msg.citations[expandedCitationIndex].snippet || msg.citations[expandedCitationIndex].citation_text}&rdquo;
                     </div>
                   )}
@@ -276,7 +302,7 @@ function EmbedChatWidgetContent() {
       </main>
 
       {/* Widget Input Bar */}
-      <footer className="border-t border-slate-800 bg-slate-900/90 p-2.5">
+      <footer className="border-t border-gray-200 bg-white p-2.5">
         <form onSubmit={handleSend} className="flex items-center gap-1.5">
           <input
             ref={inputRef}
@@ -285,12 +311,13 @@ function EmbedChatWidgetContent() {
             onChange={(e) => setInput(e.target.value)}
             placeholder="Type your question..."
             disabled={isStreaming}
-            className="flex-1 rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-slate-700"
-          />
+            className="flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500 shadow-xs"
+          >
+          </input>
           <button
             type="submit"
             disabled={!input.trim() || isStreaming}
-            className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-600 text-white transition-opacity hover:opacity-90 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+            className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white transition-opacity hover:opacity-90 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed shadow-xs"
             style={{ backgroundColor: input.trim() && !isStreaming ? brandColor : undefined }}
           >
             {isStreaming ? (
@@ -309,8 +336,8 @@ export default function EmbedChatWidgetPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex h-screen items-center justify-center bg-slate-900 text-slate-200">
-          <Loader2 className="h-6 w-6 animate-spin text-sky-500" />
+        <div className="flex h-screen items-center justify-center bg-white text-gray-700">
+          <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
         </div>
       }
     >

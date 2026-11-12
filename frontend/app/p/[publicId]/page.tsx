@@ -7,6 +7,7 @@ import {
   PublicAssistantMetadata,
   MessageCitationItem,
 } from "@/lib/api";
+import { dedupeCitations } from "@/lib/citations";
 import {
   Bot,
   Send,
@@ -18,6 +19,8 @@ import {
   AlertCircle,
   ShieldCheck,
 } from "lucide-react";
+import MarkdownRenderer from "@/components/chat/MarkdownRenderer";
+
 
 interface ChatMessage {
   id: string;
@@ -120,7 +123,11 @@ function PublicAssistantContent() {
             );
           },
           onCitations: (citations: MessageCitationItem[]) => {
-            activeCitations.push(...citations);
+            activeCitations.splice(
+              0,
+              activeCitations.length,
+              ...dedupeCitations(activeCitations, citations)
+            );
             setMessages((prev) =>
               prev.map((msg) =>
                 msg.id === assistantMsgId ? { ...msg, citations: [...activeCitations] } : msg
@@ -128,7 +135,11 @@ function PublicAssistantContent() {
             );
           },
           onCitation: (citation: MessageCitationItem) => {
-            activeCitations.push(citation);
+            activeCitations.splice(
+              0,
+              activeCitations.length,
+              ...dedupeCitations(activeCitations, [citation])
+            );
             setMessages((prev) =>
               prev.map((msg) =>
                 msg.id === assistantMsgId ? { ...msg, citations: [...activeCitations] } : msg
@@ -172,10 +183,10 @@ function PublicAssistantContent() {
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-slate-950 text-slate-100">
+      <div className="flex h-screen items-center justify-center bg-gray-50 text-gray-900">
         <div className="flex flex-col items-center gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-sky-500" />
-          <p className="text-sm text-slate-400 font-mono">Connecting to assistant...</p>
+          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+          <p className="text-sm text-gray-500 font-mono">Connecting to assistant...</p>
         </div>
       </div>
     );
@@ -183,47 +194,47 @@ function PublicAssistantContent() {
 
   if (error || !assistant) {
     return (
-      <div className="flex h-screen items-center justify-center bg-slate-950 p-4 text-slate-100">
-        <div className="max-w-md w-full rounded-2xl border border-slate-800 bg-slate-900/60 p-8 text-center backdrop-blur-xl shadow-2xl">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-400">
+      <div className="flex h-screen items-center justify-center bg-gray-50 p-4 text-gray-900">
+        <div className="max-w-md w-full rounded-2xl border border-gray-200 bg-white p-8 text-center shadow-lg">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-50 text-rose-600">
             <AlertCircle className="h-7 w-7" />
           </div>
-          <h1 className="text-xl font-semibold tracking-tight text-slate-100">Assistant Unavailable</h1>
-          <p className="mt-2 text-sm leading-relaxed text-slate-400">{error || "This assistant is currently private or unlisted."}</p>
+          <h1 className="text-xl font-semibold tracking-tight text-gray-900">Assistant Unavailable</h1>
+          <p className="mt-2 text-sm leading-relaxed text-gray-600">{error || "This assistant is currently private or unlisted."}</p>
         </div>
       </div>
     );
   }
 
-  const brandColor = assistant.brand_color || "#0284c7";
+  const brandColor = assistant.brand_color || "#2563eb";
 
   return (
-    <div className="flex h-screen flex-col bg-slate-950 text-slate-100 antialiased selection:bg-sky-500/20 selection:text-sky-300">
+    <div className="flex h-screen flex-col bg-gray-50 text-gray-900 antialiased selection:bg-blue-100 selection:text-blue-800">
       {/* Top Header */}
-      <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between border-b border-slate-800/80 bg-slate-950/80 px-6 backdrop-blur-md">
+      <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between border-b border-gray-200 bg-white/90 px-6 backdrop-blur-md shadow-xs">
         <div className="flex items-center gap-3">
           <div
-            className="flex h-9 w-9 items-center justify-center rounded-xl font-bold text-white shadow-sm ring-1 ring-white/10"
+            className="flex h-9 w-9 items-center justify-center rounded-xl font-bold text-white shadow-xs"
             style={{ backgroundColor: brandColor }}
           >
             <Bot className="h-5 w-5" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-sm font-semibold tracking-tight text-slate-100">{assistant.name}</h1>
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-400 ring-1 ring-inset ring-emerald-500/20">
+              <h1 className="text-sm font-semibold tracking-tight text-gray-900">{assistant.name}</h1>
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 Live
               </span>
             </div>
             {assistant.description && (
-              <p className="text-xs text-slate-400 line-clamp-1">{assistant.description}</p>
+              <p className="text-xs text-gray-500 line-clamp-1">{assistant.description}</p>
             )}
           </div>
         </div>
 
-        <div className="flex items-center gap-2 text-xs text-slate-400">
-          <ShieldCheck className="h-3.5 w-3.5 text-slate-500" />
+        <div className="flex items-center gap-2 text-xs text-gray-500">
+          <ShieldCheck className="h-3.5 w-3.5 text-gray-400" />
           <span className="hidden sm:inline">Verified Public Assistant</span>
         </div>
       </header>
@@ -234,15 +245,15 @@ function PublicAssistantContent() {
           {messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <div
-                className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl shadow-lg ring-1 ring-white/10"
+                className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl shadow-md"
                 style={{ backgroundColor: brandColor }}
               >
                 <Sparkles className="h-7 w-7 text-white" />
               </div>
-              <h2 className="text-lg font-semibold tracking-tight text-slate-200">
+              <h2 className="text-lg font-semibold tracking-tight text-gray-900">
                 Ask {assistant.name} anything
               </h2>
-              <p className="mt-1 max-w-md text-xs text-slate-400">
+              <p className="mt-1 max-w-md text-xs text-gray-500">
                 Ground-truth answers verified against public documentation with cited footnotes.
               </p>
             </div>
@@ -254,7 +265,7 @@ function PublicAssistantContent() {
               >
                 {msg.role === "assistant" && (
                   <div
-                    className="flex h-8 w-8 shrink-0 select-none items-center justify-center rounded-xl text-white shadow-sm"
+                    className="flex h-8 w-8 shrink-0 select-none items-center justify-center rounded-xl text-white shadow-xs"
                     style={{ backgroundColor: brandColor }}
                   >
                     <Bot className="h-4 w-4" />
@@ -262,19 +273,38 @@ function PublicAssistantContent() {
                 )}
 
                 <div
-                  className={`relative max-w-2xl rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
+                  className={`relative max-w-2xl rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-xs ${
                     msg.role === "user"
-                      ? "bg-sky-600 text-white rounded-tr-sm"
-                      : "bg-slate-900/90 text-slate-200 border border-slate-800/80 rounded-tl-sm backdrop-blur-md"
+                      ? "bg-blue-600 text-white rounded-tr-sm"
+                      : "bg-white text-gray-800 border border-gray-200 rounded-tl-sm"
                   }`}
                 >
-                  <div className="whitespace-pre-wrap break-words">{msg.content || (isStreaming && i === messages.length - 1 ? <span className="inline-flex items-center gap-1 text-slate-400"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Thinking...</span> : null)}</div>
+                  <div className="break-words">
+                    {msg.role === "user" ? (
+                      <p className="whitespace-pre-wrap">{msg.content}</p>
+                    ) : (
+                      <MarkdownRenderer
+                        content={msg.content}
+                        citations={msg.citations}
+                        onCitationClick={(cit) => {
+                          const idx = (msg.citations || []).indexOf(cit);
+                          setExpandedCitationIndex(idx === expandedCitationIndex ? null : idx);
+                        }}
+                        className="text-sm"
+                      />
+                    )}
+                    {!msg.content && isStreaming && i === messages.length - 1 && (
+                      <span className="inline-flex items-center gap-1 text-gray-400">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Thinking...
+                      </span>
+                    )}
+                  </div>
 
                   {/* Citation Footnotes */}
                   {msg.citations && msg.citations.length > 0 && (
-                    <div className="mt-3 pt-3 border-t border-slate-800">
+                    <div className="mt-3 pt-3 border-t border-gray-100">
                       <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="text-[11px] font-medium text-slate-400 flex items-center gap-1">
+                        <span className="text-[11px] font-medium text-gray-500 flex items-center gap-1">
                           <BookOpen className="h-3 w-3" /> Sources:
                         </span>
                         {msg.citations.map((c, cIdx) => (
@@ -286,10 +316,10 @@ function PublicAssistantContent() {
                                 expandedCitationIndex === cIdx ? null : cIdx
                               )
                             }
-                            className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-mono transition-colors ${
+                            className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-mono transition-colors cursor-pointer ${
                               expandedCitationIndex === cIdx
-                                ? "bg-sky-500/20 text-sky-300 ring-1 ring-sky-500/30"
-                                : "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white"
+                                ? "bg-blue-50 text-blue-700 ring-1 ring-blue-300"
+                                : "bg-gray-100 text-gray-700 hover:bg-gray-200 hover:text-gray-900"
                             }`}
                           >
                             [{c.citation_num || (c as any).citation_number || cIdx + 1}] {c.document_name || (c as any).document_title || "Document"}
@@ -304,14 +334,14 @@ function PublicAssistantContent() {
 
                       {/* Expanded Citation Preview */}
                       {expandedCitationIndex !== null && msg.citations[expandedCitationIndex] && (
-                        <div className="mt-2 rounded-lg border border-slate-800 bg-slate-950/80 p-3 text-xs text-slate-300">
-                          <div className="flex items-center justify-between pb-1 text-[11px] font-semibold text-slate-400 border-b border-slate-800">
+                        <div className="mt-2 rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-700">
+                          <div className="flex items-center justify-between pb-1 text-[11px] font-semibold text-gray-600 border-b border-gray-200">
                             <span>{msg.citations[expandedCitationIndex].document_name || (msg.citations[expandedCitationIndex] as any).document_title}</span>
                             {msg.citations[expandedCitationIndex].page_number && (
                               <span>Page {msg.citations[expandedCitationIndex].page_number}</span>
                             )}
                           </div>
-                          <p className="mt-2 italic leading-relaxed text-slate-300">
+                          <p className="mt-2 italic leading-relaxed text-gray-700">
                             &ldquo;{msg.citations[expandedCitationIndex].snippet || msg.citations[expandedCitationIndex].citation_text}&rdquo;
                           </p>
                         </div>
@@ -327,11 +357,11 @@ function PublicAssistantContent() {
       </main>
 
       {/* Bottom Message Input Bar */}
-      <footer className="sticky bottom-0 z-20 border-t border-slate-800/80 bg-slate-950/90 p-4 backdrop-blur-md">
+      <footer className="sticky bottom-0 z-20 border-t border-gray-200 bg-white/90 p-4 backdrop-blur-md">
         <div className="mx-auto max-w-3xl">
           <form
             onSubmit={handleSend}
-            className="flex items-end gap-2 rounded-2xl border border-slate-800 bg-slate-900/90 p-2 shadow-xl ring-1 ring-white/5 focus-within:border-slate-700 focus-within:ring-sky-500/30"
+            className="flex items-end gap-2 rounded-2xl border border-gray-300 bg-white p-2 shadow-xs focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500"
           >
             <textarea
               ref={inputRef}
@@ -341,12 +371,12 @@ function PublicAssistantContent() {
               placeholder={`Message ${assistant.name}... (Press Enter to send, Shift+Enter for newline)`}
               rows={1}
               disabled={isStreaming}
-              className="max-h-36 min-h-[44px] flex-1 resize-none bg-transparent px-3 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none"
+              className="max-h-36 min-h-[44px] flex-1 resize-none bg-transparent px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none"
             />
             <button
               type="submit"
               disabled={!input.trim() || isStreaming}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-600 text-white shadow-md transition-all hover:bg-sky-500 disabled:opacity-40 disabled:hover:bg-sky-600 cursor-pointer disabled:cursor-not-allowed"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-xs transition-all hover:bg-blue-500 disabled:opacity-40 disabled:hover:bg-blue-600 cursor-pointer disabled:cursor-not-allowed"
               style={{ backgroundColor: input.trim() && !isStreaming ? brandColor : undefined }}
             >
               {isStreaming ? (
@@ -356,7 +386,7 @@ function PublicAssistantContent() {
               )}
             </button>
           </form>
-          <div className="mt-2 flex items-center justify-between px-2 text-[11px] text-slate-400">
+          <div className="mt-2 flex items-center justify-between px-2 text-[11px] text-gray-400">
             <span>Powered by Multi-Tenant AI Platform</span>
             <span>All responses grounded in verified sources</span>
           </div>
@@ -370,8 +400,8 @@ export default function PublicAssistantPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex h-screen items-center justify-center bg-slate-950 text-slate-100">
-          <Loader2 className="h-8 w-8 animate-spin text-sky-500" />
+        <div className="flex h-screen items-center justify-center bg-gray-50 text-gray-900">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
         </div>
       }
     >

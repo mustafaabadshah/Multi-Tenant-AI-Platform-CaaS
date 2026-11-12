@@ -32,6 +32,7 @@ from app.llm.providers.openai_provider import (
 )
 from app.models.conversation import Conversation, Message
 from app.repositories.assistant_repository import AssistantRepository
+from app.services.byok_vault import BYOKVaultService
 
 # ==============================================================================
 # 1. PROVIDER ARCHITECTURE & REGISTRY CONTRACT (PRV-01 to PRV-04)
@@ -313,6 +314,14 @@ async def test_sse_streaming_provider_failure_emits_sanitized_error_frame(db_ses
         status="ACTIVE",
     )
     db_session.add(conv)
+
+    byok_svc = BYOKVaultService(session=db_session, tenant_id=tenant.id)
+    await byok_svc.add_credential(
+        provider_name="openai",
+        display_name="Test Key",
+        api_key="sk-test-byok-12345",
+        is_default=True,
+    )
     await db_session.commit()
 
     runtime = AssistantRuntime(session=db_session, tenant_id=tenant.id, user_id=user.id, is_admin=True)
@@ -371,10 +380,11 @@ async def test_sse_streaming_empty_response_stream_fails_safely(db_session: Asyn
     assert "Empty response stream received" in frame_str
     assert "message_complete" not in frame_str
 
-    # Verify no assistant message was committed to database
+    # Verify a visible error assistant message was persisted
     msg_stmt = select(Message).where(Message.conversation_id == conv.id, Message.sender_type == "assistant")
     messages = (await db_session.execute(msg_stmt)).scalars().all()
-    assert len(messages) == 0
+    assert len(messages) == 1
+    assert "Empty response stream received" in messages[0].content
 
 
 @pytest.mark.asyncio
@@ -467,7 +477,7 @@ async def test_persistence_atomic_user_and_assistant_messages_with_citations(db_
 
 @pytest.mark.asyncio
 async def test_persistence_failure_leaves_clean_database_state(db_session: AsyncSession, seed_data: dict):
-    """When generation fails midway, database is not left in an inconsistent partial state."""
+    """When generation fails midway, no phantom success message is persisted; the failure is persisted safely."""
     tenant = seed_data["tenant_a"]
     user = seed_data["user_a_owner"]
 
@@ -487,6 +497,14 @@ async def test_persistence_failure_leaves_clean_database_state(db_session: Async
         status="ACTIVE",
     )
     db_session.add(conv)
+
+    byok_svc = BYOKVaultService(session=db_session, tenant_id=tenant.id)
+    await byok_svc.add_credential(
+        provider_name="openai",
+        display_name="Test Key",
+        api_key="sk-test-byok-12345",
+        is_default=True,
+    )
     await db_session.commit()
 
     runtime = AssistantRuntime(session=db_session, tenant_id=tenant.id, user_id=user.id, is_admin=True)
@@ -505,7 +523,9 @@ async def test_persistence_failure_leaves_clean_database_state(db_session: Async
     assert "message_error" in frame_str
     assert "message_complete" not in frame_str
 
-    # Database must NOT contain a completed assistant message
+    # Database must NOT contain a phantom success message; the failure is persisted safely
     asst_stmt = select(Message).where(Message.conversation_id == conv.id, Message.sender_type == "assistant")
     asst_msg = (await db_session.execute(asst_stmt)).scalar_one_or_none()
-    assert asst_msg is None
+    assert asst_msg is not None
+    assert "LLM generation failed:" in asst_msg.content
+    assert "Socket closed prematurely" in asst_msg.content
