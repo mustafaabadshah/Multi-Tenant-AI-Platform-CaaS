@@ -211,12 +211,14 @@ async def test_public_publishing_domain_whitelist_enforcement(client: AsyncClien
     assert blocked_res.status_code == 403
     assert "not permitted" in blocked_res.json()["detail"]
 
-    # 3. Direct navigation (missing origin/referer) is permitted by design for direct link visitors
+    # 3. Missing origin/referer must not bypass a configured allowlist.
+    #    (M11 hardening: previously direct navigation was implicitly trusted.)
     direct_res = await client.post(
         f"/api/v1/public/assistants/{public_id}/chat",
         json={"message": "Direct visitor"},
     )
-    assert direct_res.status_code == 200
+    assert direct_res.status_code == 403
+    assert "not permitted" in direct_res.json()["detail"]
 
 
 @pytest.mark.asyncio

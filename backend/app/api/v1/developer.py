@@ -11,7 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import TenantContext, get_db, require_permission
 from app.api.v1.assistants import _to_response
 from app.assistant_runtime.runtime import AssistantRuntime
+from app.core.config import settings
 from app.core.constants import PermissionName
+from app.core.rate_limit import enforce_rate_limit
 from app.models.conversation import Conversation
 from app.models.publishing import APIKey
 from app.models.tenant import Tenant
@@ -150,6 +152,14 @@ async def developer_chat_stream(
 ) -> StreamingResponse:
     """Stream chat responses programmatically using scoped Developer API key."""
     api_key, tenant = auth_data
+
+    # Per-API-key limit; the key id is an opaque identifier, not the raw secret.
+    await enforce_rate_limit(
+        "developer.chat",
+        str(api_key.id),
+        settings.RATE_LIMIT_DEVELOPER_PER_MINUTE,
+        60,
+    )
 
     # Enforce assistant restriction if key is scoped to a specific assistant
     if api_key.assistant_id and api_key.assistant_id != assistant_id:

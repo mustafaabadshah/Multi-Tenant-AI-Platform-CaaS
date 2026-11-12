@@ -1,11 +1,13 @@
 import uuid
+from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
-from app.core.config import settings
+from app.core.config import registration_allowed, settings
 from app.core.constants import SystemRole, TenantType
+from app.core.rate_limit import client_identity, enforce_rate_limit
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -15,10 +17,12 @@ from app.core.security import (
 )
 from app.database.session import get_db
 from app.models.user import User
+from app.repositories.audit_repository import AuditLogRepository
 from app.repositories.role_repository import RoleRepository
 from app.repositories.tenant_repository import TenantRepository
 from app.repositories.user_repository import UserRepository
 from app.schemas.auth import (
+    AcceptInviteRequest,
     RefreshTokenRequest,
     TokenResponse,
     UserLoginRequest,
@@ -26,15 +30,37 @@ from app.schemas.auth import (
     UserResponse,
     WorkspaceSummary,
 )
+from app.services.invitation_service import InvitationService
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+
+
+def _invalid_invitation() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Invalid or expired invitation",
+    )
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 async def register(
     payload: UserRegisterRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
+    await enforce_rate_limit(
+        "auth.register",
+        client_identity(request),
+        settings.RATE_LIMIT_REGISTER_PER_HOUR,
+        3600,
+    )
+
+    if not registration_allowed(settings):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Public registration is disabled. Ask your workspace administrator for an invitation.",
+        )
+
     user_repo = UserRepository(db)
     tenant_repo = TenantRepository(db)
     role_repo = RoleRepository(db)
@@ -96,11 +122,82 @@ async def register(
     )
 
 
+@router.post("/accept-invite", response_model=TokenResponse)
+async def accept_invite(
+    payload: AcceptInviteRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> TokenResponse:
+    """Set an invited user's password and activate their workspace access."""
+    await enforce_rate_limit(
+        "auth.accept_invite",
+        client_identity(request),
+        settings.RATE_LIMIT_INVITE_ACCEPT_PER_HOUR,
+        3600,
+    )
+
+    invitation_service = InvitationService(db)
+    invitation = await invitation_service.get_by_raw_token(payload.token)
+    now = datetime.now(UTC)
+
+    if not invitation or invitation.accepted_at is not None:
+        raise _invalid_invitation()
+
+    expires_at = invitation.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=UTC)
+    if expires_at < now:
+        raise _invalid_invitation()
+
+    user_repo = UserRepository(db)
+    user = await user_repo.get_by_email(invitation.email)
+    if not user:
+        raise _invalid_invitation()
+
+    user.hashed_password = hash_password(payload.password)
+    invitation.accepted_at = now
+    user_id = user.id
+    email = user.email
+    tenant_id = invitation.tenant_id
+    audit_repo = AuditLogRepository(db, tenant_id)
+    await audit_repo.log_event(
+        action="member.invite_accepted",
+        resource_type="invitation",
+        resource_id=invitation.id,
+        actor_id=user_id,
+        details={"email": email},
+    )
+    await db.commit()
+
+    access_token = create_access_token(
+        subject=str(user_id),
+        claims={"email": email, "tenant_id": str(tenant_id)},
+    )
+    refresh_token = create_refresh_token(subject=str(user_id))
+
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        token_type="bearer",
+        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+    )
+
+
 @router.post("/login", response_model=TokenResponse)
 async def login(
     payload: UserLoginRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
+    # Key on IP + normalized email to blunt credential stuffing while keeping
+    # distinct accounts independent.
+    await enforce_rate_limit(
+        "auth.login",
+        f"{client_identity(request)}:{payload.email.lower()}",
+        settings.RATE_LIMIT_LOGIN_PER_MINUTE,
+        60,
+    )
+
     user_repo = UserRepository(db)
     tenant_repo = TenantRepository(db)
 

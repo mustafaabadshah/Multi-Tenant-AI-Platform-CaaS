@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.assistant_runtime.runtime import AssistantRuntime
 from app.core.config import settings
+from app.core.rate_limit import client_identity, enforce_rate_limit
 from app.database.session import get_db
 from app.models.conversation import Conversation
 from app.schemas.publishing import (
@@ -40,7 +41,7 @@ async def get_public_assistant_metadata(
         )
 
     pub, asst = res
-    if not pub.is_active or pub.visibility not in ("PUBLIC", "WORKSPACE"):
+    if not pub.is_active or pub.visibility != "PUBLIC":
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="This assistant is currently not available publicly",
@@ -67,6 +68,15 @@ async def public_chat_stream(
     db: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
     """Stream chat responses for public web and embedded widget visitors."""
+    # Rate limit before quota checks and anonymous session creation so rotating
+    # session tokens cannot create unlimited sessions or provider calls.
+    await enforce_rate_limit(
+        "public_chat.message",
+        client_identity(request),
+        settings.RATE_LIMIT_PUBLIC_MESSAGE_PER_MINUTE,
+        60,
+    )
+
     svc = PublishingService(db, uuid.UUID(int=0))
     res = await svc.get_by_public_id(public_id)
     if not res:

@@ -1,4 +1,4 @@
-from functools import lru_cache
+﻿from functools import lru_cache
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     )
 
     ENVIRONMENT: str = "development"
+    ALLOW_PUBLIC_REGISTRATION: bool | None = None
     DEBUG: bool = True
     PROJECT_NAME: str = "Multi-Tenant AI Platform-CaaS"
     API_V1_STR: str = "/api/v1"
@@ -72,6 +73,17 @@ class Settings(BaseSettings):
     MAX_PROCESSING_DURATION_SECONDS: int = 600
     MAX_DOCUMENT_PAGES: int = 1000
 
+    # Background Ingestion Dispatch & Lease (Milestone 11)
+    # In-process dispatcher used by the API lifespan for single-process staging.
+    INGESTION_INLINE_DISPATCHER_ENABLED: bool = True
+    # How often the dispatcher polls when the queue is empty.
+    INGESTION_DISPATCHER_POLL_SECONDS: int = 2
+    # Lease age after which a PROCESSING job is considered stale. Must exceed
+    # the longest expected ingestion job because there is no heartbeat yet.
+    INGESTION_LEASE_SECONDS: int = 3600
+    # Number of jobs a single process may execute concurrently.
+    INGESTION_MAX_CONCURRENCY: int = 1
+
     # OCR Settings
     OCR_ENABLED_DEFAULT: bool = False
     OCR_DEFAULT_PROVIDER: str = "tesseract"
@@ -93,6 +105,17 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str | None = None
     LLM_DEFAULT_MODEL: str = "auto"
 
+    # Rate Limiting (first-stage, per-process; no Redis dependency)
+    RATE_LIMIT_ENABLED: bool = True
+    # Comma-separated proxy IPs allowed to supply X-Forwarded-For (must be exact peers)
+    TRUSTED_PROXY_IPS: str = ""
+    RATE_LIMIT_LOGIN_PER_MINUTE: int = 10
+    RATE_LIMIT_REGISTER_PER_HOUR: int = 20
+    RATE_LIMIT_INVITE_ACCEPT_PER_HOUR: int = 20
+    RATE_LIMIT_PUBLIC_MESSAGE_PER_MINUTE: int = 20
+    RATE_LIMIT_DEVELOPER_PER_MINUTE: int = 60
+    RATE_LIMIT_UPLOAD_PER_HOUR: int = 60
+
     # Embeddings & Vector Stores (Milestone 03)
     DEFAULT_RETRIEVAL_MODE: str = "hybrid"  # "lexical", "semantic", "hybrid"
     DEFAULT_VECTOR_STORE: str = "pgvector"  # "pgvector", "qdrant", "fts"
@@ -112,6 +135,13 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+def registration_allowed(cfg: Settings) -> bool:
+    """Return whether open self-service registration is permitted."""
+    if cfg.ALLOW_PUBLIC_REGISTRATION is not None:
+        return cfg.ALLOW_PUBLIC_REGISTRATION
+    return (cfg.ENVIRONMENT or "").strip().lower() == "development"
 
 
 settings = get_settings()

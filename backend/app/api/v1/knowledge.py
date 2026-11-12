@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import TenantContext, get_current_user, require_permission
 from app.core.config import settings
 from app.core.constants import PermissionName
+from app.core.rate_limit import enforce_rate_limit
 from app.database.session import get_db
 from app.models.knowledge import KnowledgeBase
 from app.models.user import User
@@ -240,6 +241,14 @@ async def upload_documents(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[DocumentUploadResponse]:
+    # Per-user upload budget, scoped by tenant to keep identities opaque and isolated.
+    await enforce_rate_limit(
+        "knowledge.upload",
+        f"{ctx.tenant.id}:{current_user.id}",
+        settings.RATE_LIMIT_UPLOAD_PER_HOUR,
+        3600,
+    )
+
     # 1. Verify KB belongs to active tenant
     kb_repo = KnowledgeRepository(db, ctx.tenant.id)
     kb = await kb_repo.get_by_id(kb_id)

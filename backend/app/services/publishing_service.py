@@ -6,7 +6,7 @@ import secrets
 import urllib.parse
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -27,40 +27,104 @@ def generate_opaque_public_id() -> str:
     return f"pub_{secrets.token_hex(16)}"
 
 
+def _parse_allowed_domains(allowed_domains_raw: Any) -> Optional[list[str]]:
+    """Decode stored allowlist configuration; None signals a malformed value."""
+    if allowed_domains_raw is None:
+        return []
+    if isinstance(allowed_domains_raw, str):
+        raw = allowed_domains_raw.strip()
+        if not raw:
+            return []
+        try:
+            parsed = json.loads(raw)
+        except (json.JSONDecodeError, TypeError, ValueError):
+            return None
+        if isinstance(parsed, str):
+            parsed = [parsed]
+        if not isinstance(parsed, list):
+            return None
+        return [str(item) for item in parsed]
+    if isinstance(allowed_domains_raw, (list, tuple, set)):
+        return [str(item) for item in allowed_domains_raw]
+    return None
+
+
+def _parse_domain_entry(entry: str) -> Optional[tuple[str, Optional[int]]]:
+    """Parse a configured domain entry into its hostname and optional port."""
+    value = entry.strip().lower()
+    if not value:
+        return None
+    candidate = value if "://" in value else f"//{value}"
+    try:
+        parsed = urllib.parse.urlparse(candidate)
+        host = (parsed.hostname or "").strip(".").lower()
+        port = parsed.port
+    except (TypeError, ValueError):
+        return None
+    if not host:
+        return None
+    return host, port
+
+
+def _hostname_matches(host: str, pattern: str) -> bool:
+    if pattern.startswith("*."):
+        suffix = pattern[1:]
+        return len(host) > len(suffix) and host.endswith(suffix)
+    return host == pattern
+
+
 def is_origin_allowed(origin_or_referer: Optional[str], allowed_domains_raw: Optional[str]) -> bool:
-    """Validate whether request origin or referer hostname matches configured allowed domains."""
-    if not allowed_domains_raw:
+    """Validate a request origin/referer against the configured embed allowlist.
+
+    An empty configuration (or an explicit "*" entry) is unrestricted. With a
+    restricted list, a missing or malformed origin is denied. Entries match an
+    exact hostname; subdomains are accepted only for "*.example.com" patterns,
+    which never match the bare domain. Ports are ignored unless the entry
+    specifies one; http and https are both accepted.
+    """
+    domains = _parse_allowed_domains(allowed_domains_raw)
+    if domains is None:
+        return False
+    if not domains:
         return True
 
-    try:
-        domains = json.loads(allowed_domains_raw) if isinstance(allowed_domains_raw, str) else allowed_domains_raw
-    except Exception:
-        domains = ["*"]
-
-    if "*" in domains or not domains:
+    normalized = [entry.strip() for entry in domains if entry and entry.strip()]
+    if "*" in normalized:
         return True
 
     if not origin_or_referer:
-        # Non-browser or direct navigation
-        return True
-
-    try:
-        parsed = urllib.parse.urlparse(origin_or_referer)
-        req_host = (parsed.hostname or "").lower()
-    except Exception:
         return False
 
-    for pattern in domains:
-        p = pattern.strip().lower()
-        if p == "*":
-            return True
-        if p.startswith("http://") or p.startswith("https://"):
-            try:
-                p = (urllib.parse.urlparse(p).hostname or "").lower()
-            except Exception:
-                pass
-        if req_host == p or req_host.endswith(f".{p}"):
-            return True
+    try:
+        parsed = urllib.parse.urlparse(origin_or_referer.strip())
+    except (TypeError, ValueError):
+        return False
+
+    scheme = (parsed.scheme or "").lower()
+    if scheme not in ("http", "https"):
+        return False
+
+    host = (parsed.hostname or "").strip(".").lower()
+    if not host:
+        return False
+
+    try:
+        port = parsed.port
+    except ValueError:
+        return False
+    if port is None:
+        port = 443 if scheme == "https" else 80
+
+    for entry in normalized:
+        parsed_entry = _parse_domain_entry(entry)
+        if not parsed_entry:
+            continue
+        entry_host, entry_port = parsed_entry
+        if not _hostname_matches(host, entry_host):
+            continue
+        if entry_port is not None and entry_port != port:
+            continue
+        return True
 
     return False
 
