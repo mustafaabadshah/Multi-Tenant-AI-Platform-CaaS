@@ -109,7 +109,6 @@ async def pg_seed_tenants(pg_session: AsyncSession) -> dict:
         email=f"alice_{uuid.uuid4().hex[:6]}@companya.com",
         hashed_password=hash_password("Password123!"),
         full_name="Alice Owner",
-        is_active=True,
     )
     pg_session.add(user_a)
     await pg_session.flush()
@@ -137,7 +136,6 @@ async def pg_seed_tenants(pg_session: AsyncSession) -> dict:
         id=uuid.uuid4(),
         tenant_id=tenant_a.id,
         name="Engineering",
-        code="ENG",
     )
     pg_session.add(dept_a)
 
@@ -147,7 +145,6 @@ async def pg_seed_tenants(pg_session: AsyncSession) -> dict:
         email=f"bob_{uuid.uuid4().hex[:6]}@companyb.com",
         hashed_password=hash_password("Password123!"),
         full_name="Bob Owner",
-        is_active=True,
     )
     pg_session.add(user_b)
     await pg_session.flush()
@@ -175,7 +172,6 @@ async def pg_seed_tenants(pg_session: AsyncSession) -> dict:
         id=uuid.uuid4(),
         tenant_id=tenant_b.id,
         name="Marketing",
-        code="MKT",
     )
     pg_session.add(dept_b)
 
