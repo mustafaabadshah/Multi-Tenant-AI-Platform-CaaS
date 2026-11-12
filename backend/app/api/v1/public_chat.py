@@ -1,6 +1,5 @@
 """Public Assistant Web Chat, Embed Widget Configuration, and Streaming Inference Endpoints."""
 
-import json
 import logging
 import uuid
 from typing import Optional
@@ -13,7 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.assistant_runtime.runtime import AssistantRuntime
 from app.core.config import settings
 from app.database.session import get_db
-from app.models.assistant import Assistant
 from app.models.conversation import Conversation
 from app.schemas.publishing import (
     PublicAssistantMetadataResponse,
@@ -109,18 +107,16 @@ async def public_chat_stream(
         user_agent=user_agent,
     )
 
-    # Find or initialize conversation associated with this public session
-    conv_stmt = (
-        select(Conversation)
-        .where(
+    # Find or initialize conversation deterministically bound to this public session
+    conv = None
+    if session_rec.conversation_id:
+        conv_stmt = select(Conversation).where(
+            Conversation.id == session_rec.conversation_id,
             Conversation.tenant_id == pub.tenant_id,
             Conversation.assistant_id == asst.id,
-            Conversation.user_id.is_(None),
         )
-        .order_by(Conversation.created_at.desc())
-        .limit(1)
-    )
-    conv = (await db.execute(conv_stmt)).scalar_one_or_none()
+        conv = (await db.execute(conv_stmt)).scalar_one_or_none()
+
     if not conv:
         conv = Conversation(
             id=uuid.uuid4(),
@@ -130,6 +126,8 @@ async def public_chat_stream(
             title=f"Public: {payload.message[:30]}",
         )
         db.add(conv)
+        await db.flush()
+        session_rec.conversation_id = conv.id
         await db.commit()
 
     # 4. Stream response using unified AssistantRuntime with public scoping

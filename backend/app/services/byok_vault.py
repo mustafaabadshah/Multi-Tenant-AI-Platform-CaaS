@@ -81,6 +81,9 @@ class BYOKVaultService:
         self.session.add(credential)
         await self.session.commit()
         await self.session.refresh(credential)
+        # Immediately validate the credential with the provider endpoint
+        await self.test_credential(credential.id)
+        await self.session.refresh(credential)
         return credential
 
     async def test_credential(self, credential_id: uuid.UUID) -> tuple[bool, Optional[str]]:
@@ -174,7 +177,11 @@ class BYOKVaultService:
                 ProviderCredential.is_active.is_(True),
                 ProviderCredential.status != "REVOKED",
             )
-            .order_by(ProviderCredential.is_default.desc(), ProviderCredential.updated_at.desc())
+            .order_by(
+                (ProviderCredential.status == "HEALTHY").desc(),
+                ProviderCredential.is_default.desc(),
+                ProviderCredential.updated_at.desc(),
+            )
             .limit(1)
         )
         res = await self.session.execute(stmt)

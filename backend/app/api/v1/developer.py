@@ -9,14 +9,13 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import TenantContext, get_db, require_permission
+from app.api.v1.assistants import _to_response
 from app.assistant_runtime.runtime import AssistantRuntime
 from app.core.constants import PermissionName
-from app.models.assistant import Assistant
 from app.models.conversation import Conversation
 from app.models.publishing import APIKey
 from app.models.tenant import Tenant
 from app.repositories.assistant_repository import AssistantRepository
-from app.api.v1.assistants import _to_response
 from app.schemas.assistant import AssistantResponse
 from app.schemas.publishing import (
     APIKeyCreate,
@@ -39,6 +38,7 @@ def _serialize_api_key(key: APIKey) -> APIKeyResponse:
         id=key.id,
         tenant_id=key.tenant_id,
         user_id=key.user_id,
+        assistant_id=key.assistant_id,
         name=key.name,
         key_prefix=key.key_prefix,
         scopes=scopes,
@@ -132,6 +132,8 @@ async def list_developer_assistants(
     api_key, tenant = auth_data
     repo = AssistantRepository(db, tenant.id)
     assistants = await repo.list()
+    if api_key.assistant_id:
+        assistants = [a for a in assistants if a.id == api_key.assistant_id]
     responses = []
     for a in assistants:
         kb_ids = await repo.get_connected_kb_ids(a.id)
@@ -148,6 +150,13 @@ async def developer_chat_stream(
 ) -> StreamingResponse:
     """Stream chat responses programmatically using scoped Developer API key."""
     api_key, tenant = auth_data
+
+    # Enforce assistant restriction if key is scoped to a specific assistant
+    if api_key.assistant_id and api_key.assistant_id != assistant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"API key is restricted to assistant '{api_key.assistant_id}'.",
+        )
 
     repo = AssistantRepository(db, tenant.id)
     asst = await repo.get_by_id(assistant_id)

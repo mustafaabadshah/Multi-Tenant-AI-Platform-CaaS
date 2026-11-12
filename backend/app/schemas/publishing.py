@@ -55,6 +55,7 @@ class PublicAssistantMetadataResponse(BaseModel):
 class APIKeyCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     scopes: list[str] = Field(default_factory=lambda: ["assistant:read", "assistant:chat"])
+    assistant_id: Optional[uuid.UUID] = Field(default=None, description="Optional single assistant restriction")
     expires_days: Optional[int] = Field(default=None, ge=1, le=365)
 
 
@@ -64,6 +65,7 @@ class APIKeyResponse(BaseModel):
     id: uuid.UUID
     tenant_id: uuid.UUID
     user_id: Optional[uuid.UUID]
+    assistant_id: Optional[uuid.UUID] = None
     name: str
     key_prefix: str
     scopes: list[str]

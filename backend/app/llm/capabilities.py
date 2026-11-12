@@ -22,8 +22,20 @@ class ModelCapability:
 # Verified model catalog mapping current generation production models
 _VERIFIED_MODELS: list[ModelCapability] = [
     # -------------------------------------------------------------------------
-    # Groq (High-throughput Llama 3 & Mixtral)
+    # Groq (High-throughput OpenAI GPT-OSS, Llama 3 & Mixtral)
     # -------------------------------------------------------------------------
+    ModelCapability(
+        provider="groq",
+        model_id="openai/gpt-oss-120b",
+        display_name="GPT-OSS 120B (Groq LPU)",
+        context_window=131072,
+        max_output_tokens=8192,
+        supports_streaming=True,
+        supports_tools=True,
+        supports_vision=False,
+        supports_json_mode=True,
+        description="High-capacity open-weights model optimized for production reasoning and retrieval on Groq LPUs.",
+    ),
     ModelCapability(
         provider="groq",
         model_id="llama-3.3-70b-versatile",
@@ -34,7 +46,7 @@ _VERIFIED_MODELS: list[ModelCapability] = [
         supports_tools=True,
         supports_vision=False,
         supports_json_mode=True,
-        description="State-of-the-art open weights model with ultra-fast inference on Groq LPUs.",
+        description="Open weights versatile model on Groq LPUs.",
     ),
     ModelCapability(
         provider="groq",

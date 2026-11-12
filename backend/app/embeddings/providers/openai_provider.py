@@ -108,6 +108,8 @@ class OpenAICompatibleProvider(EmbeddingProvider):
 
             except (httpx.TimeoutException, httpx.NetworkError) as err:
                 logger.warning(f"Network error on attempt {attempt + 1}: {err}")
+                if "127.0.0.1" in endpoint or "localhost" in endpoint:
+                    break
 
             if attempt < max_retries:
                 # Exponential backoff with jitter

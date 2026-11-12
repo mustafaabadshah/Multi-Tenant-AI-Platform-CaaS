@@ -8,7 +8,8 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Optional
 
-from sqlalchemy import delete, select
+from fastapi import HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.assistant import Assistant, AssistantVersion
@@ -19,8 +20,11 @@ logger = logging.getLogger("mmaip.services.publishing")
 
 
 def generate_opaque_public_id() -> str:
-    """Generate a clean, unguessable public identifier for published assistants."""
-    return f"pub_{secrets.token_hex(8)}"
+    """Generate a clean, high-entropy 128-bit unguessable public identifier.
+
+    Uses 16 cryptographically secure random bytes (32 hexadecimal characters).
+    """
+    return f"pub_{secrets.token_hex(16)}"
 
 
 def is_origin_allowed(origin_or_referer: Optional[str], allowed_domains_raw: Optional[str]) -> bool:
@@ -184,6 +188,7 @@ class PublishingService:
         session_token: Optional[str] = None,
         client_ip: Optional[str] = None,
         user_agent: Optional[str] = None,
+        conversation_id: Optional[uuid.UUID] = None,
     ) -> PublicChatSession:
         """Resolve or initialize an unguessable session for public chat visitors."""
         now = datetime.now(UTC)
@@ -191,11 +196,19 @@ class PublishingService:
             stmt = select(PublicChatSession).where(
                 PublicChatSession.publication_id == publication_id,
                 PublicChatSession.session_token == session_token.strip(),
-                PublicChatSession.expires_at > now,
             )
             existing = (await self.session.execute(stmt)).scalar_one_or_none()
             if existing:
+                exp = existing.expires_at if existing.expires_at.tzinfo else existing.expires_at.replace(tzinfo=UTC)
+                if exp <= now:
+                    logger.warning(f"Public chat session {existing.id} expired at {existing.expires_at}")
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Public chat session has expired. Please start a new session.",
+                    )
                 existing.updated_at = now
+                if conversation_id and not existing.conversation_id:
+                    existing.conversation_id = conversation_id
                 await self.session.commit()
                 return existing
 
@@ -203,7 +216,8 @@ class PublishingService:
             id=uuid.uuid4(),
             tenant_id=self.tenant_id,
             publication_id=publication_id,
-            session_token=f"sess_{secrets.token_urlsafe(24)}",
+            conversation_id=conversation_id,
+            session_token=session_token.strip() if session_token else f"sess_{secrets.token_urlsafe(24)}",
             client_ip_hash=secrets.token_hex(16) if client_ip else None,
             user_agent=user_agent[:250] if user_agent else None,
             expires_at=now + timedelta(days=7),
@@ -212,3 +226,16 @@ class PublishingService:
         await self.session.commit()
         await self.session.refresh(new_session)
         return new_session
+
+    async def bind_session_conversation(
+        self,
+        session_id: uuid.UUID,
+        conversation_id: uuid.UUID,
+    ) -> None:
+        """Bind a specific conversation thread to an anonymous public session."""
+        stmt = select(PublicChatSession).where(PublicChatSession.id == session_id)
+        session_rec = (await self.session.execute(stmt)).scalar_one_or_none()
+        if session_rec:
+            session_rec.conversation_id = conversation_id
+            session_rec.updated_at = datetime.now(UTC)
+            await self.session.commit()

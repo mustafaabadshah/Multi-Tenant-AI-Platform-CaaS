@@ -12,10 +12,9 @@ from app.models.config import (
     ProviderConnection,
     VectorStoreConfig,
 )
-from app.models.provider import ProviderCredential, ProviderUsageLog
-from app.models.publishing import APIKey, AssistantPublication, PublicChatSession
 from app.models.conversation import Conversation, Message, MessageAttachment, MessageCitation
 from app.models.department import Department
+from app.models.evaluation import EvalDataset, EvalDatasetItem, EvalRun, EvalRunResult
 from app.models.group import EmployeeGroup, GroupMembership
 from app.models.invitation import Invitation
 from app.models.knowledge import (
@@ -32,6 +31,8 @@ from app.models.knowledge import (
 )
 from app.models.membership import TenantMembership
 from app.models.organization import Organization
+from app.models.provider import ProviderCredential, ProviderUsageLog
+from app.models.publishing import APIKey, AssistantPublication, PublicChatSession
 from app.models.role import Permission, ResourcePermission, Role, RolePermission
 from app.models.tenant import Tenant
 from app.models.user import User
@@ -55,6 +56,10 @@ __all__ = [
     "EmbeddingConfig",
     "EmbeddingJob",
     "EmployeeGroup",
+    "EvalDataset",
+    "EvalDatasetItem",
+    "EvalRun",
+    "EvalRunResult",
     "GroupMembership",
     "IngestionConfig",
     "IngestionEvent",

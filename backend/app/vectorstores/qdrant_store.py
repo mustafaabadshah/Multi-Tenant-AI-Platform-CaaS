@@ -128,6 +128,9 @@ class QdrantVectorStore(VectorStore):
                 f"Query vector dimension mismatch: expected {filter_criteria.expected_dimensions}, got {dims}"
             )
 
+        if filter_criteria.document_ids is not None and len(filter_criteria.document_ids) == 0:
+            return []
+
         col_name = self._collection_for_dim(dims)
         try:
             collections = await client.get_collections()

@@ -100,11 +100,15 @@ class OpenAICompatibleLLMProvider(LLMProvider):
     async def generate(self, messages: list[LLMMessage], config: LLMConfig) -> LLMResponse:
         base_url = self._resolve_base_url(config)
         api_key = self._resolve_api_key(config)
+        if not api_key:
+            raise LLMAuthenticationError(f"No API key configured for provider '{self._name}'. Please configure your BYOK key or environment credentials.")
         url = f"{base_url}/chat/completions"
 
+        extra_h = getattr(config, "extra_headers", {}) or {}
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}",
+            **extra_h,
         }
         payload = {
             "model": config.model or "auto",
@@ -149,11 +153,15 @@ class OpenAICompatibleLLMProvider(LLMProvider):
     ) -> AsyncIterator[LLMStreamChunk]:
         base_url = self._resolve_base_url(config)
         api_key = self._resolve_api_key(config)
+        if not api_key:
+            raise LLMAuthenticationError(f"No API key configured for provider '{self._name}'. Please configure your BYOK key or environment credentials.")
         url = f"{base_url}/chat/completions"
 
+        extra_h = getattr(config, "extra_headers", {}) or {}
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}",
+            **extra_h,
         }
         payload = {
             "model": config.model or "auto",
@@ -201,14 +209,29 @@ class OpenAICompatibleLLMProvider(LLMProvider):
 
     def _handle_http_error(self, status_code: int, err_text: str):
         """Map HTTP error status codes to normalized LLM exceptions."""
-        logger.error(f"Provider '{self._name}' returned HTTP {status_code}")
+        detail = ""
+        try:
+            parsed = json.loads(err_text)
+            if isinstance(parsed, dict) and "error" in parsed:
+                err_obj = parsed["error"]
+                if isinstance(err_obj, dict) and "message" in err_obj:
+                    detail = f": {err_obj['message']}"
+                elif isinstance(err_obj, str):
+                    detail = f": {err_obj}"
+            elif isinstance(parsed, dict) and "detail" in parsed:
+                detail = f": {parsed['detail']}"
+        except Exception:
+            if err_text:
+                detail = f": {err_text[:200]}"
+
+        logger.error(f"Provider '{self._name}' returned HTTP {status_code}{detail}")
         if status_code in (401, 403):
-            raise LLMAuthenticationError(f"Authentication failed with provider '{self._name}' (HTTP {status_code})")
+            raise LLMAuthenticationError(f"Authentication failed with provider '{self._name}' (HTTP {status_code}){detail}")
         if status_code == 429:
-            raise LLMRateLimitError(f"Rate limit exceeded on provider '{self._name}' (HTTP 429)")
+            raise LLMRateLimitError(f"Rate limit exceeded on provider '{self._name}' (HTTP 429){detail}")
         if status_code == 404:
-            raise LLMProviderError(f"Provider '{self._name}' endpoint not found (HTTP 404)")
-        raise LLMProviderError(f"Provider '{self._name}' server error (HTTP {status_code})")
+            raise LLMProviderError(f"Provider '{self._name}' error (HTTP 404){detail or ' endpoint or model not found'}")
+        raise LLMProviderError(f"Provider '{self._name}' server error (HTTP {status_code}){detail}")
 
     async def validate_key(self, config: LLMConfig) -> bool:
         base_url = self._resolve_base_url(config)

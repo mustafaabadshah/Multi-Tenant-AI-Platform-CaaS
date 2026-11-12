@@ -1,7 +1,6 @@
 """Acceptance and Security Test Suite for M08: Assistant Publishing, Embeds, and Developer API Keys."""
 
 import hashlib
-import json
 import uuid
 
 import pytest
@@ -10,10 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.assistant import Assistant, AssistantKnowledgeBase
 from app.models.knowledge import Document, DocumentChunk, KnowledgeBase
-from app.models.publishing import APIKey, AssistantPublication
-from app.models.provider import ProviderUsageLog
-from app.services.api_key_service import APIKeyService, hash_api_key
-from app.services.publishing_service import PublishingService, is_origin_allowed
+from app.models.publishing import APIKey
 
 
 async def _create_test_assistant(db: AsyncSession, tenant_id: uuid.UUID, name: str = "Test Assistant") -> Assistant:
@@ -421,3 +417,113 @@ async def test_embed_config_and_script_loader(client: AsyncClient, seed_data: di
     assert script_resp.status_code == 200
     assert "application/javascript" in script_resp.headers["content-type"]
     assert "mmaip-widget-container" in script_resp.text
+
+
+@pytest.mark.asyncio
+async def test_public_id_128_bit_entropy():
+    """Verify that generated public assistant IDs provide at least 128 bits of entropy (32 hex chars)."""
+    from app.services.publishing_service import generate_opaque_public_id
+    pid = generate_opaque_public_id()
+    assert pid.startswith("pub_")
+    hex_part = pid.replace("pub_", "")
+    # 32 hex chars = 16 bytes = 128 bits
+    assert len(hex_part) == 32
+    assert all(c in "0123456789abcdef" for c in hex_part)
+
+
+@pytest.mark.asyncio
+async def test_api_key_assistant_restriction(client: AsyncClient, seed_data: dict, db_session: AsyncSession):
+    """Verify that an API key restricted to a specific assistant cannot access other assistants."""
+    tenant_a = seed_data["tenant_a"]
+    asst_allowed = await _create_test_assistant(db_session, tenant_a.id, "Allowed Assistant")
+    asst_blocked = await _create_test_assistant(db_session, tenant_a.id, "Blocked Assistant")
+
+    headers = {
+        "Authorization": f"Bearer {seed_data['token_a_owner']}",
+        "X-Tenant-ID": str(tenant_a.id),
+    }
+
+    # Create API key restricted to asst_allowed
+    key_payload = {
+        "name": "Restricted Scope Key",
+        "scopes": ["assistant:read", "assistant:chat"],
+        "assistant_id": str(asst_allowed.id),
+    }
+    create_resp = await client.post("/api/v1/developer/api-keys", json=key_payload, headers=headers)
+    assert create_resp.status_code == 201
+    key_data = create_resp.json()
+    assert key_data["assistant_id"] == str(asst_allowed.id)
+    raw_key = key_data["raw_key"]
+
+    dev_headers = {"Authorization": f"Bearer {raw_key}"}
+
+    # 1. Listing assistants only returns the allowed assistant
+    list_resp = await client.get("/api/v1/developer/assistants", headers=dev_headers)
+    assert list_resp.status_code == 200
+    asst_list = list_resp.json()
+    assert len(asst_list) == 1
+    assert asst_list[0]["id"] == str(asst_allowed.id)
+
+    # 2. Chatting with allowed assistant succeeds
+    chat_resp = await client.post(
+        f"/api/v1/developer/assistants/{asst_allowed.id}/chat",
+        json={"message": "Hello allowed assistant"},
+        headers=dev_headers,
+    )
+    assert chat_resp.status_code == 200
+
+    # 3. Chatting with blocked assistant fails with 403 Forbidden
+    blocked_resp = await client.post(
+        f"/api/v1/developer/assistants/{asst_blocked.id}/chat",
+        json={"message": "Intrusion attempt"},
+        headers=dev_headers,
+    )
+    assert blocked_resp.status_code == 403
+    assert f"restricted to assistant '{asst_allowed.id}'" in blocked_resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_public_chat_session_conversation_binding(client: AsyncClient, seed_data: dict, db_session: AsyncSession):
+    """Verify that distinct anonymous session tokens resolve to distinct isolated conversation threads."""
+    tenant_a = seed_data["tenant_a"]
+    asst = await _create_test_assistant(db_session, tenant_a.id, "Public Isolated Asst")
+    headers = {
+        "Authorization": f"Bearer {seed_data['token_a_owner']}",
+        "X-Tenant-ID": str(tenant_a.id),
+    }
+
+    # Publish
+    pub_payload = {
+        "visibility": "PUBLIC",
+        "allowed_domains": ["*"],
+    }
+    pub_resp = await client.post(f"/api/v1/assistants/{asst.id}/publish", json=pub_payload, headers=headers)
+    public_id = pub_resp.json()["public_id"]
+
+    # Visitor 1 sends message
+    token_v1 = "sess_visitor111111111111111111"
+    res1 = await client.post(
+        f"/api/v1/public/assistants/{public_id}/chat",
+        json={"message": "Message from visitor 1", "session_token": token_v1},
+    )
+    assert res1.status_code == 200
+
+    # Visitor 2 sends message
+    token_v2 = "sess_visitor222222222222222222"
+    res2 = await client.post(
+        f"/api/v1/public/assistants/{public_id}/chat",
+        json={"message": "Message from visitor 2", "session_token": token_v2},
+    )
+    assert res2.status_code == 200
+
+    # Verify sessions in DB have distinct conversation_ids
+    from sqlalchemy import select
+
+    from app.models.publishing import PublicChatSession
+    sessions = (await db_session.execute(
+        select(PublicChatSession).where(PublicChatSession.session_token.in_([token_v1, token_v2]))
+    )).scalars().all()
+    assert len(sessions) == 2
+    conv_ids = [s.conversation_id for s in sessions]
+    assert all(cid is not None for cid in conv_ids)
+    assert conv_ids[0] != conv_ids[1], "Visitors must have distinct conversation IDs"

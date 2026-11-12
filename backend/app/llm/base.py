@@ -75,6 +75,7 @@ class LLMConfig:
     api_key: Optional[str] = None
     base_url: Optional[str] = None
     timeout_seconds: int = 45
+    extra_headers: dict[str, str] = field(default_factory=dict)
 
 
 class LLMProvider(ABC):

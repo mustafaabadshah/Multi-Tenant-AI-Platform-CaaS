@@ -4,13 +4,14 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.database.base import Base, TenantScopedMixin, TimestampMixin, UUIDPrimaryKeyMixin
+from app.database.base import Base, TenantScopedMixin, UUIDPrimaryKeyMixin
 
 if TYPE_CHECKING:
     from app.models.assistant import Assistant, AssistantVersion
+    from app.models.conversation import Conversation
     from app.models.tenant import Tenant
     from app.models.user import User
 
@@ -97,6 +98,11 @@ class APIKey(Base, UUIDPrimaryKeyMixin, TenantScopedMixin):
         nullable=True,
         index=True,
     )
+    assistant_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("assistants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     name: Mapped[str] = mapped_column(
         String(100),
         nullable=False,
@@ -144,6 +150,7 @@ class APIKey(Base, UUIDPrimaryKeyMixin, TenantScopedMixin):
     # Relationships
     tenant: Mapped["Tenant"] = relationship("Tenant")
     user: Mapped[Optional["User"]] = relationship("User")
+    assistant: Mapped[Optional["Assistant"]] = relationship("Assistant")
 
 
 class PublicChatSession(Base, UUIDPrimaryKeyMixin, TenantScopedMixin):
@@ -154,6 +161,11 @@ class PublicChatSession(Base, UUIDPrimaryKeyMixin, TenantScopedMixin):
     publication_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("assistant_publications.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
+    )
+    conversation_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("conversations.id", ondelete="SET NULL"),
+        nullable=True,
         index=True,
     )
     session_token: Mapped[str] = mapped_column(
@@ -189,3 +201,4 @@ class PublicChatSession(Base, UUIDPrimaryKeyMixin, TenantScopedMixin):
     # Relationships
     tenant: Mapped["Tenant"] = relationship("Tenant")
     publication: Mapped["AssistantPublication"] = relationship("AssistantPublication")
+    conversation: Mapped[Optional["Conversation"]] = relationship("Conversation")

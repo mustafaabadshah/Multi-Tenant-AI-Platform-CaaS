@@ -19,7 +19,7 @@ from app.schemas.publishing import APIKeyCreate
 logger = logging.getLogger("mmaip.services.api_key")
 
 DEFAULT_SCOPES = ["assistant:read", "assistant:chat"]
-VALID_SCOPES = {"assistant:read", "assistant:chat", "knowledge:read"}
+VALID_SCOPES = {"assistant:read", "assistant:chat", "assistant:eval", "knowledge:read"}
 KEY_PREFIX = "mmaip_live_"
 
 
@@ -67,6 +67,7 @@ class APIKeyService:
             id=uuid.uuid4(),
             tenant_id=self.tenant_id,
             user_id=user_id,
+            assistant_id=payload.assistant_id,
             name=payload.name.strip(),
             key_prefix=KEY_PREFIX,
             key_hash=key_hash,
@@ -87,8 +88,9 @@ class APIKeyService:
         self,
         raw_key: str,
         required_scope: Optional[str] = None,
+        target_assistant_id: Optional[uuid.UUID] = None,
     ) -> tuple[APIKey, Tenant]:
-        """Authenticate an incoming Bearer API key, checking expiration and scopes.
+        """Authenticate an incoming Bearer API key, checking expiration, scopes, and optional assistant restriction.
 
         Returns (APIKey, Tenant).
         """
@@ -142,6 +144,14 @@ class APIKeyService:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"API key lacks required permission scope '{required_scope}'. Key scopes: {scopes}",
+            )
+
+        # Enforce assistant-level restriction if configured
+        if api_key.assistant_id and target_assistant_id and api_key.assistant_id != target_assistant_id:
+            logger.warning(f"API key {api_key.id} restricted to assistant {api_key.assistant_id}, cannot access {target_assistant_id}")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"API key is restricted to assistant '{api_key.assistant_id}'.",
             )
 
         # Update last_used_at timestamp

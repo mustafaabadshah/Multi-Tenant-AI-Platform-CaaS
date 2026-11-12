@@ -1,18 +1,20 @@
 """Groq High-Throughput LPU Provider Adapter."""
 
 import logging
-from typing import Optional
+import os
+from collections.abc import AsyncGenerator
 
-from app.llm.base import LLMConfig
+from app.llm.base import LLMConfig, LLMMessage, LLMResponse, LLMStreamChunk
 from app.llm.providers.openai_provider import OpenAICompatibleLLMProvider
 
 logger = logging.getLogger("mmaip.llm.groq")
 
 GROQ_DEFAULT_BASE_URL = "https://api.groq.com/openai/v1"
+GROQ_DEFAULT_MODEL = os.environ.get("GROQ_DEFAULT_MODEL", "openai/gpt-oss-120b")
 
 
 class GroqLLMProvider(OpenAICompatibleLLMProvider):
-    """Groq LPU Provider implementing ultra-low-latency Llama and Mixtral inference."""
+    """Groq LPU Provider implementing ultra-low-latency open-weights inference."""
 
     def __init__(self, default_base_url: str = GROQ_DEFAULT_BASE_URL):
         super().__init__(
@@ -24,6 +26,35 @@ class GroqLLMProvider(OpenAICompatibleLLMProvider):
     @property
     def provider_name(self) -> str:
         return "groq"
+
+    def _normalize_config(self, config: LLMConfig) -> LLMConfig:
+        raw_model = (config.model or "").strip()
+        if not raw_model or raw_model.lower() == "auto":
+            model = GROQ_DEFAULT_MODEL
+            logger.debug(f"Resolved Groq auto model to production default: {model}")
+        else:
+            model = raw_model
+
+        extra_h = getattr(config, "extra_headers", {}) or {}
+        return LLMConfig(
+            provider=config.provider,
+            model=model,
+            temperature=config.temperature,
+            max_tokens=config.max_tokens,
+            api_key=config.api_key,
+            base_url=config.base_url,
+            timeout_seconds=config.timeout_seconds,
+            extra_headers=extra_h,
+        )
+
+    async def generate(self, messages: list[LLMMessage], config: LLMConfig) -> LLMResponse:
+        return await super().generate(messages, self._normalize_config(config))
+
+    async def generate_stream(
+        self, messages: list[LLMMessage], config: LLMConfig
+    ) -> AsyncGenerator[LLMStreamChunk, None]:
+        async for chunk in super().generate_stream(messages, self._normalize_config(config)):
+            yield chunk
 
     async def validate_key(self, config: LLMConfig) -> bool:
         """Validate Groq API key against /models endpoint."""
