@@ -20,12 +20,17 @@ def derive_fernet_key(key_material: str) -> bytes:
 
 
 def get_active_fernet_key() -> bytes:
-    """Get the active encryption key derived from settings.SECRET_KEY."""
-    return derive_fernet_key(settings.SECRET_KEY)
+    """Get the active encryption key derived from settings.SECRET_ENCRYPTION_KEY.
+
+    Falls back to settings.SECRET_KEY when SECRET_ENCRYPTION_KEY is unset so
+    existing deployments keep decrypting data encrypted with the old key material.
+    """
+    key_material = settings.SECRET_ENCRYPTION_KEY or settings.SECRET_KEY
+    return derive_fernet_key(key_material)
 
 
 def get_previous_fernet_keys() -> list[bytes]:
-    """Get previous encryption keys derived from settings.PREVIOUS_SECRET_KEYS."""
+    """Get previous encryption key material derived from settings.PREVIOUS_SECRET_KEYS."""
     raw = getattr(settings, "PREVIOUS_SECRET_KEYS", "") or ""
     keys: list[bytes] = []
     for item in raw.split(","):

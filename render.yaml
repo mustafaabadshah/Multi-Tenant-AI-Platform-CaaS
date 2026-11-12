@@ -84,9 +84,19 @@ services:
       - key: LLM_DEFAULT_MODEL
         value: auto
 
-      # Storage Backend
+      # Storage Backend (durable S3-compatible object storage — Render filesystem is ephemeral)
       - key: STORAGE_BACKEND
-        value: local
+        value: s3
+      - key: S3_BUCKET_NAME
+        sync: false
+      - key: S3_ENDPOINT_URL
+        sync: false
+      - key: S3_ACCESS_KEY_ID
+        sync: false
+      - key: S3_SECRET_ACCESS_KEY
+        sync: false
+      - key: S3_REGION_NAME
+        value: us-east-1
       - key: STORAGE_PATH
         value: /app/data/storage
 

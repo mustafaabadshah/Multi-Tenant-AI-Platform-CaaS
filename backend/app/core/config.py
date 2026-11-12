@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(".env", "backend/.env"),
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -19,11 +19,13 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = "http://localhost:3000"
     BACKEND_URL: str = "http://localhost:8000"
     ALLOWED_ORIGINS: str = ""
+    ALLOW_DEV_LAN_ORIGINS: bool = False  # Explicit opt-in: enable LAN regex in development only
     CORS_ORIGIN_REGEX: str = r"^https://mmaip-frontend(-[a-zA-Z0-9_-]+)?\.vercel\.app$"
 
     # Security & JWT
     SECRET_KEY: str = "dev-secret-key-change-me-in-production-min-32-bytes-long"
     PREVIOUS_SECRET_KEYS: str = ""  # Comma-separated previous secret keys for seamless decryption during key rotation
+    SECRET_ENCRYPTION_KEY: str = ""  # Dedicated Fernet key material for BYOK secrets; falls back to SECRET_KEY when unset
     JWT_SECRET: str = "dev-jwt-secret-key-change-me-in-production-min-32-bytes"
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
@@ -58,6 +60,11 @@ class Settings(BaseSettings):
     # Storage & Upload Limits
     STORAGE_BACKEND: str = "local"
     STORAGE_PATH: str = "./data/storage"
+    S3_BUCKET_NAME: str | None = None
+    S3_ENDPOINT_URL: str | None = None
+    S3_ACCESS_KEY_ID: str | None = None
+    S3_SECRET_ACCESS_KEY: str | None = None
+    S3_REGION_NAME: str = "us-east-1"
     MAX_FILE_SIZE_BYTES: int = 50 * 1024 * 1024  # 50 MB
     MAX_FILES_PER_REQUEST: int = 10
     MAX_EXTRACTED_TEXT_SIZE_BYTES: int = 20 * 1024 * 1024  # 20 MB

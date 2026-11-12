@@ -13,7 +13,8 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from app.main import app
+from app.core.config import Settings
+from app.main import app, create_app
 
 
 # -----------------------------------------------------------------------------
@@ -118,19 +119,27 @@ def test_readiness_endpoint():
 # 4. CORS Origin Resolution Tests
 # -----------------------------------------------------------------------------
 def test_cors_origin_resolution():
-    """Verify that CORSMiddleware allows configured FRONTEND_URL and Vercel preview domains."""
-    client = TestClient(app)
+    """Verify production CORSMiddleware allows configured FRONTEND_URL and Vercel preview domains."""
+    # Production policy: explicit origins + production regex, no development regex.
+    prod_settings = Settings(
+        ENVIRONMENT="production",
+        DEBUG=False,
+        FRONTEND_URL="https://multi-tenant-ai-platform.vercel.app",
+        ALLOWED_ORIGINS="",
+        CORS_ORIGIN_REGEX=r"^https://mmaip-frontend(-[a-zA-Z0-9_-]+)?\.vercel\.app$",
+    )
+    client = TestClient(create_app(prod_settings))
 
     # 1. Exact FRONTEND_URL origin
     resp_fe = client.options(
         "/health",
         headers={
-            "Origin": "http://localhost:3000",
+            "Origin": "https://multi-tenant-ai-platform.vercel.app",
             "Access-Control-Request-Method": "GET",
         },
     )
     assert resp_fe.status_code == 200
-    assert resp_fe.headers.get("access-control-allow-origin") == "http://localhost:3000"
+    assert resp_fe.headers.get("access-control-allow-origin") == "https://multi-tenant-ai-platform.vercel.app"
 
     # 2. Vercel preview domain via regex
     preview_origin = "https://mmaip-frontend-preview-pr-12.vercel.app"
