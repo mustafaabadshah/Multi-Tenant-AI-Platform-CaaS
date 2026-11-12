@@ -10,15 +10,17 @@ services:
     region: oregon
     plan: starter
     rootDir: backend
-    buildCommand: "pip install -e ."
+    buildCommand: "pip install --require-hashes -r requirements.lock && pip install --no-deps -e ."
     preDeployCommand: "alembic upgrade head"
-    startCommand: "uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 2"
+    startCommand: "uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1"
     healthCheckPath: /health
-    autoDeploy: true
+    autoDeploy: false
     envVars:
       - key: ENVIRONMENT
         value: staging
       - key: DEBUG
+        value: "false"
+      - key: ALLOW_PUBLIC_REGISTRATION
         value: "false"
       - key: PROJECT_NAME
         value: "Multi-Tenant AI Platform-CaaS"
@@ -53,6 +55,12 @@ services:
       - key: PREVIOUS_SECRET_KEYS
         value: ""
 
+      # Rate Limiting & Proxy Trust
+      - key: RATE_LIMIT_ENABLED
+        value: "true"
+      - key: TRUSTED_PROXY_IPS
+        sync: false
+
       # CORS & Frontend Origins
       - key: FRONTEND_URL
         sync: false
@@ -74,15 +82,21 @@ services:
       - key: RRF_K_CONSTANT
         value: "60"
 
+      # Inline Ingestion Dispatcher (single-process staging envelope)
+      - key: INGESTION_INLINE_DISPATCHER_ENABLED
+        value: "true"
+      - key: INGESTION_LEASE_SECONDS
+        value: "3600"
+      - key: INGESTION_MAX_CONCURRENCY
+        value: "1"
+
       # AI Gateway Settings
       - key: LLM_BASE_URL
-        value: "https://api.openai.com/v1"
+        sync: false
       - key: OPENAI_API_KEY
         sync: false
       - key: OMNIROUTE_API_KEY
         sync: false
-      - key: LLM_DEFAULT_MODEL
-        value: auto
 
       # Storage Backend (durable S3-compatible object storage — Render filesystem is ephemeral)
       - key: STORAGE_BACKEND
@@ -97,8 +111,6 @@ services:
         sync: false
       - key: S3_REGION_NAME
         value: us-east-1
-      - key: STORAGE_PATH
-        value: /app/data/storage
 
 # -----------------------------------------------------------------------------
 # MANAGED POSTGRESQL DATABASE (v16 with pgvector)

@@ -15,10 +15,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr-eng \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml /app/
-RUN pip install --upgrade pip && pip install -e .
+COPY pyproject.toml requirements.lock /app/
+RUN pip install --require-hashes -r requirements.lock
 
 COPY . /app/
+RUN pip install --no-deps -e .
 
 EXPOSE 8000
 
