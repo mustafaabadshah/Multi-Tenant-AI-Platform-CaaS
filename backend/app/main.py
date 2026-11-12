@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -21,6 +22,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     validate_storage_configuration(settings)
 
+    dispatcher_stop: asyncio.Event | None = None
+    dispatcher_task: asyncio.Task[None] | None = None
+
     # Startup: ensure tables exist if running on sqlite/local dev, and seed system roles
     try:
         async with engine.begin() as conn:
@@ -31,18 +35,74 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             await role_repo.seed_system_roles_and_permissions()
             await session.commit()
 
-        # Recover any orphaned background ingestion / embedding jobs from previous crashes
+        # Recover interrupted background jobs. Ingestion recovery is lease
+        # aware (requeue while retries remain, terminal on exhaustion); fresh
+        # PROCESSING jobs owned by a live sibling process are left untouched.
         async with async_session_maker() as session:
             from app.services.ingestion.recovery import recover_orphaned_jobs
 
             stats = await recover_orphaned_jobs(session)
             if stats["recovered_ingestion_jobs"] > 0 or stats["recovered_embedding_jobs"] > 0:
                 print(f"[Lifespan] Recovered orphaned background jobs: {stats}")
+
+        # Idempotent second sweep for rows that became stale after the first
+        # pass (or when recovery.py is bypassed by another entry point).
+        async with async_session_maker() as session:
+            from app.services.ingestion.job_queue import recover_stale_jobs
+
+            stale_stats = await recover_stale_jobs(session, settings.INGESTION_LEASE_SECONDS)
+            if stale_stats["recovered"] > 0:
+                print(f"[Lifespan] Lease recovery: {stale_stats}")
+
     except Exception as e:
         # In Docker / production with migrations, alembic handles DDL
         print(f"[Startup Warning] Schema init, role seed, or job recovery: {e}")
 
+    # Start the dispatcher even if a recovery sweep failed: QUEUED jobs must
+    # still be picked up. API upload tasks and a standalone worker also claim
+    # atomically, so duplicate dispatch cannot double-process a job.
+    if settings.INGESTION_INLINE_DISPATCHER_ENABLED:
+        try:
+            from app.services.ingestion.job_queue import dispatch_pending_jobs
+
+            dispatcher_stop = asyncio.Event()
+            dispatcher_task = asyncio.create_task(
+                dispatch_pending_jobs(
+                    async_session_maker,
+                    dispatcher_stop,
+                    settings.INGESTION_DISPATCHER_POLL_SECONDS,
+                    settings.INGESTION_MAX_CONCURRENCY,
+                ),
+                name="ingestion-inline-dispatcher",
+            )
+            print(
+                "[Lifespan] Inline ingestion dispatcher started "
+                f"(poll={settings.INGESTION_DISPATCHER_POLL_SECONDS}s, "
+                f"concurrency={settings.INGESTION_MAX_CONCURRENCY}, "
+                f"lease={settings.INGESTION_LEASE_SECONDS}s)"
+            )
+        except Exception as e:
+            print(f"[Startup Warning] Inline ingestion dispatcher failed to start: {e}")
+
     yield
+
+    # Shutdown: stop claiming new jobs, let the in-flight job drain briefly,
+    # then cancel if it exceeds the shutdown budget (lease recovery will
+    # requeue it on the next startup).
+    if dispatcher_stop is not None:
+        dispatcher_stop.set()
+    if dispatcher_task is not None:
+        try:
+            await asyncio.wait_for(dispatcher_task, timeout=30)
+        except TimeoutError:
+            print("[Shutdown] Inline ingestion dispatcher did not drain in 30s; cancelling.")
+            dispatcher_task.cancel()
+            try:
+                await dispatcher_task
+            except asyncio.CancelledError:
+                pass
+        except Exception as e:
+            print(f"[Shutdown Warning] Inline ingestion dispatcher exited with error: {e}")
 
     # Shutdown: dispose db pool
     await engine.dispose()

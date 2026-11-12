@@ -422,9 +422,11 @@ async def test_09_background_recovery_and_stalled_job_reconciliation(db_session:
     assert stats["recovered_ingestion_jobs"] >= 1
 
     rechecked_job = await job_repo.get_by_id(stuck_job.id)
-    assert rechecked_job.status == "FAILED"
-    assert rechecked_job.stage == "INTERRUPTED"
-    assert rechecked_job.error_category == "PROCESS_RESTART"
+    assert rechecked_job.status == "QUEUED"
+    assert rechecked_job.stage == "RETRY_QUEUED"
+    assert rechecked_job.retry_count == 1
+    assert rechecked_job.started_at is None
+    assert rechecked_job.error_category == "LEASE_EXPIRED"
 
 
 # ---------------------------------------------------------------------------

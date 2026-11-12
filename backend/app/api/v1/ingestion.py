@@ -81,6 +81,8 @@ async def retry_ingestion_job(
     job.retry_count = 0
     job.error_message = None
     job.error_category = None
+    job.started_at = None
+    job.completed_at = None
 
     if job.document_id:
         doc = await db.get(Document, job.document_id)
@@ -136,7 +138,7 @@ async def cancel_ingestion_job(
 
     if job.document_id:
         doc = await db.get(Document, job.document_id)
-        if doc and doc.status == "PROCESSING":
+        if doc and doc.status in ("QUEUED", "PROCESSING"):
             doc.status = "CANCELLED"
 
     await repo.record_event(

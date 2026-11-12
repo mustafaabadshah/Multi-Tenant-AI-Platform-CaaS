@@ -1,9 +1,9 @@
 """Tests for Stage 5: Durable Background Processing & Recovery.
 
 Verifies:
-1. Orphaned ingestion jobs in PROCESSING on process crash/restart are recovered to FAILED
-   with error_category=PROCESS_RESTART and error_message indicating application process restart.
-2. Associated documents are safely transitioned out of PROCESSING to FAILED.
+1. Orphaned ingestion jobs in PROCESSING are recovered by the lease sweep: jobs with
+   retry budget remaining are requeued (LEASE_EXPIRED) instead of being failed.
+2. Associated documents are unlocked to QUEUED when the job is requeued.
 3. IngestionEvents are created to maintain auditability.
 4. Orphaned embedding jobs in PROCESSING are recovered.
 5. Recovered jobs can be safely retried via POST /api/v1/ingestion/jobs/{id}/retry.
@@ -79,17 +79,20 @@ async def test_orphaned_ingestion_job_recovery(
     stats = await recover_orphaned_jobs(db_session)
     assert stats["recovered_ingestion_jobs"] >= 1
 
-    # 4. Verify job transition
+    # 4. Verify lease requeue transition (retry budget remains)
     await db_session.refresh(job)
-    assert job.status == "FAILED"
-    assert job.stage == "INTERRUPTED"
-    assert job.error_category == "PROCESS_RESTART"
-    assert "interrupted by an application process restart" in job.error_message.lower()
-    assert job.completed_at is not None
+    assert job.status == "QUEUED"
+    assert job.stage == "RETRY_QUEUED"
+    assert job.retry_count == 1
+    assert job.started_at is None
+    assert job.error_category == "LEASE_EXPIRED"
+    assert "lease expired" in job.error_message.lower()
+    assert job.completed_at is None
+    assert job.job_metadata.get("lease_recovery_notes")
 
-    # 5. Verify document transition
+    # 5. Verify document unlock
     await db_session.refresh(doc)
-    assert doc.status == "FAILED"
+    assert doc.status == "QUEUED"
 
     # 6. Verify audit event
     stmt = (
@@ -101,9 +104,9 @@ async def test_orphaned_ingestion_job_recovery(
     events = res.scalars().all()
     assert len(events) >= 1
     recovery_event = events[0]
-    assert recovery_event.stage == "PROCESS_RESTART"
-    assert recovery_event.status == "FAILED"
-    assert "restart" in recovery_event.message.lower()
+    assert recovery_event.stage == "LEASE_EXPIRED"
+    assert recovery_event.status == "RETRY_QUEUED"
+    assert "lease expired" in recovery_event.message.lower()
 
 
 @pytest.mark.asyncio
