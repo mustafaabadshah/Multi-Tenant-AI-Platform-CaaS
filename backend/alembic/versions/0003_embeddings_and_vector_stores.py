@@ -31,26 +31,47 @@ def upgrade() -> None:
     # 2. Add department and access control columns to knowledge_bases and documents
     op.add_column("knowledge_bases", sa.Column("department_id", sa.Uuid(), nullable=True))
     op.add_column("knowledge_bases", sa.Column("access_level", sa.String(50), nullable=False, server_default="tenant"))
-    op.create_foreign_key(
-        "fk_kb_department",
-        "knowledge_bases",
-        "departments",
-        ["department_id"],
-        ["id"],
-        ondelete="SET NULL",
-    )
+    if is_postgres:
+        op.create_foreign_key(
+            "fk_kb_department",
+            "knowledge_bases",
+            "departments",
+            ["department_id"],
+            ["id"],
+            ondelete="SET NULL",
+        )
+    else:
+        # SQLite cannot ALTER ADD CONSTRAINT; rebuild the table in batch mode.
+        with op.batch_alter_table("knowledge_bases", schema=None) as batch_op:
+            batch_op.create_foreign_key(
+                "fk_kb_department",
+                "departments",
+                ["department_id"],
+                ["id"],
+                ondelete="SET NULL",
+            )
     op.create_index("ix_knowledge_bases_department_id", "knowledge_bases", ["department_id"])
 
     op.add_column("documents", sa.Column("department_id", sa.Uuid(), nullable=True))
     op.add_column("documents", sa.Column("access_level", sa.String(50), nullable=False, server_default="tenant"))
-    op.create_foreign_key(
-        "fk_doc_department",
-        "documents",
-        "departments",
-        ["department_id"],
-        ["id"],
-        ondelete="SET NULL",
-    )
+    if is_postgres:
+        op.create_foreign_key(
+            "fk_doc_department",
+            "documents",
+            "departments",
+            ["department_id"],
+            ["id"],
+            ondelete="SET NULL",
+        )
+    else:
+        with op.batch_alter_table("documents", schema=None) as batch_op:
+            batch_op.create_foreign_key(
+                "fk_doc_department",
+                "departments",
+                ["department_id"],
+                ["id"],
+                ondelete="SET NULL",
+            )
     op.create_index("ix_documents_department_id", "documents", ["department_id"])
 
     # 3. Retrieval & Vector Store Configurations
@@ -144,16 +165,27 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    bind = op.get_bind()
+    is_postgres = bind.dialect.name == "postgresql"
+
     op.drop_table("embedding_jobs")
     op.drop_table("chunk_embeddings")
     op.drop_table("retrieval_configs")
 
-    op.drop_constraint("fk_doc_department", "documents", type_="foreignkey")
+    if is_postgres:
+        op.drop_constraint("fk_doc_department", "documents", type_="foreignkey")
+    else:
+        with op.batch_alter_table("documents", schema=None) as batch_op:
+            batch_op.drop_constraint("fk_doc_department", type_="foreignkey")
     op.drop_index("ix_documents_department_id", table_name="documents")
     op.drop_column("documents", "access_level")
     op.drop_column("documents", "department_id")
 
-    op.drop_constraint("fk_kb_department", "knowledge_bases", type_="foreignkey")
+    if is_postgres:
+        op.drop_constraint("fk_kb_department", "knowledge_bases", type_="foreignkey")
+    else:
+        with op.batch_alter_table("knowledge_bases", schema=None) as batch_op:
+            batch_op.drop_constraint("fk_kb_department", type_="foreignkey")
     op.drop_index("ix_knowledge_bases_department_id", table_name="knowledge_bases")
     op.drop_column("knowledge_bases", "access_level")
     op.drop_column("knowledge_bases", "department_id")

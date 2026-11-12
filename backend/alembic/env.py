@@ -26,6 +26,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        render_as_batch=True,
     )
 
     with context.begin_transaction():
@@ -33,14 +34,22 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata)
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        render_as_batch=True,
+    )
     with context.begin_transaction():
         context.run_migrations()
 
 
 async def run_async_migrations() -> None:
     configuration = config.get_section(config.config_ini_section, {})
-    configuration["sqlalchemy.url"] = settings.DATABASE_URL
+    override_url = config.get_main_option("sqlalchemy.url")
+    target_url = override_url or settings.DATABASE_URL
+    if target_url.startswith("sqlite:///") and not target_url.startswith("sqlite+aiosqlite:///"):
+        target_url = target_url.replace("sqlite:///", "sqlite+aiosqlite:///")
+    configuration["sqlalchemy.url"] = target_url
 
     connectable = async_engine_from_config(
         configuration,
