@@ -21,6 +21,7 @@ from app.schemas.knowledge import (
     IngestionJobResponse,
     KnowledgeBaseCreateRequest,
     KnowledgeBaseResponse,
+    KnowledgeBaseUpdateRequest,
 )
 from app.schemas.retrieval import (
     EmbeddingJobRead,
@@ -121,6 +122,7 @@ async def get_knowledge_base(
             detail="Knowledge base not found in active workspace",
         )
     _check_kb_acl(kb, ctx)
+    doc_count = await repo.get_document_count(kb.id)
 
     return KnowledgeBaseResponse(
         id=kb.id,
@@ -128,9 +130,67 @@ async def get_knowledge_base(
         name=kb.name,
         description=kb.description,
         status=kb.status,
-        document_count=0,
+        document_count=doc_count,
         created_at=kb.created_at,
         updated_at=kb.updated_at,
+    )
+
+
+@router.patch("/{kb_id}", response_model=KnowledgeBaseResponse)
+async def update_knowledge_base(
+    kb_id: uuid.UUID,
+    payload: KnowledgeBaseUpdateRequest,
+    ctx: TenantContext = Depends(require_permission(PermissionName.KNOWLEDGE_CREATE.value)),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> KnowledgeBaseResponse:
+    repo = KnowledgeRepository(db, ctx.tenant.id)
+    kb = await repo.get_by_id(kb_id)
+    if not kb:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Knowledge base not found in active workspace",
+        )
+    _check_kb_acl(kb, ctx)
+
+    update_dict = payload.model_dump(exclude_unset=True)
+    if not update_dict:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No fields provided for update",
+        )
+
+    if "name" in update_dict and update_dict["name"] is not None:
+        update_dict["name"] = update_dict["name"].strip()
+
+    updated_kb = await repo.update(kb_id, **update_dict)
+    if not updated_kb:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Knowledge base not found in active workspace",
+        )
+    await db.commit()
+
+    audit_repo = AuditLogRepository(db, ctx.tenant.id)
+    await audit_repo.log_event(
+        action="knowledge.update",
+        resource_type="knowledge_base",
+        resource_id=kb.id,
+        actor_id=current_user.id,
+        details=update_dict,
+    )
+
+    doc_count = await repo.get_document_count(kb.id)
+
+    return KnowledgeBaseResponse(
+        id=updated_kb.id,
+        tenant_id=updated_kb.tenant_id,
+        name=updated_kb.name,
+        description=updated_kb.description,
+        status=updated_kb.status,
+        document_count=doc_count,
+        created_at=updated_kb.created_at,
+        updated_at=updated_kb.updated_at,
     )
 
 

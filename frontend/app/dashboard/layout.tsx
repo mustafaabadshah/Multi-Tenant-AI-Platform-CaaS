@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
@@ -18,36 +18,46 @@ import {
   ChevronDown,
   PlusCircle,
   LogOut,
-  Shield,
-  Sparkles,
   ExternalLink,
+  Activity,
+  MessageSquare,
+  Menu,
+  X,
+  ChevronLeft,
+  ChevronRight,
+  ShieldCheck,
 } from "lucide-react";
 import { api } from "@/lib/api";
+import Spinner from "@/components/ui/Spinner";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, activeWorkspace, workspaces, switchWorkspace, refreshWorkspaces, logout, isLoading } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
+
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   const [showCreateWorkspaceModal, setShowCreateWorkspaceModal] = useState(false);
   const [newWsName, setNewWsName] = useState("");
   const [newWsType, setNewWsType] = useState<"INDIVIDUAL" | "ORGANIZATION">("ORGANIZATION");
   const [creatingWs, setCreatingWs] = useState(false);
 
-  if (isLoading) {
+  useEffect(() => {
+    if (!isLoading && !user) {
+      router.push("/login");
+    }
+  }, [isLoading, user, router]);
+
+  if (isLoading || !user) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950">
+      <div className="flex min-h-screen items-center justify-center bg-gray-50">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-slate-400 text-sm">Loading workspace...</p>
+          <Spinner size="lg" />
+          <p className="text-gray-500 text-sm">{isLoading ? "Loading workspace..." : "Redirecting to sign in..."}</p>
         </div>
       </div>
     );
-  }
-
-  if (!user) {
-    router.push("/login");
-    return null;
   }
 
   const handleCreateWorkspace = async (e: React.FormEvent) => {
@@ -70,244 +80,376 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   };
 
-  const navItems = [
-    { label: "Overview", href: "/dashboard", icon: LayoutDashboard },
+  const navGroups = [
     {
-      category: "Workspace",
+      group: "Workspace",
       items: [
-        { label: "Organization", href: "/dashboard/workspace", icon: Building2 },
+        { label: "Overview", href: "/dashboard", icon: LayoutDashboard },
+        { label: "Assistants", href: "/dashboard/assistants", icon: Bot },
+        { label: "Knowledge", href: "/dashboard/knowledge", icon: Database },
+        { label: "Conversations", href: "/dashboard/conversations", icon: MessageSquare },
+      ],
+    },
+    {
+      group: "Operate",
+      items: [
+        { label: "Observability", href: "/dashboard/observability", icon: Activity },
+      ],
+    },
+    {
+      group: "Organization",
+      items: [
         { label: "Employees", href: "/dashboard/employees", icon: Users },
         { label: "Departments", href: "/dashboard/departments", icon: Briefcase },
         { label: "Groups", href: "/dashboard/groups", icon: Layers },
+        { label: "Organization", href: "/dashboard/workspace", icon: Building2 },
       ],
     },
     {
-      category: "AI Platform",
+      group: "Settings",
       items: [
-        { label: "Assistants", href: "/dashboard/assistants", icon: Bot },
-        { label: "Knowledge Bases", href: "/dashboard/knowledge", icon: Database },
         { label: "Providers & Keys", href: "/dashboard/providers", icon: Key },
-      ],
-    },
-    {
-      category: "Administration",
-      items: [
         { label: "Audit Logs", href: "/dashboard/audit", icon: History },
         { label: "Settings", href: "/dashboard/settings", icon: Settings },
       ],
     },
   ];
 
-  return (
-    <div className="flex min-h-screen bg-slate-950 text-slate-100">
-      {/* Sidebar */}
-      <aside className="w-64 border-r border-slate-800 bg-slate-900/60 backdrop-blur-xl flex flex-col justify-between shrink-0">
-        <div>
-          {/* Brand */}
-          <div className="h-16 px-5 border-b border-slate-800 flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/20 ring-1 ring-white/20">
-              <Bot className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <span className="font-bold text-sm tracking-tight text-white block">Multi-Tenant AI Platform-CaaS</span>
-              <span className="text-[10px] text-blue-400 font-medium block">Enterprise Multi-Tenant</span>
-            </div>
-          </div>
-
-          {/* Workspace Switcher */}
-          <div className="p-3 border-b border-slate-800/80 relative">
-            <button
-              type="button"
-              onClick={() => setWorkspaceMenuOpen(!workspaceMenuOpen)}
-              className="w-full p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 hover:border-slate-700 transition flex items-center justify-between text-left cursor-pointer group"
-            >
-              <div className="min-w-0 pr-2">
-                <span className="text-[10px] uppercase font-semibold text-slate-400 block tracking-wider">
-                  Active Workspace
-                </span>
-                <span className="text-xs font-semibold text-slate-100 truncate block">
-                  {activeWorkspace?.tenant_name || "Select Workspace"}
-                </span>
-                <span className="text-[10px] text-blue-400 block font-mono">
-                  {activeWorkspace?.tenant_type || "ORGANIZATION"}
-                </span>
-              </div>
-              <ChevronDown className="w-4 h-4 text-slate-400 shrink-0 group-hover:text-slate-200 transition" />
-            </button>
-
-            {/* Switcher Dropdown */}
-            {workspaceMenuOpen && (
-              <div className="absolute top-full left-3 right-3 mt-1.5 p-1.5 rounded-xl bg-slate-900 border border-slate-800 shadow-2xl z-50 animate-fadeIn">
-                <div className="text-[10px] font-semibold text-slate-400 px-2 py-1 uppercase tracking-wider">
-                  Available Workspaces
-                </div>
-                <div className="max-h-48 overflow-y-auto space-y-1">
-                  {workspaces.map((ws) => (
-                    <button
-                      key={ws.tenant_id}
-                      type="button"
-                      onClick={() => {
-                        switchWorkspace(ws.tenant_id);
-                        setWorkspaceMenuOpen(false);
-                      }}
-                      className={`w-full p-2 rounded-lg text-left text-xs transition flex items-center justify-between cursor-pointer ${
-                        ws.tenant_id === activeWorkspace?.tenant_id
-                          ? "bg-blue-600/20 text-blue-300 font-semibold border border-blue-500/30"
-                          : "text-slate-300 hover:bg-slate-800/70"
-                      }`}
-                    >
-                      <div className="truncate">
-                        <span className="block truncate">{ws.tenant_name}</span>
-                        <span className="text-[10px] text-slate-400 block font-mono">{ws.tenant_type}</span>
-                      </div>
-                      {ws.tenant_id === activeWorkspace?.tenant_id && (
-                        <span className="w-2 h-2 rounded-full bg-blue-400 shrink-0"></span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="pt-1.5 mt-1 border-t border-slate-800">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setWorkspaceMenuOpen(false);
-                      setShowCreateWorkspaceModal(true);
-                    }}
-                    className="w-full p-2 rounded-lg text-xs text-blue-400 hover:bg-blue-950/40 flex items-center gap-2 transition cursor-pointer font-medium"
-                  >
-                    <PlusCircle className="w-3.5 h-3.5" />
-                    <span>Create New Workspace</span>
-                  </button>
-                </div>
+  const renderNavItems = (collapsed = false) => {
+    return (
+      <nav className="space-y-4 px-2">
+        {navGroups.map((group) => (
+          <div key={group.group} className="space-y-1">
+            {!collapsed && (
+              <div className="px-2.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+                {group.group}
               </div>
             )}
-          </div>
+            {group.items.map((item) => {
+              const Icon = item.icon;
+              const isActive =
+                item.href === "/dashboard"
+                  ? pathname === "/dashboard"
+                  : pathname.startsWith(item.href);
 
-          {/* Navigation Links */}
-          <nav className="p-3 space-y-5 overflow-y-auto max-h-[calc(100vh-250px)]">
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setMobileMenuOpen(false)}
+                  title={collapsed ? item.label : undefined}
+                  className={`flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
+                    collapsed ? "justify-center" : ""
+                  } ${
+                    isActive
+                      ? "bg-blue-50 text-blue-600 font-semibold"
+                      : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+                  }`}
+                >
+                  <Icon size={18} className={`shrink-0 ${isActive ? "text-blue-600" : "text-gray-500"}`} />
+                  {!collapsed && <span className="truncate">{item.label}</span>}
+                </Link>
+              );
+            })}
+          </div>
+        ))}
+      </nav>
+    );
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex">
+      {/* Mobile Drawer Backdrop */}
+      {mobileMenuOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-gray-900/40 backdrop-blur-xs lg:hidden"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* Mobile Drawer */}
+      <aside
+        className={`fixed top-0 bottom-0 left-0 z-50 w-64 bg-white border-r border-gray-200 transform transition-transform duration-200 ease-in-out lg:hidden flex flex-col justify-between ${
+          mobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        <div>
+          {/* Mobile Header */}
+          <div className="h-16 px-4 border-b border-gray-200 flex items-center justify-between">
             <Link
               href="/dashboard"
-              className={`flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition ${
-                pathname === "/dashboard"
-                  ? "bg-blue-600 text-white shadow-lg shadow-blue-600/30"
-                  : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
-              }`}
+              className="flex items-center gap-2.5"
+              onClick={() => setMobileMenuOpen(false)}
             >
-              <LayoutDashboard className="w-4 h-4" />
-              <span>Overview</span>
-            </Link>
-
-            {navItems.slice(1).map((group, idx) => (
-              <div key={idx} className="space-y-1">
-                <span className="text-[10px] uppercase font-bold text-slate-400 px-3 tracking-wider block">
-                  {group.category}
-                </span>
-                {group.items?.map((item) => {
-                  const Icon = item.icon;
-                  const active = pathname === item.href;
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className={`flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition ${
-                        active
-                          ? "bg-blue-600 text-white shadow-lg shadow-blue-600/30"
-                          : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
-                      }`}
-                    >
-                      <Icon className="w-4 h-4" />
-                      <span>{item.label}</span>
-                    </Link>
-                  );
-                })}
+              <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-sm">
+                M
               </div>
-            ))}
-          </nav>
+              <div className="truncate">
+                <span className="font-semibold text-gray-900 text-sm tracking-tight block">Multi-Tenant AI Platform</span>
+                <span className="text-[10px] text-gray-500 block">Multi-Tenant CaaS</span>
+              </div>
+            </Link>
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(false)}
+              className="p-1 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+            >
+              <X size={20} />
+            </button>
+          </div>
+
+          {/* Mobile Nav */}
+          <div className="p-3 overflow-y-auto max-h-[calc(100vh-140px)]">
+            {renderNavItems(false)}
+          </div>
         </div>
 
-        {/* User Account Footer */}
-        <div className="p-3 border-t border-slate-800 bg-slate-950/40">
-          <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between">
+        {/* Mobile User Footer */}
+        <div className="p-3 border-t border-gray-200 bg-gray-50">
+          <div className="flex items-center justify-between">
             <div className="min-w-0 pr-2">
-              <span className="text-xs font-semibold text-slate-200 truncate block">
-                {user.full_name}
-              </span>
-              <span className="text-[11px] text-slate-400 truncate block">
-                {user.email}
-              </span>
-              <span className="inline-block mt-0.5 text-[9px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded bg-blue-950 text-blue-400 border border-blue-800">
-                {activeWorkspace?.role || "Member"}
-              </span>
+              <span className="text-xs font-semibold text-gray-900 truncate block">{user.full_name}</span>
+              <span className="text-[11px] text-gray-500 truncate block">{user.email}</span>
             </div>
             <button
               type="button"
               onClick={logout}
-              title="Sign Out"
-              className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-slate-800 transition cursor-pointer"
+              className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-gray-100 transition-colors"
+              title="Logout"
             >
-              <LogOut className="w-4 h-4" />
+              <LogOut size={16} />
             </button>
           </div>
         </div>
       </aside>
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Top Header */}
-        <header className="h-16 border-b border-slate-800 bg-slate-900/40 backdrop-blur-xl px-8 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
-            <h2 className="text-sm font-semibold text-slate-200">
-              {activeWorkspace?.tenant_name || "Workspace"}
-            </h2>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
-              {activeWorkspace?.tenant_slug}
-            </span>
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950/80 text-emerald-400 border border-emerald-800 flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-              Tenant Isolated
-            </span>
+      {/* Desktop Persistent Sidebar */}
+      <aside
+        className={`hidden lg:flex flex-col justify-between shrink-0 bg-white border-r border-gray-200 transition-all duration-200 sticky top-0 h-screen ${
+          isCollapsed ? "w-16" : "w-64"
+        }`}
+      >
+        <div className="flex flex-col min-h-0">
+          {/* Sidebar Header */}
+          <div className="h-16 px-3 border-b border-gray-200 flex items-center justify-between">
+            {!isCollapsed ? (
+              <Link href="/dashboard" className="flex items-center gap-2.5 min-w-0 px-1">
+                <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-sm shrink-0">
+                  M
+                </div>
+                <div className="truncate">
+                  <span className="font-semibold text-gray-900 text-sm block tracking-tight truncate">
+                    Multi-Tenant AI Platform
+                  </span>
+                  <span className="text-[10px] text-gray-500 block truncate">Multi-Tenant CaaS</span>
+                </div>
+              </Link>
+            ) : (
+              <Link href="/dashboard" className="mx-auto" title="Multi-Tenant AI Platform">
+                <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-sm">
+                  M
+                </div>
+              </Link>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setIsCollapsed(!isCollapsed)}
+              className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+              title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            >
+              {isCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+            </button>
           </div>
 
-          <div className="flex items-center gap-4 text-xs text-slate-400">
+          {/* Workspace Switcher */}
+          {!isCollapsed ? (
+            <div className="p-3 border-b border-gray-100 relative">
+              <button
+                type="button"
+                onClick={() => setWorkspaceMenuOpen(!workspaceMenuOpen)}
+                className="w-full p-2 rounded-lg bg-gray-50 border border-gray-200 hover:border-gray-300 transition-colors flex items-center justify-between text-left cursor-pointer group"
+              >
+                <div className="min-w-0 pr-2">
+                  <span className="text-[10px] uppercase font-semibold text-gray-500 block tracking-wider">
+                    Workspace
+                  </span>
+                  <span className="text-xs font-semibold text-gray-900 truncate block">
+                    {activeWorkspace?.tenant_name || "Select Workspace"}
+                  </span>
+                  <span className="text-[10px] text-blue-600 font-mono block">
+                    {activeWorkspace?.tenant_type || "ORGANIZATION"}
+                  </span>
+                </div>
+                <ChevronDown size={14} className="text-gray-400 group-hover:text-gray-600 shrink-0" />
+              </button>
+
+              {/* Workspace Dropdown */}
+              {workspaceMenuOpen && (
+                <div className="absolute top-full left-3 right-3 mt-1.5 p-1.5 rounded-lg bg-white border border-gray-200 shadow-lg z-50 animate-fadeIn">
+                  <div className="text-[10px] font-semibold text-gray-500 px-2 py-1 uppercase tracking-wider">
+                    Available Workspaces
+                  </div>
+                  <div className="max-h-48 overflow-y-auto space-y-0.5">
+                    {workspaces.map((ws) => (
+                      <button
+                        key={ws.tenant_id}
+                        type="button"
+                        onClick={() => {
+                          switchWorkspace(ws.tenant_id);
+                          setWorkspaceMenuOpen(false);
+                        }}
+                        className={`w-full p-2 rounded-md text-left text-xs transition-colors flex items-center justify-between cursor-pointer ${
+                          ws.tenant_id === activeWorkspace?.tenant_id
+                            ? "bg-blue-50 text-blue-700 font-semibold"
+                            : "text-gray-700 hover:bg-gray-100"
+                        }`}
+                      >
+                        <div className="truncate">
+                          <span className="block truncate">{ws.tenant_name}</span>
+                          <span className="text-[10px] text-gray-400 block font-mono">{ws.tenant_type}</span>
+                        </div>
+                        {ws.tenant_id === activeWorkspace?.tenant_id && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-blue-600 shrink-0" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="pt-1.5 mt-1 border-t border-gray-100">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWorkspaceMenuOpen(false);
+                        setShowCreateWorkspaceModal(true);
+                      }}
+                      className="w-full p-1.5 rounded-md text-xs text-blue-600 hover:bg-blue-50 flex items-center gap-1.5 font-medium cursor-pointer"
+                    >
+                      <PlusCircle size={14} />
+                      <span>New Workspace</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="py-2 flex justify-center border-b border-gray-100">
+              <button
+                type="button"
+                onClick={() => setIsCollapsed(false)}
+                title={`Active: ${activeWorkspace?.tenant_name || "Workspace"}`}
+                className="w-10 h-10 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-center text-gray-700 hover:bg-gray-100"
+              >
+                <Building2 size={18} />
+              </button>
+            </div>
+          )}
+
+          {/* Nav List */}
+          <div className="py-3 overflow-y-auto flex-1">{renderNavItems(isCollapsed)}</div>
+        </div>
+
+        {/* Desktop Footer */}
+        <div className="p-3 border-t border-gray-200 bg-white">
+          {!isCollapsed ? (
+            <div className="flex items-center justify-between">
+              <div className="min-w-0 pr-2">
+                <span className="text-xs font-semibold text-gray-900 truncate block">{user.full_name}</span>
+                <span className="text-[11px] text-gray-500 truncate block">{user.email}</span>
+                <span className="inline-block mt-0.5 text-[9px] uppercase tracking-wider font-semibold px-1.5 py-0.2 rounded bg-gray-100 text-gray-600 border border-gray-200">
+                  {activeWorkspace?.role || "Member"}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={logout}
+                title="Logout"
+                className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-gray-100 transition-colors"
+              >
+                <LogOut size={16} />
+              </button>
+            </div>
+          ) : (
+            <div className="flex justify-center">
+              <button
+                type="button"
+                onClick={logout}
+                title="Logout"
+                className="p-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-gray-100 transition-colors"
+              >
+                <LogOut size={18} />
+              </button>
+            </div>
+          )}
+        </div>
+      </aside>
+
+      {/* Main Content Viewport */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Sticky Topbar */}
+        <header className="sticky top-0 z-30 h-16 bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(true)}
+              className="p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 lg:hidden"
+              aria-label="Open navigation"
+            >
+              <Menu size={20} />
+            </button>
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-semibold text-gray-900">
+                {activeWorkspace?.tenant_name || "Workspace"}
+              </h2>
+              <span className="hidden sm:inline-flex text-[10px] font-mono px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200">
+                {activeWorkspace?.tenant_slug}
+              </span>
+              <span className="inline-flex items-center gap-1.5 text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span>Tenant Isolated</span>
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4 text-xs text-gray-600">
             <a
               href="http://localhost:8000/docs"
               target="_blank"
               rel="noreferrer"
-              className="flex items-center gap-1 hover:text-slate-200 transition"
+              className="hidden sm:flex items-center gap-1 hover:text-blue-600 transition-colors"
             >
               <span>API Reference</span>
-              <ExternalLink className="w-3.5 h-3.5" />
+              <ExternalLink size={12} />
             </a>
-            <div className="w-px h-4 bg-slate-800"></div>
-            <div className="flex items-center gap-1.5 text-blue-400">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>OmniRoute AI Gateway Ready</span>
+            <div className="hidden sm:block w-px h-4 bg-gray-200" />
+            <div className="flex items-center gap-1.5 text-blue-600 font-medium">
+              <ShieldCheck size={14} />
+              <span className="hidden md:inline">RBAC & BYOK Active</span>
             </div>
           </div>
         </header>
 
-        {/* Page Content */}
-        <main className="flex-1 p-8 overflow-y-auto">{children}</main>
+        {/* Page Main Content */}
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">{children}</main>
       </div>
 
       {/* Create Workspace Modal */}
       {showCreateWorkspaceModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-md w-full shadow-2xl animate-fadeIn">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white border border-gray-200 rounded-xl p-6 max-w-md w-full shadow-xl">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl bg-blue-600/20 text-blue-400 flex items-center justify-center">
-                <Building2 className="w-5 h-5" />
+              <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                <Building2 size={20} />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-slate-100">Create New Workspace</h3>
-                <p className="text-xs text-slate-400">Add an individual sandbox or organization</p>
+                <h3 className="text-base font-semibold text-gray-900">Create New Workspace</h3>
+                <p className="text-xs text-gray-500">Add an individual sandbox or organizational tenant</p>
               </div>
             </div>
 
             <form onSubmit={handleCreateWorkspace} className="space-y-4">
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">
+                <label className="block text-xs font-medium text-gray-700 mb-1">
                   Workspace Name
                 </label>
                 <input
@@ -316,54 +458,54 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   value={newWsName}
                   onChange={(e) => setNewWsName(e.target.value)}
                   placeholder="e.g. Apex AI Research or Marketing Team"
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-100 focus:border-blue-500 outline-none"
+                  className="w-full px-3 py-2 rounded-lg bg-white border border-gray-300 text-sm text-gray-900 focus:border-blue-600 focus:ring-2 focus:ring-blue-500/20 outline-none"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">
+                <label className="block text-xs font-medium text-gray-700 mb-1">
                   Workspace Type
                 </label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
                     onClick={() => setNewWsType("ORGANIZATION")}
-                    className={`p-2.5 rounded-xl border text-xs text-left transition cursor-pointer ${
+                    className={`p-3 rounded-lg border text-left transition-colors cursor-pointer ${
                       newWsType === "ORGANIZATION"
-                        ? "border-blue-500 bg-blue-950/40 text-blue-200"
-                        : "border-slate-800 bg-slate-950 text-slate-400"
+                        ? "border-blue-600 bg-blue-50/50 text-blue-700"
+                        : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
                     }`}
                   >
-                    <span className="font-bold block">Organization</span>
-                    <span className="text-[10px] text-slate-400">Multi-department & team</span>
+                    <span className="font-semibold text-xs block">Organization</span>
+                    <span className="text-[10px] text-gray-500">Multi-department & team</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setNewWsType("INDIVIDUAL")}
-                    className={`p-2.5 rounded-xl border text-xs text-left transition cursor-pointer ${
+                    className={`p-3 rounded-lg border text-left transition-colors cursor-pointer ${
                       newWsType === "INDIVIDUAL"
-                        ? "border-blue-500 bg-blue-950/40 text-blue-200"
-                        : "border-slate-800 bg-slate-950 text-slate-400"
+                        ? "border-blue-600 bg-blue-50/50 text-blue-700"
+                        : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
                     }`}
                   >
-                    <span className="font-bold block">Individual</span>
-                    <span className="text-[10px] text-slate-400">Solo workspace</span>
+                    <span className="font-semibold text-xs block">Individual</span>
+                    <span className="text-[10px] text-gray-500">Solo workspace</span>
                   </button>
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
+              <div className="flex justify-end gap-2 pt-3 border-t border-gray-100">
                 <button
                   type="button"
                   onClick={() => setShowCreateWorkspaceModal(false)}
-                  className="px-3 py-2 rounded-xl text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition cursor-pointer"
+                  className="px-3 py-2 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-100 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={creatingWs}
-                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs transition cursor-pointer disabled:opacity-50"
+                  className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs transition-colors disabled:opacity-50"
                 >
                   {creatingWs ? "Creating..." : "Create Workspace"}
                 </button>

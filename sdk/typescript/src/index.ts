@@ -41,6 +41,11 @@ export class MMAIPClient {
   private readonly baseUrl: string;
   private readonly timeoutMs: number;
 
+  public readonly assistants: {
+    list: () => Promise<AssistantInfo[]>;
+    streamChat: (assistantId: string, options: ChatOptions) => AsyncGenerator<StreamEvent, void, unknown>;
+  };
+
   constructor(options: MMAIPClientOptions) {
     if (!options.apiKey) {
       throw new MMAIPError("API key is required to initialize MMAIPClient");
@@ -48,77 +53,78 @@ export class MMAIPClient {
     this.apiKey = options.apiKey.trim();
     this.baseUrl = (options.baseUrl || "http://localhost:8000/api/v1").replace(/\/+$/, "");
     this.timeoutMs = options.timeoutMs || 30000;
-  }
 
-  public assistants = {
-    list: async (): Promise<AssistantInfo[]> => {
-      const res = await this.request("/developer/assistants", { method: "GET" });
-      return res as AssistantInfo[];
-    },
+    const self = this;
+    this.assistants = {
+      list: async (): Promise<AssistantInfo[]> => {
+        const res = await self.request("/developer/assistants", { method: "GET" });
+        return res as AssistantInfo[];
+      },
 
-    streamChat: async function* (
-      assistantId: string,
-      options: ChatOptions
-    ): AsyncGenerator<StreamEvent, void, unknown> {
-      const url = `${this.baseUrl}/developer/assistants/${assistantId}/chat`;
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${this.apiKey}`,
-        },
-        body: JSON.stringify({
-          message: options.message,
-          conversation_id: options.conversationId,
-        }),
-      });
+      streamChat: async function* (
+        assistantId: string,
+        options: ChatOptions
+      ): AsyncGenerator<StreamEvent, void, unknown> {
+        const url = `${self.baseUrl}/developer/assistants/${assistantId}/chat`;
+        const response = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${self.apiKey}`,
+          },
+          body: JSON.stringify({
+            message: options.message,
+            conversation_id: options.conversationId,
+          }),
+        });
 
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new MMAIPError(`Chat request failed (${response.status}): ${errText}`, response.status);
-      }
+        if (!response.ok) {
+          const errText = await response.text();
+          throw new MMAIPError(`Chat request failed (${response.status}): ${errText}`, response.status);
+        }
 
-      if (!response.body) {
-        throw new MMAIPError("No response body received from streaming endpoint");
-      }
+        if (!response.body) {
+          throw new MMAIPError("No response body received from streaming endpoint");
+        }
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder("utf-8");
-      let buffer = "";
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder("utf-8");
+        let buffer = "";
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n\n");
-        buffer = lines.pop() || "";
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n\n");
+          buffer = lines.pop() || "";
 
-        for (const block of lines) {
-          if (!block.trim()) continue;
-          let eventType = "message";
-          let dataStr = "";
+          for (const block of lines) {
+            if (!block.trim()) continue;
+            let eventType = "message";
+            let dataStr = "";
 
-          for (const line of block.split("\n")) {
-            if (line.startsWith("event:")) {
-              eventType = line.replace("event:", "").trim();
-            } else if (line.startsWith("data:")) {
-              dataStr += line.replace("data:", "").trim();
+            for (const line of block.split("\n")) {
+              if (line.startsWith("event:")) {
+                eventType = line.replace("event:", "").trim();
+              } else if (line.startsWith("data:")) {
+                dataStr += line.replace("data:", "").trim();
+              }
             }
-          }
 
-          if (dataStr) {
-            try {
-              const parsed = JSON.parse(dataStr);
-              yield { event: eventType, data: parsed };
-            } catch {
-              yield { event: eventType, data: { raw: dataStr } };
+            if (dataStr) {
+              try {
+                const parsed = JSON.parse(dataStr);
+                yield { event: eventType, data: parsed };
+              } catch {
+                yield { event: eventType, data: { raw: dataStr } };
+              }
             }
           }
         }
-      }
-    }.bind(this),
-  };
+      },
+    };
+  }
 
   private async request(endpoint: string, options: RequestInit): Promise<any> {
     const url = `${this.baseUrl}${endpoint}`;

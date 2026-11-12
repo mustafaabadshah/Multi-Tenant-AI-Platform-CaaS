@@ -4,6 +4,11 @@ import React, { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { api, EmployeeGroup, Department } from "@/lib/api";
 import { Layers, Plus, Trash2, Users } from "lucide-react";
+import Button from "@/components/ui/Button";
+import Input from "@/components/ui/Input";
+import Modal from "@/components/ui/Modal";
+import EmptyState from "@/components/ui/EmptyState";
+import Spinner from "@/components/ui/Spinner";
 
 export default function GroupsPage() {
   const { activeWorkspace } = useAuth();
@@ -30,7 +35,7 @@ export default function GroupsPage() {
       setGroups(gData);
       setDepartments(dData);
     } catch (err) {
-      console.error(err);
+      console.error("Failed to load groups", err);
     } finally {
       setLoading(false);
     }
@@ -67,7 +72,7 @@ export default function GroupsPage() {
   };
 
   const handleDelete = async (id: string, groupName: string) => {
-    if (!confirm(`Are you sure you want to delete employee group "${groupName}"?`)) return;
+    if (!confirm(`Are you sure you want to delete group "${groupName}"?`)) return;
     try {
       await api.deleteGroup(id);
       await loadGroups();
@@ -80,151 +85,171 @@ export default function GroupsPage() {
     <div className="space-y-6 max-w-6xl">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-white tracking-tight">Employee Groups</h1>
-          <p className="text-xs text-slate-400 mt-1">
-            Group employees for cross-functional assistant access or role assignments.
+          <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Employee Groups</h1>
+          <p className="text-sm text-gray-600 mt-1">
+            Group team members across departments for collaborative projects, shared assistants, and access tiers.
           </p>
         </div>
-        <button
-          type="button"
+        <Button
           onClick={() => setShowCreateModal(true)}
-          className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs shadow-lg shadow-indigo-600/25 flex items-center gap-2 transition cursor-pointer self-start"
+          icon={Plus}
+          iconPosition="left"
+          variant="primary"
+          size="sm"
         >
-          <Plus className="w-4 h-4" />
-          <span>Create Group</span>
-        </button>
+          Create Group
+        </Button>
       </div>
 
       {loading ? (
-        <div className="p-12 text-center text-xs text-slate-400">Loading employee groups...</div>
-      ) : groups.length === 0 ? (
-        <div className="p-16 text-center border border-dashed border-slate-800 rounded-2xl bg-slate-900/30">
-          <Layers className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-          <h3 className="text-sm font-semibold text-slate-200">No employee groups configured</h3>
-          <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-            Employee groups let you grant assistant and knowledge base permissions to cohorts of employees at once.
-          </p>
+        <div className="flex items-center justify-center min-h-[300px]">
+          <Spinner size="lg" />
         </div>
+      ) : groups.length === 0 ? (
+        <EmptyState
+          icon={Layers}
+          title="No employee groups found"
+          description="Create cross-functional groups to assign bulk assistant access and knowledge access."
+          action={{
+            label: "Create First Group",
+            onClick: () => setShowCreateModal(true),
+            icon: Plus,
+          }}
+        />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {groups.map((group) => (
-            <div
-              key={group.id}
-              className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 backdrop-blur-xl flex flex-col justify-between hover:border-slate-700 transition"
-            >
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="w-9 h-9 rounded-xl bg-indigo-600/20 text-indigo-400 flex items-center justify-center">
-                    <Layers className="w-4 h-4" />
+          {groups.map((group) => {
+            const dept = departments.find((d) => d.id === group.department_id);
+            return (
+              <div
+                key={group.id}
+                className="bg-white border border-gray-200 rounded-lg p-5 flex flex-col justify-between hover:border-gray-300 hover:shadow-xs transition-all"
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-9 h-9 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                      <Layers size={18} />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(group.id, group.name)}
+                      className="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-gray-100 transition-colors"
+                      title="Delete group"
+                    >
+                      <Trash2 size={16} />
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(group.id, group.name)}
-                    className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-slate-800 transition cursor-pointer"
-                    title="Delete group"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  <h3 className="text-sm font-semibold text-gray-900 tracking-tight">{group.name}</h3>
+                  <p className="text-xs text-gray-500 mt-1 line-clamp-2">
+                    {group.description || "No description provided."}
+                  </p>
+                  {dept && (
+                    <span className="inline-block mt-2 text-[10px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200">
+                      {dept.name}
+                    </span>
+                  )}
                 </div>
-                <h3 className="text-sm font-bold text-white tracking-tight">{group.name}</h3>
-                <p className="text-xs text-slate-400 mt-1 line-clamp-2">
-                  {group.description || "No description provided."}
-                </p>
-              </div>
 
-              <div className="pt-4 mt-4 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
-                <span className="flex items-center gap-1.5">
-                  <Users className="w-3.5 h-3.5 text-blue-400" />
-                  <span>{group.member_count} Members</span>
-                </span>
-                <span className="text-[11px] text-slate-500 font-mono">
-                  {new Date(group.created_at).toLocaleDateString()}
-                </span>
+                <div className="pt-4 mt-4 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
+                  <span className="flex items-center gap-1.5">
+                    <Users size={14} className="text-gray-400" />
+                    <span>
+                      {group.member_count} {group.member_count === 1 ? "Member" : "Members"}
+                    </span>
+                  </span>
+                  <span className="text-[11px] text-gray-400 font-mono">
+                    {new Date(group.created_at).toLocaleDateString([], {
+                      month: "short",
+                      day: "numeric",
+                    })}
+                  </span>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
-      {/* Create Group Modal */}
+      {/* Create Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-md w-full shadow-2xl animate-fadeIn">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl bg-indigo-600/20 text-indigo-400 flex items-center justify-center">
-                <Layers className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-slate-100">Create Employee Group</h3>
-                <p className="text-xs text-slate-400">Organize members into functional teams</p>
-              </div>
-            </div>
-
+        <Modal
+          isOpen={true}
+          onClose={() => setShowCreateModal(false)}
+          title="Create Employee Group"
+          description="Group team members for collaborative assistant access and department workflows."
+          maxWidth="md"
+        >
+          <form onSubmit={handleCreate} className="space-y-4">
             {error && (
-              <div className="mb-4 p-2.5 rounded-xl bg-red-950/60 border border-red-800 text-red-300 text-xs">
+              <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700">
                 {error}
               </div>
             )}
 
-            <form onSubmit={handleCreate} className="space-y-3.5 text-xs">
-              <div>
-                <label className="block text-slate-300 font-medium mb-1">Group Name</label>
-                <input
-                  type="text"
-                  required
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Lead Analysts, Compliance Reviewers"
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 focus:border-indigo-500 outline-none"
-                />
-              </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Group Name *
+              </label>
+              <Input
+                type="text"
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. AI Prompt Engineers or Customer Success"
+              />
+            </div>
 
-              <div>
-                <label className="block text-slate-300 font-medium mb-1">Linked Department (Optional)</label>
-                <select
-                  value={departmentId}
-                  onChange={(e) => setDepartmentId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 focus:border-indigo-500 outline-none"
-                >
-                  <option value="">None (Cross-department)</option>
-                  {departments.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Associated Department (Optional)
+              </label>
+              <select
+                value={departmentId}
+                onChange={(e) => setDepartmentId(e.target.value)}
+                className="w-full px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-500/20"
+              >
+                <option value="">No Department (Workspace-wide)</option>
+                {departments.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-              <div>
-                <label className="block text-slate-300 font-medium mb-1">Description (Optional)</label>
-                <textarea
-                  rows={3}
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Purpose of this group..."
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 focus:border-indigo-500 outline-none resize-none"
-                />
-              </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Description (Optional)
+              </label>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Brief description of this group..."
+                rows={3}
+                className="w-full px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-500/20"
+              />
+            </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="px-3 py-2 rounded-xl text-slate-400 hover:text-slate-200 transition cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition cursor-pointer disabled:opacity-50"
-                >
-                  {submitting ? "Creating..." : "Save Group"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+            <div className="flex justify-end gap-2 pt-3 border-t border-gray-100">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => setShowCreateModal(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="primary"
+                size="sm"
+                isLoading={submitting}
+              >
+                Create Group
+              </Button>
+            </div>
+          </form>
+        </Modal>
       )}
     </div>
   );

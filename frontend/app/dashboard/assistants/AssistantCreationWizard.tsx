@@ -28,6 +28,8 @@ import {
   FileText,
   HelpCircle,
 } from "lucide-react";
+import MarkdownRenderer from "@/components/chat/MarkdownRenderer";
+
 
 interface AssistantCreationWizardProps {
   isOpen: boolean;
@@ -250,17 +252,17 @@ export default function AssistantCreationWizard({
       : templates.filter((t) => t.category.toLowerCase() === selectedCategory.toLowerCase());
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-6 bg-black/80 backdrop-blur-md animate-fadeIn">
-      <div className="bg-slate-950 border border-slate-800 rounded-3xl max-w-4xl w-full shadow-2xl flex flex-col max-h-[92vh] overflow-hidden text-slate-100">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-6 bg-gray-900/50 backdrop-blur-xs animate-fadeIn">
+      <div className="bg-white border border-gray-200 rounded-3xl max-w-4xl w-full shadow-2xl flex flex-col max-h-[92vh] overflow-hidden text-gray-900">
         {/* Header Bar */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800/80 bg-slate-900/60">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400">
+            <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600">
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-white tracking-tight">Assistant Studio &middot; Guided Creation</h2>
-              <p className="text-[11px] text-slate-400">
+              <h2 className="text-sm font-bold text-gray-900 tracking-tight">Assistant Studio &middot; Guided Creation</h2>
+              <p className="text-[11px] text-gray-500">
                 Step {step} of 5 &middot;{" "}
                 {step === 1 && "Choose Purpose & Template"}
                 {step === 2 && "Define Identity & Audience"}
@@ -272,17 +274,17 @@ export default function AssistantCreationWizard({
           </div>
 
           {/* Stepper Progress Badges */}
-          <div className="hidden sm:flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800 text-[11px] font-mono">
+          <div className="hidden sm:flex items-center gap-1.5 bg-gray-100 p-1 rounded-xl border border-gray-200 text-[11px] font-mono">
             {[1, 2, 3, 4, 5].map((s) => (
               <button
                 key={s}
                 onClick={() => setStep(s as any)}
                 className={`w-6 h-6 rounded-lg flex items-center justify-center font-bold transition ${
                   step === s
-                    ? "bg-blue-600 text-white shadow-sm"
+                    ? "bg-blue-600 text-white shadow-xs"
                     : s < step
-                    ? "bg-slate-800 text-blue-400"
-                    : "text-slate-600"
+                    ? "bg-white text-blue-600 border border-gray-200"
+                    : "text-gray-400"
                 }`}
               >
                 {s < step ? <Check className="w-3.5 h-3.5" /> : s}
@@ -292,7 +294,7 @@ export default function AssistantCreationWizard({
 
           <button
             onClick={onClose}
-            className="p-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white transition"
+            className="p-1.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-gray-800 transition cursor-pointer"
             title="Close"
           >
             <X className="w-4 h-4" />
@@ -300,7 +302,7 @@ export default function AssistantCreationWizard({
         </div>
 
         {/* Content Body */}
-        <div className="flex-1 overflow-y-auto p-6 bg-slate-950">
+        <div className="flex-1 overflow-y-auto p-6 bg-white">
           {/* =============================================================== */}
           {/* STEP 1: PURPOSE & TEMPLATE SELECTION                            */}
           {/* =============================================================== */}
@@ -308,23 +310,23 @@ export default function AssistantCreationWizard({
             <div className="space-y-5 animate-fadeIn">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                 <div>
-                  <h3 className="text-base font-bold text-white tracking-tight">What kind of assistant are you building?</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">
+                  <h3 className="text-base font-bold text-gray-900 tracking-tight">What kind of assistant are you building?</h3>
+                  <p className="text-xs text-gray-500 mt-0.5">
                     Select a purpose template with proven pedagogical or operational guidelines, or start custom.
                   </p>
                 </div>
 
                 {/* Category Pills */}
-                <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800 text-xs">
+                <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl border border-gray-200 text-xs">
                   {["All", "Education", "Business", "Personal", "Domain"].map((cat) => (
                     <button
                       key={cat}
                       type="button"
                       onClick={() => setSelectedCategory(cat)}
-                      className={`px-3 py-1 rounded-lg font-medium transition ${
+                      className={`px-3 py-1 rounded-lg font-medium transition cursor-pointer ${
                         selectedCategory === cat
-                          ? "bg-blue-600 text-white shadow-sm"
-                          : "text-slate-400 hover:text-white"
+                          ? "bg-white text-blue-600 font-semibold shadow-xs"
+                          : "text-gray-600 hover:text-gray-900"
                       }`}
                     >
                       {cat}
@@ -338,22 +340,22 @@ export default function AssistantCreationWizard({
                 {/* Custom Blank Option */}
                 <div
                   onClick={() => handleSelectTemplate(null)}
-                  className={`p-4 rounded-2xl border transition cursor-pointer flex flex-col justify-between select-none ${
+                  className={`p-4 rounded-2xl border transition cursor-pointer flex flex-col justify-between select-none shadow-xs ${
                     selectedTemplate === null
-                      ? "border-blue-500 bg-blue-950/20 ring-1 ring-blue-500"
-                      : "border-slate-800/80 bg-slate-900/50 hover:border-slate-700"
+                      ? "border-blue-600 bg-blue-50/40 ring-1 ring-blue-600/30"
+                      : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50/60"
                   }`}
                 >
                   <div>
-                    <div className="w-8 h-8 rounded-xl bg-slate-800 text-slate-300 flex items-center justify-center mb-3">
+                    <div className="w-8 h-8 rounded-xl bg-gray-100 text-gray-700 flex items-center justify-center mb-3 border border-gray-200">
                       <Sliders className="w-4 h-4" />
                     </div>
-                    <h4 className="text-xs font-bold text-white">Custom Domain Assistant</h4>
-                    <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+                    <h4 className="text-xs font-bold text-gray-900">Custom Domain Assistant</h4>
+                    <p className="text-[11px] text-gray-500 mt-1 leading-relaxed">
                       Blank canvas with standard hybrid defaults. Configure from scratch without pre-set rules.
                     </p>
                   </div>
-                  <div className="mt-3 pt-2 border-t border-slate-800/60 flex items-center justify-between text-[10px] text-slate-500 font-mono">
+                  <div className="mt-3 pt-2 border-t border-gray-100 flex items-center justify-between text-[10px] text-gray-400 font-mono">
                     <span>Category: Custom</span>
                     <span>General</span>
                   </div>
@@ -366,33 +368,33 @@ export default function AssistantCreationWizard({
                     <div
                       key={tmpl.id}
                       onClick={() => handleSelectTemplate(tmpl)}
-                      className={`p-4 rounded-2xl border transition cursor-pointer flex flex-col justify-between select-none ${
+                      className={`p-4 rounded-2xl border transition cursor-pointer flex flex-col justify-between select-none shadow-xs ${
                         isSelected
-                          ? "border-blue-500 bg-blue-950/20 ring-1 ring-blue-500"
-                          : "border-slate-800/80 bg-slate-900/50 hover:border-slate-700"
+                          ? "border-blue-600 bg-blue-50/40 ring-1 ring-blue-600/30"
+                          : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50/60"
                       }`}
                     >
                       <div>
                         <div className="flex items-center justify-between mb-2">
-                          <div className="w-8 h-8 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center">
+                          <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-100 text-blue-600 flex items-center justify-center">
                             {tmpl.category === "Education" && <GraduationCap className="w-4 h-4" />}
                             {tmpl.category === "Business" && <Briefcase className="w-4 h-4" />}
                             {tmpl.category === "Personal" && <User className="w-4 h-4" />}
                             {tmpl.category === "Domain" && <Compass className="w-4 h-4" />}
                           </div>
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-slate-800 text-slate-300 border border-slate-700">
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-gray-100 text-gray-700 border border-gray-200">
                             {tmpl.category}
                           </span>
                         </div>
-                        <h4 className="text-xs font-bold text-white">{tmpl.name}</h4>
-                        <p className="text-[11px] text-slate-400 mt-1 leading-relaxed line-clamp-3">
+                        <h4 className="text-xs font-bold text-gray-900">{tmpl.name}</h4>
+                        <p className="text-[11px] text-gray-500 mt-1 leading-relaxed line-clamp-3">
                           {tmpl.description}
                         </p>
                       </div>
 
-                      <div className="mt-3 pt-2 border-t border-slate-800/60 flex items-center justify-between text-[10px] text-slate-500 font-mono">
+                      <div className="mt-3 pt-2 border-t border-gray-100 flex items-center justify-between text-[10px] text-gray-400 font-mono">
                         <span>Audience: {tmpl.intended_audience}</span>
-                        <span className="text-blue-400 font-semibold">{tmpl.default_response_style}</span>
+                        <span className="text-blue-600 font-semibold">{tmpl.default_response_style}</span>
                       </div>
                     </div>
                   );
@@ -407,16 +409,16 @@ export default function AssistantCreationWizard({
           {step === 2 && (
             <div className="max-w-xl mx-auto space-y-5 animate-fadeIn">
               <div>
-                <h3 className="text-base font-bold text-white tracking-tight">Name & Audience</h3>
-                <p className="text-xs text-slate-400 mt-0.5">
+                <h3 className="text-base font-bold text-gray-900 tracking-tight">Name & Audience</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
                   Who is this assistant for, and what should it be called?
                 </p>
               </div>
 
               <div className="space-y-4 text-xs">
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">
-                    Assistant Name <span className="text-blue-400">*</span>
+                  <label className="block text-gray-700 font-semibold mb-1">
+                    Assistant Name <span className="text-blue-600">*</span>
                   </label>
                   <input
                     type="text"
@@ -424,27 +426,27 @@ export default function AssistantCreationWizard({
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="e.g. Molecular Genetics Tutor, Acme People Guide"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white focus:border-blue-500 outline-none transition"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-gray-300 text-gray-900 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none transition"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Scope & Description</label>
+                  <label className="block text-gray-700 font-semibold mb-1">Scope & Description</label>
                   <textarea
                     rows={2}
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     placeholder="Brief description of what this assistant does..."
-                    className="w-full px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-800 text-white focus:border-blue-500 outline-none resize-none transition"
+                    className="w-full px-3.5 py-2 rounded-xl bg-white border border-gray-300 text-gray-900 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none resize-none transition"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Intended Audience</label>
+                  <label className="block text-gray-700 font-semibold mb-1">Intended Audience</label>
                   <select
                     value={audienceLevel}
                     onChange={(e) => setAudienceLevel(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white focus:border-blue-500 outline-none transition"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-gray-300 text-gray-900 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none transition"
                   >
                     <option value="general">General Public (Accessible to everyone)</option>
                     <option value="school">School Students (Simple vocabulary & examples)</option>
@@ -464,35 +466,35 @@ export default function AssistantCreationWizard({
           {step === 3 && (
             <div className="max-w-2xl mx-auto space-y-5 animate-fadeIn">
               <div>
-                <h3 className="text-base font-bold text-white tracking-tight">Connect Knowledge Bases (Optional)</h3>
-                <p className="text-xs text-slate-400 mt-0.5">
+                <h3 className="text-base font-bold text-gray-900 tracking-tight">Connect Knowledge Bases (Optional)</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
                   Select knowledge bases for grounded retrieval. If you have no documents yet, you can skip this step!
                 </p>
               </div>
 
               {/* Informational Callout */}
-              <div className="p-3.5 rounded-2xl bg-blue-950/30 border border-blue-900/60 text-xs text-blue-300 flex items-start gap-2.5">
-                <HelpCircle className="w-4 h-4 shrink-0 mt-0.5 text-blue-400" />
+              <div className="p-3.5 rounded-2xl bg-blue-50 border border-blue-100 text-xs text-blue-900 flex items-start gap-2.5">
+                <HelpCircle className="w-4 h-4 shrink-0 mt-0.5 text-blue-600" />
                 <div>
-                  <span className="font-semibold block text-white">Knowledge is 100% Optional</span>
-                  <span className="text-[11px] text-slate-400 block mt-0.5">
+                  <span className="font-semibold block text-gray-900">Knowledge is 100% Optional</span>
+                  <span className="text-[11px] text-gray-600 block mt-0.5">
                     Assistants can operate purely on model intelligence and custom instructions. You can attach documents later at any time.
                   </span>
                 </div>
               </div>
 
               {tenantKBs.length === 0 ? (
-                <div className="p-8 rounded-2xl bg-slate-900/40 border border-slate-800 text-center space-y-2">
-                  <Database className="w-8 h-8 text-slate-600 mx-auto" />
-                  <h4 className="text-xs font-bold text-slate-300">No Knowledge Bases in Workspace</h4>
-                  <p className="text-[11px] text-slate-500 max-w-sm mx-auto">
+                <div className="p-8 rounded-2xl bg-gray-50 border border-gray-200 text-center space-y-2">
+                  <Database className="w-8 h-8 text-gray-400 mx-auto" />
+                  <h4 className="text-xs font-bold text-gray-800">No Knowledge Bases in Workspace</h4>
+                  <p className="text-[11px] text-gray-500 max-w-sm mx-auto">
                     You can proceed without documents now and upload study materials or handbooks later in the Knowledge Studio.
                   </p>
                 </div>
               ) : (
                 <div className="space-y-2">
-                  <span className="text-xs font-semibold text-slate-300 block">Available Knowledge Bases</span>
-                  <div className="max-h-60 overflow-y-auto p-2 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-1.5">
+                  <span className="text-xs font-semibold text-gray-700 block">Available Knowledge Bases</span>
+                  <div className="max-h-60 overflow-y-auto p-2 rounded-2xl bg-gray-50 border border-gray-200 space-y-1.5">
                     {tenantKBs.map((kb) => {
                       const checked = selectedKBIds.includes(kb.id);
                       return (
@@ -500,8 +502,8 @@ export default function AssistantCreationWizard({
                           key={kb.id}
                           className={`flex items-center gap-3 p-3 rounded-xl border transition cursor-pointer select-none text-xs ${
                             checked
-                              ? "bg-blue-950/20 border-blue-500 text-white"
-                              : "bg-slate-950 border-slate-850 text-slate-300 hover:border-slate-700"
+                              ? "bg-blue-50/60 border-blue-600 text-gray-900"
+                              : "bg-white border-gray-200 text-gray-700 hover:border-gray-300"
                           }`}
                         >
                           <input
@@ -514,17 +516,17 @@ export default function AssistantCreationWizard({
                                 setSelectedKBIds((prev) => prev.filter((id) => id !== kb.id));
                               }
                             }}
-                            className="accent-blue-500 rounded w-4 h-4"
+                            className="accent-blue-600 rounded w-4 h-4"
                           />
                           <div className="min-w-0 flex-1">
-                            <span className="font-semibold block truncate">{kb.name}</span>
+                            <span className="font-semibold block truncate text-gray-900">{kb.name}</span>
                             {kb.description && (
-                              <span className="text-[11px] text-slate-500 block truncate mt-0.5">
+                              <span className="text-[11px] text-gray-500 block truncate mt-0.5">
                                 {kb.description}
                               </span>
                             )}
                           </div>
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-slate-800 text-slate-300 shrink-0">
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-gray-100 text-gray-700 border border-gray-200 shrink-0">
                             {kb.document_count} docs
                           </span>
                         </label>
@@ -541,21 +543,21 @@ export default function AssistantCreationWizard({
           {/* =============================================================== */}
           {step === 4 && (
             <div className="space-y-5 animate-fadeIn">
-              <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+              <div className="flex items-center justify-between border-b border-gray-200 pb-3">
                 <div>
-                  <h3 className="text-base font-bold text-white tracking-tight">Behavior & Response Style</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">
+                  <h3 className="text-base font-bold text-gray-900 tracking-tight">Behavior & Response Style</h3>
+                  <p className="text-xs text-gray-500 mt-0.5">
                     Configure how your assistant responds to questions and handles missing information.
                   </p>
                 </div>
 
                 {/* Simple vs Advanced Toggle */}
-                <div className="flex items-center bg-slate-900 p-1 rounded-xl border border-slate-800 text-xs">
+                <div className="flex items-center bg-gray-100 p-1 rounded-xl border border-gray-200 text-xs">
                   <button
                     type="button"
                     onClick={() => setMode("simple")}
                     className={`px-3 py-1 rounded-lg font-medium transition cursor-pointer ${
-                      mode === "simple" ? "bg-blue-600 text-white shadow-sm" : "text-slate-400 hover:text-white"
+                      mode === "simple" ? "bg-white text-blue-600 font-semibold shadow-xs" : "text-gray-600 hover:text-gray-900"
                     }`}
                   >
                     Simple Mode
@@ -564,7 +566,7 @@ export default function AssistantCreationWizard({
                     type="button"
                     onClick={() => setMode("advanced")}
                     className={`px-3 py-1 rounded-lg font-medium transition cursor-pointer ${
-                      mode === "advanced" ? "bg-blue-600 text-white shadow-sm" : "text-slate-400 hover:text-white"
+                      mode === "advanced" ? "bg-white text-blue-600 font-semibold shadow-xs" : "text-gray-600 hover:text-gray-900"
                     }`}
                   >
                     Advanced Mode
@@ -576,11 +578,11 @@ export default function AssistantCreationWizard({
               {mode === "simple" ? (
                 <div className="max-w-xl mx-auto space-y-4 text-xs">
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Response Style</label>
+                    <label className="block text-gray-700 font-semibold mb-1">Response Style</label>
                     <select
                       value={responseStyle}
                       onChange={(e) => setResponseStyle(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white focus:border-blue-500 outline-none"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-gray-300 text-gray-900 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none"
                     >
                       <option value="balanced">Balanced & Direct (Clear answers with essential context)</option>
                       <option value="socratic">Socratic & Inquisitive (Guides with questions & active recall)</option>
@@ -592,24 +594,24 @@ export default function AssistantCreationWizard({
                   </div>
 
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">When Information is Missing or Uncertain</label>
+                    <label className="block text-gray-700 font-semibold mb-1">When Information is Missing or Uncertain</label>
                     <select
                       value={uncertaintyBehavior}
                       onChange={(e) => setUncertaintyBehavior(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white focus:border-blue-500 outline-none"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-gray-300 text-gray-900 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none"
                     >
-                      <option value="admit">Honestly state: "I could not find information on that"</option>
+                      <option value="admit">Honestly state: &quot;I could not find information on that&quot;</option>
                       <option value="clarify">Ask clarifying questions to narrow down the query</option>
                       <option value="synthesize">Provide general knowledge with an explicit disclaimer</option>
                     </select>
                   </div>
 
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Citation Strictness</label>
+                    <label className="block text-gray-700 font-semibold mb-1">Citation Strictness</label>
                     <select
                       value={citationStyle}
                       onChange={(e) => setCitationStyle(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white focus:border-blue-500 outline-none"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-gray-300 text-gray-900 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none"
                     >
                       <option value="strict">Strict (Always cite source documents and page numbers)</option>
                       <option value="general">General (Mention source titles when relevant)</option>
@@ -617,13 +619,13 @@ export default function AssistantCreationWizard({
                   </div>
 
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">System Instructions & Persona</label>
+                    <label className="block text-gray-700 font-semibold mb-1">System Instructions & Persona</label>
                     <textarea
                       rows={5}
                       value={systemPrompt}
                       onChange={(e) => setSystemPrompt(e.target.value)}
                       placeholder="Guidelines regarding role, tone, and scope..."
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white focus:border-blue-500 outline-none resize-none font-mono text-[11px]"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-gray-300 text-gray-900 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none resize-none font-mono text-[11px]"
                     />
                   </div>
                 </div>
@@ -632,30 +634,33 @@ export default function AssistantCreationWizard({
                 <div className="space-y-4 text-xs">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <div>
-                      <label className="block text-slate-300 font-semibold mb-1">LLM Provider</label>
+                      <label className="block text-gray-700 font-semibold mb-1">LLM Provider</label>
                       <select
                         value={llmProvider}
                         onChange={(e) => setLlmProvider(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-white focus:border-blue-500 outline-none font-mono"
+                        className="w-full px-3 py-2 rounded-xl bg-white border border-gray-300 text-gray-900 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none font-mono"
                       >
                         <option value="omniroute">OmniRoute (Local Gateway)</option>
                         <option value="openai">OpenAI (Direct BYOK)</option>
+                        <option value="anthropic">Anthropic Claude (Direct BYOK)</option>
+                        <option value="gemini">Google Gemini (Direct BYOK)</option>
+                        <option value="groq">Groq LPU (Direct BYOK)</option>
                         <option value="mock">Offline Mock (Deterministic CPU)</option>
                       </select>
                     </div>
 
                     <div>
-                      <label className="block text-slate-300 font-semibold mb-1">Model Name</label>
+                      <label className="block text-gray-700 font-semibold mb-1">Model Name</label>
                       <input
                         type="text"
                         value={defaultModel}
                         onChange={(e) => setDefaultModel(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-white focus:border-blue-500 outline-none font-mono"
+                        className="w-full px-3 py-2 rounded-xl bg-white border border-gray-300 text-gray-900 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none font-mono"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-slate-300 font-semibold mb-1">Temperature ({temperature})</label>
+                      <label className="block text-gray-700 font-semibold mb-1">Temperature ({temperature})</label>
                       <input
                         type="range"
                         min="0.0"
@@ -663,18 +668,18 @@ export default function AssistantCreationWizard({
                         step="0.05"
                         value={temperature}
                         onChange={(e) => setTemperature(parseFloat(e.target.value))}
-                        className="w-full accent-blue-500 mt-2"
+                        className="w-full accent-blue-600 mt-2"
                       />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <div>
-                      <label className="block text-slate-300 font-semibold mb-1">Retrieval Mode</label>
+                      <label className="block text-gray-700 font-semibold mb-1">Retrieval Mode</label>
                       <select
                         value={retrievalMode}
                         onChange={(e) => setRetrievalMode(e.target.value as any)}
-                        className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-white focus:border-blue-500 outline-none font-mono"
+                        className="w-full px-3 py-2 rounded-xl bg-white border border-gray-300 text-gray-900 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none font-mono"
                       >
                         <option value="hybrid">Hybrid (BM25 + Semantic RRF)</option>
                         <option value="semantic">Semantic Only (Dense Cosine)</option>
@@ -683,37 +688,37 @@ export default function AssistantCreationWizard({
                     </div>
 
                     <div>
-                      <label className="block text-slate-300 font-semibold mb-1">Top-K Chunks ({topK})</label>
+                      <label className="block text-gray-700 font-semibold mb-1">Top-K Chunks ({topK})</label>
                       <input
                         type="number"
                         min="1"
                         max="20"
                         value={topK}
                         onChange={(e) => setTopK(parseInt(e.target.value) || 5)}
-                        className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-white focus:border-blue-500 outline-none font-mono"
+                        className="w-full px-3 py-2 rounded-xl bg-white border border-gray-300 text-gray-900 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none font-mono"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-slate-300 font-semibold mb-1">Max Output Tokens</label>
+                      <label className="block text-gray-700 font-semibold mb-1">Max Output Tokens</label>
                       <input
                         type="number"
                         min="64"
                         max="4096"
                         value={maxTokens}
                         onChange={(e) => setMaxTokens(parseInt(e.target.value) || 1024)}
-                        className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-white focus:border-blue-500 outline-none font-mono"
+                        className="w-full px-3 py-2 rounded-xl bg-white border border-gray-300 text-gray-900 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none font-mono"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Complete System Instructions</label>
+                    <label className="block text-gray-700 font-semibold mb-1">Complete System Instructions</label>
                     <textarea
                       rows={6}
                       value={systemPrompt}
                       onChange={(e) => setSystemPrompt(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white focus:border-blue-500 outline-none font-mono text-[11px]"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-gray-300 text-gray-900 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none font-mono text-[11px]"
                     />
                   </div>
                 </div>
@@ -728,33 +733,33 @@ export default function AssistantCreationWizard({
             <div className="space-y-4 animate-fadeIn flex flex-col h-[520px]">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-base font-bold text-white tracking-tight">Test Sandbox</h3>
-                  <p className="text-xs text-slate-400">
+                  <h3 className="text-base font-bold text-gray-900 tracking-tight">Test Sandbox</h3>
+                  <p className="text-xs text-gray-500">
                     Try sending a message to verify responses before finalizing your assistant.
                   </p>
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-blue-950 text-blue-400 border border-blue-900">
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-blue-50 text-blue-700 border border-blue-200">
                     Model: {defaultModel}
                   </span>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-slate-900 text-slate-400 border border-slate-800">
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-gray-100 text-gray-700 border border-gray-200">
                     KBs: {selectedKBIds.length} connected
                   </span>
                 </div>
               </div>
 
               {testError && (
-                <div className="p-3 rounded-xl bg-red-950/60 border border-red-800 text-red-300 text-xs">
+                <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs">
                   {testError}
                 </div>
               )}
 
               {/* Chat Messages Frame */}
-              <div className="flex-1 overflow-y-auto p-4 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-3 text-xs">
+              <div className="flex-1 overflow-y-auto p-4 rounded-2xl bg-gray-50 border border-gray-200 space-y-3 text-xs">
                 {testMessages.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-500 space-y-2">
-                    <Bot className="w-8 h-8 text-slate-700" />
+                  <div className="h-full flex flex-col items-center justify-center text-center p-6 text-gray-400 space-y-2">
+                    <Bot className="w-8 h-8 text-gray-300" />
                     <p className="text-xs">Your assistant is ready to preview. Type a message below.</p>
                     {selectedTemplate?.suggested_starter_questions && (
                       <div className="flex flex-wrap gap-1.5 justify-center max-w-md mt-2">
@@ -764,7 +769,7 @@ export default function AssistantCreationWizard({
                             onClick={() => {
                               setTestInput(q);
                             }}
-                            className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300 transition"
+                            className="px-2.5 py-1 rounded-lg bg-white border border-gray-200 hover:border-gray-300 text-[11px] text-gray-700 transition shadow-xs cursor-pointer"
                           >
                             &ldquo;{q}&rdquo;
                           </button>
@@ -779,19 +784,27 @@ export default function AssistantCreationWizard({
                       className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}
                     >
                       <div
-                        className={`max-w-[85%] p-3 rounded-2xl ${
-                          msg.role === "user"
-                            ? "bg-blue-600 text-white rounded-br-none"
-                            : "bg-slate-950 border border-slate-800 text-slate-200 rounded-bl-none"
-                        }`}
-                      >
-                        <p className="whitespace-pre-wrap">{msg.content || (testStreaming && i === testMessages.length - 1 ? "..." : "")}</p>
+          className={`max-w-[85%] p-3 rounded-2xl shadow-xs ${
+            msg.role === "user"
+              ? "bg-blue-600 text-white rounded-br-none"
+              : "bg-white border border-gray-200 text-gray-900 rounded-bl-none"
+          }`}
+        >
+          {msg.role === "user" ? (
+            <p className="whitespace-pre-wrap text-sm">{msg.content || (testStreaming && i === testMessages.length - 1 ? "..." : "")}</p>
+          ) : (
+            <MarkdownRenderer
+              content={msg.content || ""}
+              citations={msg.citations || []}
+              className="text-sm"
+            />
+          )}
                         {msg.citations && msg.citations.length > 0 && (
-                          <div className="mt-2 pt-2 border-t border-slate-800 flex flex-wrap gap-1">
+                          <div className="mt-2 pt-2 border-t border-gray-100 flex flex-wrap gap-1">
                             {msg.citations.map((c: any) => (
                               <span
                                 key={c.citation_num}
-                                className="px-1.5 py-0.5 rounded bg-blue-950 text-blue-400 font-mono text-[10px] border border-blue-900"
+                                className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 font-mono text-[10px] border border-blue-200"
                               >
                                 [{c.citation_num}] {c.document_name}
                               </span>
@@ -813,22 +826,22 @@ export default function AssistantCreationWizard({
                   onChange={(e) => setTestInput(e.target.value)}
                   placeholder="Ask a question to test..."
                   disabled={testStreaming}
-                  className="flex-1 px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white text-xs focus:border-blue-500 outline-none transition disabled:opacity-50"
+                  className="flex-1 px-3.5 py-2.5 rounded-xl bg-white border border-gray-300 text-gray-900 placeholder:text-gray-400 text-xs focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none transition disabled:opacity-50"
                 />
                 {testStreaming ? (
                   <button
                     type="button"
                     onClick={() => abortControllerRef.current?.abort()}
-                    className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-semibold flex items-center gap-1.5 transition"
+                    className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
                   >
-                    <Square className="w-3.5 h-3.5" />
+                    <Square className="w-3.5 h-3.5 fill-current" />
                     <span>Stop</span>
                   </button>
                 ) : (
                   <button
                     type="submit"
                     disabled={!testInput.trim()}
-                    className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 transition disabled:opacity-50"
+                    className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1.5 transition disabled:opacity-50 shadow-xs cursor-pointer"
                   >
                     <Send className="w-3.5 h-3.5" />
                     <span>Send</span>
@@ -840,13 +853,13 @@ export default function AssistantCreationWizard({
         </div>
 
         {/* Footer Navigation */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-slate-800/80 bg-slate-900/60">
+        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50">
           <div>
             {step > 1 && (
               <button
                 type="button"
                 onClick={() => setStep((s) => (s - 1) as any)}
-                className="px-4 py-2 rounded-xl text-slate-400 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition"
+                className="px-4 py-2 rounded-xl text-gray-600 hover:text-gray-900 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
                 <span>Back</span>
@@ -858,7 +871,7 @@ export default function AssistantCreationWizard({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl text-slate-400 hover:text-white text-xs font-semibold transition"
+              className="px-4 py-2 rounded-xl text-gray-600 hover:text-gray-900 text-xs font-semibold transition cursor-pointer"
             >
               Cancel
             </button>
@@ -874,7 +887,7 @@ export default function AssistantCreationWizard({
                   setSaveError(null);
                   setStep((s) => (s + 1) as any);
                 }}
-                className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 transition shadow-lg shadow-blue-600/20"
+                className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1.5 transition shadow-sm cursor-pointer"
               >
                 <span>Continue</span>
                 <ArrowRight className="w-3.5 h-3.5" />
@@ -884,7 +897,7 @@ export default function AssistantCreationWizard({
                 type="button"
                 disabled={saving}
                 onClick={handleSaveAssistant}
-                className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 transition shadow-lg shadow-blue-600/20 disabled:opacity-50"
+                className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1.5 transition shadow-sm disabled:opacity-50 cursor-pointer"
               >
                 <Check className="w-3.5 h-3.5" />
                 <span>{saving ? "Saving Assistant..." : "Save Assistant"}</span>

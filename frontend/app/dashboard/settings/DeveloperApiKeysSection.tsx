@@ -13,14 +13,17 @@ import {
   Copy,
   Check,
   AlertTriangle,
-  Loader2,
   Shield,
   Terminal,
   Clock,
   CheckCircle2,
-  Eye,
-  AlertCircle,
 } from "lucide-react";
+import Button from "@/components/ui/Button";
+import Input from "@/components/ui/Input";
+import Modal from "@/components/ui/Modal";
+import Badge from "@/components/ui/Badge";
+import EmptyState from "@/components/ui/EmptyState";
+import Spinner from "@/components/ui/Spinner";
 
 export default function DeveloperApiKeysSection() {
   const [keys, setKeys] = useState<APIKeyItem[]>([]);
@@ -75,7 +78,6 @@ export default function DeveloperApiKeysSection() {
       setNewlyCreatedKey(created.raw_key);
       setShowCreateModal(false);
       setKeyName("");
-      // Reload keys list
       loadKeys();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Key generation failed";
@@ -86,7 +88,11 @@ export default function DeveloperApiKeysSection() {
   };
 
   const handleRevokeKey = async (keyId: string, name: string) => {
-    if (!confirm(`Are you sure you want to revoke API key "${name}"? Any external services using this key will be disconnected immediately.`)) {
+    if (
+      !confirm(
+        `Are you sure you want to revoke API key "${name}"? Any external services using this key will be disconnected immediately.`
+      )
+    ) {
       return;
     }
 
@@ -117,20 +123,20 @@ export default function DeveloperApiKeysSection() {
   };
 
   return (
-    <div className="space-y-5 text-slate-100">
+    <div className="space-y-6">
       {/* Newly Created Secret Modal Alert */}
       {newlyCreatedKey && (
-        <div className="rounded-2xl border border-amber-500/40 bg-amber-950/30 p-5 shadow-2xl backdrop-blur-xl animate-fadeIn">
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-5 shadow-sm animate-fadeIn">
           <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/20 text-amber-400">
-              <AlertTriangle className="h-5 w-5" />
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
+              <AlertTriangle size={18} />
             </div>
             <div className="flex-1 space-y-2">
-              <h3 className="text-sm font-semibold text-amber-300">
+              <h3 className="text-sm font-semibold text-amber-900">
                 Save Your Secret API Key Now
               </h3>
-              <p className="text-xs leading-relaxed text-slate-300">
-                This secret token will <strong className="text-white">never be displayed again</strong>.
+              <p className="text-xs leading-relaxed text-amber-800">
+                This secret token will <strong className="font-semibold text-gray-900">never be displayed again</strong>.
                 Store it in your environment variables or a secure secret manager.
               </p>
 
@@ -139,132 +145,133 @@ export default function DeveloperApiKeysSection() {
                   type="text"
                   readOnly
                   value={newlyCreatedKey}
-                  className="flex-1 rounded-xl border border-amber-500/40 bg-slate-950 px-3.5 py-2.5 font-mono text-xs text-amber-300 select-all focus:outline-none"
+                  className="w-full rounded-lg border border-amber-300 bg-white px-3 py-1.5 font-mono text-xs text-gray-900 outline-none"
                 />
-                <button
-                  type="button"
+                <Button
+                  variant="primary"
+                  size="xs"
                   onClick={copySecret}
-                  className="flex items-center gap-1.5 rounded-xl bg-amber-500 px-4 py-2.5 text-xs font-semibold text-slate-950 hover:bg-amber-400 transition cursor-pointer"
+                  className="shrink-0"
                 >
                   {copiedRawKey ? (
-                    <Check className="h-4 w-4" />
+                    <>
+                      <Check size={14} className="mr-1" />
+                      <span>Copied!</span>
+                    </>
                   ) : (
-                    <Copy className="h-4 w-4" />
+                    <>
+                      <Copy size={14} className="mr-1" />
+                      <span>Copy</span>
+                    </>
                   )}
-                  <span>{copiedRawKey ? "Copied" : "Copy Key"}</span>
-                </button>
-                <button
-                  type="button"
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="xs"
                   onClick={() => setNewlyCreatedKey(null)}
-                  className="rounded-xl border border-slate-700 bg-slate-800 px-3 py-2.5 text-xs text-slate-300 hover:bg-slate-700 cursor-pointer"
+                  className="shrink-0"
                 >
                   Done
-                </button>
+                </Button>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Main Keys Container */}
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 backdrop-blur-xl space-y-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
-              <Key className="h-4 w-4 text-sky-400" />
-              <span>Developer API Keys & Scopes</span>
-            </h2>
-            <p className="text-xs text-slate-400 mt-1">
-              Programmatic access tokens for the REST API and official Python / TypeScript SDKs.
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-1.5 rounded-xl bg-sky-600 px-3.5 py-2 text-xs font-semibold text-white shadow-lg shadow-sky-600/20 hover:bg-sky-500 transition cursor-pointer shrink-0"
-          >
-            <Plus className="h-4 w-4" />
-            <span>Create New API Key</span>
-          </button>
+      {/* Header & Create Trigger */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2">
+            <Key size={18} className="text-blue-600" />
+            <span>Developer API Keys</span>
+          </h2>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Cryptographically signed bearer tokens for server-to-server and SDK integration.
+          </p>
         </div>
+        <Button
+          variant="primary"
+          size="sm"
+          icon={Plus}
+          onClick={() => setShowCreateModal(true)}
+        >
+          Create Key
+        </Button>
+      </div>
 
-        {error && (
-          <div className="rounded-xl border border-rose-800 bg-rose-950/40 p-3 text-xs text-rose-300 flex items-center gap-2">
-            <AlertCircle className="h-4 w-4 shrink-0" />
-            <span>{error}</span>
-          </div>
-        )}
-
-        {/* Keys Table / List */}
+      {/* Keys Table */}
+      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-xs">
         {loading ? (
-          <div className="flex h-32 items-center justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-sky-500" />
+          <div className="p-12 flex items-center justify-center">
+            <Spinner size="lg" />
           </div>
         ) : keys.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-slate-800 p-8 text-center">
-            <Key className="mx-auto h-8 w-8 text-slate-600 mb-2" />
-            <p className="text-xs text-slate-400 font-medium">No API keys created yet</p>
-            <p className="text-[11px] text-slate-400 mt-1">
-              Generate a scoped key to integrate assistants into your backend or applications.
-            </p>
-          </div>
+          <EmptyState
+            icon={Key}
+            title="No API keys configured"
+            description="Generate a developer API key to programmatically query assistants via TypeScript or Python SDKs."
+            action={{
+              label: "Create First API Key",
+              onClick: () => setShowCreateModal(true),
+              icon: Plus,
+            }}
+          />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full text-left border-collapse text-xs">
               <thead>
-                <tr className="border-b border-slate-800 text-slate-400">
-                  <th className="pb-3 font-medium">Name & Prefix</th>
-                  <th className="pb-3 font-medium">Scopes</th>
-                  <th className="pb-3 font-medium">Expires</th>
-                  <th className="pb-3 font-medium">Last Used</th>
-                  <th className="pb-3 font-medium text-right">Actions</th>
+                <tr className="border-b border-gray-200 bg-gray-50/80 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+                  <th className="py-3 px-4">Name</th>
+                  <th className="py-3 px-4">Key Prefix</th>
+                  <th className="py-3 px-4">Scopes</th>
+                  <th className="py-3 px-4">Created</th>
+                  <th className="py-3 px-4">Expires</th>
+                  <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60">
+              <tbody className="divide-y divide-gray-100">
                 {keys.map((k) => (
-                  <tr key={k.id} className="hover:bg-slate-800/20 transition-colors">
-                    <td className="py-3.5 pr-4">
-                      <div className="font-semibold text-slate-100">{k.name}</div>
-                      <div className="font-mono text-[11px] text-slate-400 mt-0.5">
-                        {k.key_prefix}...
-                      </div>
+                  <tr key={k.id} className="hover:bg-gray-50/60 transition-colors">
+                    <td className="py-3 px-4 font-semibold text-gray-900">{k.name}</td>
+                    <td className="py-3 px-4 font-mono text-gray-600 text-[11px]">
+                      {k.key_prefix}...
                     </td>
-                    <td className="py-3.5 pr-4">
+                    <td className="py-3 px-4">
                       <div className="flex flex-wrap gap-1">
                         {k.scopes.map((s) => (
-                          <span
-                            key={s}
-                            className="rounded-md bg-slate-800 px-2 py-0.5 font-mono text-[10px] text-sky-400 border border-slate-700"
-                          >
+                          <Badge key={s} variant="blue" size="xs">
                             {s}
-                          </span>
+                          </Badge>
                         ))}
                       </div>
                     </td>
-                    <td className="py-3.5 pr-4 text-slate-400">
+                    <td className="py-3 px-4 text-gray-500 font-mono text-[11px]">
+                      {new Date(k.created_at).toLocaleDateString([], {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })}
+                    </td>
+                    <td className="py-3 px-4 text-gray-500 font-mono text-[11px]">
                       {k.expires_at ? (
-                        <span className="flex items-center gap-1 font-mono text-[11px]">
-                          <Clock className="h-3 w-3 text-slate-500" />
-                          {new Date(k.expires_at).toLocaleDateString()}
-                        </span>
+                        new Date(k.expires_at).toLocaleDateString([], {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })
                       ) : (
-                        <span className="text-[11px] text-slate-400">Never</span>
+                        <span className="text-gray-400">Never</span>
                       )}
                     </td>
-                    <td className="py-3.5 pr-4 text-slate-400 font-mono text-[11px]">
-                      {k.last_used_at
-                        ? new Date(k.last_used_at).toLocaleDateString()
-                        : "Never used"}
-                    </td>
-                    <td className="py-3.5 text-right">
+                    <td className="py-3 px-4 text-right">
                       <button
                         type="button"
                         onClick={() => handleRevokeKey(k.id, k.name)}
-                        className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-500/10 hover:text-rose-400 transition cursor-pointer"
-                        title="Revoke Key"
+                        className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-gray-100 transition-colors"
+                        title="Revoke key"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 size={14} />
                       </button>
                     </td>
                   </tr>
@@ -275,152 +282,104 @@ export default function DeveloperApiKeysSection() {
         )}
       </div>
 
-      {/* SDK & Quick Integration Samples */}
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 backdrop-blur-xl space-y-4">
-        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
-          <Terminal className="h-4 w-4 text-emerald-400" />
-          <span>Quick SDK Integration</span>
-        </h3>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-          {/* TypeScript SDK */}
-          <div className="rounded-xl border border-slate-800 bg-slate-950 p-4 space-y-2">
-            <div className="flex items-center justify-between text-slate-200 font-semibold">
-              <span>TypeScript (@mmaip/client)</span>
-              <span className="text-[10px] font-mono text-slate-500">Node / Web</span>
-            </div>
-            <pre className="rounded-lg bg-slate-900 p-2.5 font-mono text-[11px] text-slate-300 overflow-x-auto leading-relaxed">
-{`import { MMAIPClient } from "@mmaip/client";
-
-const client = new MMAIPClient({
-  apiKey: "mmaip_live_...",
-});
-
-for await (const chunk of client.streamChat(
-  "assistant-id",
-  "Hello!"
-)) {
-  process.stdout.write(chunk.delta || "");
-}`}
-            </pre>
-          </div>
-
-          {/* Python SDK */}
-          <div className="rounded-xl border border-slate-800 bg-slate-950 p-4 space-y-2">
-            <div className="flex items-center justify-between text-slate-200 font-semibold">
-              <span>Python (mmaip)</span>
-              <span className="text-[10px] font-mono text-slate-500">Python 3.10+</span>
-            </div>
-            <pre className="rounded-lg bg-slate-900 p-2.5 font-mono text-[11px] text-slate-300 overflow-x-auto leading-relaxed">
-{`from mmaip import MMAIPClient
-
-client = MMAIPClient(api_key="mmaip_live_...")
-
-for event in client.chat.stream(
-    assistant_id="assistant-id",
-    message="Hello!",
-):
-    if event.get("delta"):
-        print(event["delta"], end="", flush=True)`}
-            </pre>
-          </div>
-        </div>
-      </div>
-
-      {/* Create Key Modal */}
+      {/* Create API Key Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-white">Create Developer API Key</h3>
-              <button
-                type="button"
-                onClick={() => setShowCreateModal(false)}
-                className="text-slate-400 hover:text-white"
-              >
-                &times;
-              </button>
+        <Modal
+          isOpen={true}
+          onClose={() => setShowCreateModal(false)}
+          title="Create Developer API Key"
+          description="Generate a secure API key with fine-grained capability scopes."
+          maxWidth="md"
+        >
+          <form onSubmit={handleCreateKey} className="space-y-4">
+            {error && (
+              <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700">
+                {error}
+              </div>
+            )}
+
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Key Identifier Name *
+              </label>
+              <Input
+                type="text"
+                required
+                value={keyName}
+                onChange={(e) => setKeyName(e.target.value)}
+                placeholder="e.g. Production Backend Service or Mobile Client"
+              />
             </div>
 
-            <form onSubmit={handleCreateKey} className="space-y-4 text-xs">
-              <div>
-                <label className="block text-slate-300 font-medium mb-1">Key Description / Name</label>
-                <input
-                  type="text"
-                  required
-                  value={keyName}
-                  onChange={(e) => setKeyName(e.target.value)}
-                  placeholder="e.g., Production Next.js App"
-                  className="w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-white placeholder-slate-500 focus:border-sky-500 focus:outline-none"
-                />
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Authorization Scopes
+              </label>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                {[
+                  { scope: "assistant:read", label: "Read Assistants" },
+                  { scope: "assistant:chat", label: "Execute Chat" },
+                  { scope: "knowledge:read", label: "Read Knowledge" },
+                  { scope: "knowledge:search", label: "Retrieval Search" },
+                ].map(({ scope, label }) => {
+                  const isChecked = selectedScopes.includes(scope);
+                  return (
+                    <button
+                      key={scope}
+                      type="button"
+                      onClick={() => toggleScope(scope)}
+                      className={`p-2 rounded-lg border text-left transition-colors cursor-pointer flex items-center justify-between ${
+                        isChecked
+                          ? "border-blue-600 bg-blue-50 text-blue-700 font-medium"
+                          : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
+                      }`}
+                    >
+                      <span className="truncate">{label}</span>
+                      {isChecked && <Check size={14} className="text-blue-600 shrink-0" />}
+                    </button>
+                  );
+                })}
               </div>
+            </div>
 
-              <div>
-                <label className="block text-slate-300 font-medium mb-1.5">Scopes & Permissions</label>
-                <div className="space-y-2">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={selectedScopes.includes("assistant:read")}
-                      onChange={() => toggleScope("assistant:read")}
-                      className="rounded border-slate-700 text-sky-500 focus:ring-sky-500"
-                    />
-                    <div>
-                      <span className="font-mono text-slate-200">assistant:read</span>
-                      <span className="text-[11px] text-slate-400 block">List workspace assistants</span>
-                    </div>
-                  </label>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Expiration Lifespan
+              </label>
+              <select
+                value={expiresDays === null ? "null" : expiresDays}
+                onChange={(e) =>
+                  setExpiresDays(e.target.value === "null" ? null : parseInt(e.target.value, 10))
+                }
+                className="w-full px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-500/20"
+              >
+                <option value="30">30 Days</option>
+                <option value="90">90 Days</option>
+                <option value="365">1 Year</option>
+                <option value="null">No Expiration</option>
+              </select>
+            </div>
 
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={selectedScopes.includes("assistant:chat")}
-                      onChange={() => toggleScope("assistant:chat")}
-                      className="rounded border-slate-700 text-sky-500 focus:ring-sky-500"
-                    />
-                    <div>
-                      <span className="font-mono text-slate-200">assistant:chat</span>
-                      <span className="text-[11px] text-slate-400 block">Stream inference responses</span>
-                    </div>
-                  </label>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-slate-300 font-medium mb-1">Key Expiration</label>
-                <select
-                  value={expiresDays ?? "never"}
-                  onChange={(e) =>
-                    setExpiresDays(e.target.value === "never" ? null : Number(e.target.value))
-                  }
-                  className="w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-white focus:border-sky-500 focus:outline-none"
-                >
-                  <option value={30}>30 Days (Recommended)</option>
-                  <option value={60}>60 Days</option>
-                  <option value={90}>90 Days</option>
-                  <option value="never">No Expiration</option>
-                </select>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="rounded-xl border border-slate-700 px-4 py-2 font-medium text-slate-300 hover:bg-slate-800"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={creating || !keyName.trim()}
-                  className="rounded-xl bg-sky-600 px-4 py-2 font-semibold text-white hover:bg-sky-500 disabled:opacity-50 cursor-pointer"
-                >
-                  {creating ? "Generating..." : "Generate Key"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+            <div className="flex justify-end gap-2 pt-3 border-t border-gray-100">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => setShowCreateModal(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="primary"
+                size="sm"
+                isLoading={creating}
+              >
+                Generate Key
+              </Button>
+            </div>
+          </form>
+        </Modal>
       )}
     </div>
   );

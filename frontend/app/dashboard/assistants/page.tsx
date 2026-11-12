@@ -35,7 +35,10 @@ import {
   Sliders,
   ShieldCheck,
   Tag,
+  Edit2,
+  RotateCcw,
 } from "lucide-react";
+import MarkdownRenderer from "@/components/chat/MarkdownRenderer";
 
 export default function AssistantsChatPage() {
   const { activeWorkspace } = useAuth();
@@ -56,6 +59,10 @@ export default function AssistantsChatPage() {
   // State: Conversations & Chat
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [activeConversation, setActiveConversation] = useState<ConversationItem | null>(null);
+  const [convSearchQuery, setConvSearchQuery] = useState("");
+  const [editingConvId, setEditingConvId] = useState<string | null>(null);
+  const [editingConvTitle, setEditingConvTitle] = useState("");
+
   const [messages, setMessages] = useState<MessageItem[]>([]);
   const [inputMessage, setInputMessage] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -79,6 +86,33 @@ export default function AssistantsChatPage() {
         (a.template_id && a.template_id.toLowerCase().includes(q))
     );
   }, [assistants, searchQuery]);
+
+  const filteredConversations = useMemo(() => {
+    if (!convSearchQuery.trim()) return conversations;
+    const q = convSearchQuery.toLowerCase();
+    return conversations.filter((c) => c.title.toLowerCase().includes(q));
+  }, [conversations, convSearchQuery]);
+
+  const handleRenameConversation = async (convId: string, newTitle: string) => {
+    const trimmed = newTitle.trim();
+    if (!trimmed) {
+      setEditingConvId(null);
+      return;
+    }
+    try {
+      const updated = await api.updateConversation(convId, { title: trimmed });
+      setConversations((prev) =>
+        prev.map((c) => (c.id === convId ? { ...c, title: updated.title } : c))
+      );
+      if (activeConversation?.id === convId) {
+        setActiveConversation((prev) => (prev ? { ...prev, title: updated.title } : null));
+      }
+    } catch (err) {
+      console.error("Failed to rename conversation", err);
+    } finally {
+      setEditingConvId(null);
+    }
+  };
 
   const activeMessageCitations = useMemo(() => {
     if (!activeCitation) return [];
@@ -204,9 +238,8 @@ export default function AssistantsChatPage() {
   };
 
   // 5. Send Message & Stream Response
-  const handleSendMessage = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    const content = inputMessage.trim();
+  const handleSendMessageWithText = async (textToSend: string) => {
+    const content = textToSend.trim();
     if (!content || !activeAssistant || streaming) return;
 
     let conv = activeConversation;
@@ -292,6 +325,26 @@ export default function AssistantsChatPage() {
     }
   };
 
+  const handleSendMessage = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    await handleSendMessageWithText(inputMessage);
+  };
+
+  const handleRegenerateResponse = async () => {
+    if (streaming || !activeAssistant || !activeConversation) return;
+    const userMessages = messages.filter((m) => m.sender_type === "user");
+    if (userMessages.length === 0) return;
+    const lastUserMsg = userMessages[userMessages.length - 1];
+    // Remove the last assistant response from the display if present
+    setMessages((prev) => {
+      if (prev.length > 0 && prev[prev.length - 1].sender_type === "assistant") {
+        return prev.slice(0, prev.length - 1);
+      }
+      return prev;
+    });
+    await handleSendMessageWithText(lastUserMsg.content);
+  };
+
   const handleCopy = (id: string, text: string) => {
     navigator.clipboard.writeText(text);
     setCopiedId(id);
@@ -299,28 +352,28 @@ export default function AssistantsChatPage() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-5rem)] border border-slate-800/80 rounded-2xl overflow-hidden bg-slate-950 shadow-2xl backdrop-blur-xl">
+    <div className="flex h-[calc(100vh-5rem)] border border-gray-200 rounded-2xl overflow-hidden bg-white shadow-sm">
       {/* ================================================================= */}
       {/* 1. LEFT SIDEBAR: Assistant Studio List & Conversation History */}
       {/* ================================================================= */}
-      <div className="w-80 bg-slate-900/60 border-r border-slate-800/80 flex flex-col justify-between shrink-0">
+      <div className="w-80 bg-gray-50/70 border-r border-gray-200 flex flex-col justify-between shrink-0">
         <div>
           {/* Studio Header */}
-          <div className="p-4 border-b border-slate-800/80 flex items-center justify-between">
+          <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-white">
             <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded-lg bg-sky-500/10 text-sky-400 flex items-center justify-center border border-sky-500/20">
+              <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100">
                 <Bot className="w-4 h-4" />
               </div>
               <div>
-                <span className="text-xs font-bold tracking-tight text-slate-100 block">
+                <span className="text-xs font-bold tracking-tight text-gray-900 block">
                   Assistant Studio
                 </span>
-                <span className="text-[10px] text-slate-500">M06 Creation & Lifecycle</span>
+                <span className="text-[10px] text-gray-500">M06 Creation & Lifecycle</span>
               </div>
             </div>
             <button
               onClick={() => setShowWizard(true)}
-              className="p-1.5 px-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-medium transition cursor-pointer flex items-center gap-1 shadow-sm"
+              className="p-1.5 px-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium transition cursor-pointer flex items-center gap-1 shadow-sm"
               title="Create Assistant Wizard"
             >
               <Plus className="w-3.5 h-3.5" />
@@ -329,26 +382,26 @@ export default function AssistantsChatPage() {
           </div>
 
           {/* Search Box */}
-          <div className="p-2.5 border-b border-slate-800/60">
+          <div className="p-2.5 border-b border-gray-200 bg-white">
             <div className="relative">
-              <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Filter assistants..."
-                className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-slate-950/80 border border-slate-800 text-[11px] text-slate-200 placeholder:text-slate-600 focus:border-sky-500 outline-none transition"
+                className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-gray-50 border border-gray-200 text-[11px] text-gray-900 placeholder:text-gray-400 focus:border-blue-600 focus:bg-white outline-none transition"
               />
             </div>
           </div>
         </div>
 
         {/* Assistant List */}
-        <div className="p-2 space-y-1 overflow-y-auto max-h-64 border-b border-slate-800/80 flex-1">
+        <div className="p-2 space-y-1 overflow-y-auto max-h-64 border-b border-gray-200 flex-1">
           {loading ? (
-            <div className="p-4 text-center text-[11px] text-slate-500">Loading assistants...</div>
+            <div className="p-4 text-center text-[11px] text-gray-400">Loading assistants...</div>
           ) : filteredAssistants.length === 0 ? (
-            <div className="p-4 text-center text-[11px] text-slate-500">
+            <div className="p-4 text-center text-[11px] text-gray-400">
               {searchQuery ? "No matching assistants." : "No assistants created yet."}
             </div>
           ) : (
@@ -362,20 +415,20 @@ export default function AssistantsChatPage() {
                   }}
                   className={`w-full text-left p-2.5 rounded-xl text-xs transition cursor-pointer flex items-center justify-between ${
                     isSelected
-                      ? "bg-slate-800/90 text-white font-medium border border-sky-500/30 shadow-sm"
-                      : "text-slate-400 hover:bg-slate-900/80 hover:text-slate-200"
+                      ? "bg-white text-gray-900 font-semibold border border-blue-500/30 shadow-xs ring-1 ring-blue-500/10"
+                      : "text-gray-600 hover:bg-gray-100/70 hover:text-gray-900"
                   }`}
                 >
                   <div className="truncate pr-2 flex-1">
                     <div className="flex items-center gap-1.5 truncate">
                       <span className="truncate font-semibold">{asst.name}</span>
-                      <span className="px-1.5 py-0.2 rounded text-[9px] bg-slate-800 text-sky-400 border border-slate-700/60 font-mono">
+                      <span className="px-1.5 py-0.2 rounded text-[9px] bg-gray-100 text-blue-600 border border-gray-200 font-mono">
                         v{asst.current_version_num || 1}
                       </span>
                     </div>
-                    <div className="text-[10px] text-slate-500 truncate flex items-center gap-1.5 mt-0.5">
+                    <div className="text-[10px] text-gray-500 truncate flex items-center gap-1.5 mt-0.5">
                       {asst.template_id ? (
-                        <span className="text-sky-400/90 truncate flex items-center gap-1">
+                        <span className="text-blue-600/90 truncate flex items-center gap-1">
                           <Tag className="w-2.5 h-2.5" />
                           {asst.template_id.replace(/-/g, " ")}
                         </span>
@@ -385,7 +438,7 @@ export default function AssistantsChatPage() {
                     </div>
                   </div>
                   {asst.connected_kb_ids && asst.connected_kb_ids.length > 0 && (
-                    <span className="px-1.5 py-0.5 rounded text-[9px] bg-emerald-950 text-emerald-400 border border-emerald-800/60 font-mono shrink-0">
+                    <span className="px-1.5 py-0.5 rounded text-[9px] bg-emerald-50 text-emerald-700 border border-emerald-200 font-mono shrink-0">
                       {asst.connected_kb_ids.length} KB
                     </span>
                   )}
@@ -396,55 +449,109 @@ export default function AssistantsChatPage() {
         </div>
 
         {/* Conversations History */}
-        <div className="h-48 flex flex-col overflow-hidden bg-slate-950/40">
-          <div className="p-2.5 px-4 flex items-center justify-between text-[11px] font-semibold text-slate-400 border-b border-slate-800/60">
+        <div className="h-56 flex flex-col overflow-hidden bg-gray-50/50">
+          <div className="p-2.5 px-4 flex items-center justify-between text-[11px] font-semibold text-gray-700 border-b border-gray-200 bg-white/60">
             <span>Conversations</span>
             <button
               onClick={handleNewConversation}
-              className="text-[10px] text-sky-400 hover:text-sky-300 transition cursor-pointer flex items-center gap-1"
+              className="text-[10px] text-blue-600 hover:text-blue-700 transition cursor-pointer flex items-center gap-1 font-medium"
             >
               <Plus className="w-3 h-3" />
               <span>New</span>
             </button>
           </div>
 
+          {/* Quick filter for conversations */}
+          {conversations.length > 2 && (
+            <div className="px-2.5 py-1.5 border-b border-gray-200">
+              <input
+                type="text"
+                value={convSearchQuery}
+                onChange={(e) => setConvSearchQuery(e.target.value)}
+                placeholder="Search chats..."
+                className="w-full px-2 py-1 rounded bg-white border border-gray-200 text-[10px] text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500 transition"
+              />
+            </div>
+          )}
+
           <div className="flex-1 overflow-y-auto p-2 space-y-1">
-            {conversations.length === 0 ? (
-              <div className="p-3 text-center text-[10px] text-slate-600">No chats recorded.</div>
+            {filteredConversations.length === 0 ? (
+              <div className="p-3 text-center text-[10px] text-gray-400">
+                {convSearchQuery ? "No matching chats." : "No chats recorded."}
+              </div>
             ) : (
-              conversations.map((c) => {
+              filteredConversations.map((c) => {
                 const isSelected = activeConversation?.id === c.id;
+                const isEditing = editingConvId === c.id;
                 return (
                   <div
                     key={c.id}
                     onClick={() => {
-                      setActiveConversation(c);
-                      setViewMode("chat");
+                      if (!isEditing) {
+                        setActiveConversation(c);
+                        setViewMode("chat");
+                      }
                     }}
-                    className={`group w-full text-left px-2.5 py-1.5 rounded-lg text-xs transition cursor-pointer flex items-center justify-between ${
+                    className={`group w-full text-left px-2.5 py-1.5 rounded-lg text-xs transition cursor-pointer flex items-center justify-between gap-1 ${
                       isSelected && viewMode === "chat"
-                        ? "bg-sky-600/10 text-sky-300 font-medium border border-sky-500/20"
-                        : "text-slate-400 hover:bg-slate-900 hover:text-slate-200"
+                        ? "bg-blue-50 text-blue-700 font-medium border border-blue-200"
+                        : "text-gray-600 hover:bg-gray-100/80 hover:text-gray-900"
                     }`}
                   >
-                    <div className="flex items-center gap-2 truncate">
-                      <MessageSquare className="w-3.5 h-3.5 shrink-0 opacity-60" />
-                      <span className="truncate text-[11px]">{c.title}</span>
+                    {isEditing ? (
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          handleRenameConversation(c.id, editingConvTitle);
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex-1 min-w-0"
+                      >
+                        <input
+                          type="text"
+                          value={editingConvTitle}
+                          onChange={(e) => setEditingConvTitle(e.target.value)}
+                          autoFocus
+                          onBlur={() => handleRenameConversation(c.id, editingConvTitle)}
+                          className="w-full px-1.5 py-0.5 rounded bg-white border border-blue-500 text-[11px] text-gray-900 outline-none"
+                        />
+                      </form>
+                    ) : (
+                      <div className="flex items-center gap-2 truncate flex-1 min-w-0">
+                        <MessageSquare className="w-3.5 h-3.5 shrink-0 opacity-60" />
+                        <span className="truncate text-[11px]">{c.title}</span>
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-0.5 shrink-0">
+                      {!isEditing && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingConvId(c.id);
+                            setEditingConvTitle(c.title);
+                          }}
+                          className="opacity-0 group-hover:opacity-100 p-1 hover:text-blue-600 text-gray-400 transition cursor-pointer"
+                          title="Rename chat"
+                        >
+                          <Edit2 className="w-3 h-3" />
+                        </button>
+                      )}
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          await api.deleteConversation(c.id);
+                          setConversations((prev) => prev.filter((item) => item.id !== c.id));
+                          if (activeConversation?.id === c.id) {
+                            setActiveConversation(null);
+                          }
+                        }}
+                        className="opacity-0 group-hover:opacity-100 p-1 hover:text-red-600 text-gray-400 transition cursor-pointer"
+                        title="Delete chat"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
                     </div>
-                    <button
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        await api.deleteConversation(c.id);
-                        setConversations((prev) => prev.filter((item) => item.id !== c.id));
-                        if (activeConversation?.id === c.id) {
-                          setActiveConversation(null);
-                        }
-                      }}
-                      className="opacity-0 group-hover:opacity-100 p-1 hover:text-red-400 transition"
-                      title="Delete chat"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
                   </div>
                 );
               })
@@ -453,37 +560,37 @@ export default function AssistantsChatPage() {
         </div>
 
         {/* Workspace Footer Info */}
-        <div className="p-3 border-t border-slate-800/80 bg-slate-900/40 text-[10px] text-slate-500 flex items-center justify-between">
+        <div className="p-3 border-t border-gray-200 bg-white text-[10px] text-gray-500 flex items-center justify-between">
           <span className="truncate max-w-[140px]">{activeWorkspace?.tenant_name || "Workspace"}</span>
-          <span className="font-mono text-sky-400">Studio M06</span>
+          <span className="font-mono text-blue-600 font-medium">Studio M06</span>
         </div>
       </div>
 
       {/* ================================================================= */}
       {/* 2. MAIN WORKSPACE / CHAT CONTAINER */}
       {/* ================================================================= */}
-      <div className="flex-1 flex flex-col bg-slate-950 overflow-hidden relative">
+      <div className="flex-1 flex flex-col bg-white overflow-hidden relative">
         {activeAssistant ? (
           <>
             {/* Top Navigation & Mode Switcher Header */}
-            <div className="p-3.5 px-6 border-b border-slate-800/80 bg-slate-900/40 backdrop-blur-md flex items-center justify-between z-10">
+            <div className="p-3.5 px-6 border-b border-gray-200 bg-white flex items-center justify-between z-10">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-sky-500/10 text-sky-400 flex items-center justify-center font-bold border border-sky-500/20">
+                <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold border border-blue-100">
                   <Bot className="w-5 h-5" />
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h2 className="text-sm font-bold text-white tracking-tight">
+                    <h2 className="text-sm font-bold text-gray-900 tracking-tight">
                       {activeAssistant.name}
                     </h2>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-sky-950/80 text-sky-400 border border-sky-800/60 font-semibold">
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-200 font-semibold">
                       v{activeAssistant.current_version_num || 1}
                     </span>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800/80 text-slate-300 border border-slate-700/60">
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-gray-100 text-gray-700 border border-gray-200">
                       {activeAssistant.llm_provider || "omniroute"} • {activeAssistant.default_model || "auto"}
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-400 mt-0.5 truncate max-w-md">
+                  <p className="text-[11px] text-gray-500 mt-0.5 truncate max-w-md">
                     {activeAssistant.description || "Configurable Multi-Tenant Assistant"}
                   </p>
                 </div>
@@ -491,14 +598,14 @@ export default function AssistantsChatPage() {
 
               {/* View Switcher: Studio Workspace vs Chat Sandbox */}
               <div className="flex items-center gap-3">
-                <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800">
+                <div className="flex items-center bg-gray-100 p-1 rounded-xl border border-gray-200">
                   <button
                     type="button"
                     onClick={() => setViewMode("workspace")}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
                       viewMode === "workspace"
-                        ? "bg-slate-800 text-sky-400 font-semibold shadow-sm"
-                        : "text-slate-400 hover:text-slate-200"
+                        ? "bg-white text-blue-600 font-semibold shadow-xs"
+                        : "text-gray-600 hover:text-gray-900"
                     }`}
                   >
                     <Sliders className="w-3.5 h-3.5" />
@@ -509,8 +616,8 @@ export default function AssistantsChatPage() {
                     onClick={() => setViewMode("chat")}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
                       viewMode === "chat"
-                        ? "bg-sky-600 text-white font-semibold shadow-sm"
-                        : "text-slate-400 hover:text-slate-200"
+                        ? "bg-blue-600 text-white font-semibold shadow-xs"
+                        : "text-gray-600 hover:text-gray-900"
                     }`}
                   >
                     <MessageSquare className="w-3.5 h-3.5" />
@@ -520,7 +627,7 @@ export default function AssistantsChatPage() {
 
                 <button
                   onClick={() => setShowWizard(true)}
-                  className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-medium transition cursor-pointer flex items-center gap-1.5"
+                  className="px-3 py-1.5 rounded-xl bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-medium transition cursor-pointer flex items-center gap-1.5 shadow-xs"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>New Assistant</span>
@@ -553,25 +660,50 @@ export default function AssistantsChatPage() {
               </div>
             ) : (
               /* Conversational Chat View */
-              <div className="flex-1 flex flex-col overflow-hidden relative">
+              <div className="flex-1 flex flex-col overflow-hidden relative bg-gray-50/30">
                 {/* Chat Messages Log */}
                 <div className="flex-1 overflow-y-auto p-6 space-y-6">
                   {messages.length === 0 ? (
-                    <div className="h-full flex flex-col items-center justify-center text-center max-w-sm mx-auto">
-                      <div className="w-12 h-12 rounded-2xl bg-sky-500/10 text-sky-400 flex items-center justify-center mb-3 border border-sky-500/20">
+                    <div className="h-full flex flex-col items-center justify-center text-center max-w-md mx-auto py-8">
+                      <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mb-3 border border-blue-100">
                         <Sparkles className="w-6 h-6" />
                       </div>
-                      <h3 className="text-sm font-bold text-slate-200">
+                      <h3 className="text-sm font-bold text-gray-900">
                         Ready to chat with {activeAssistant.name}
                       </h3>
-                      <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
-                        Test questions grounded in connected knowledge bases. Responses follow the
-                        configured prompt trust hierarchy.
+                      <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
+                        Test questions grounded in connected knowledge bases. Responses follow strict
+                        source citations and prompt trust guidelines.
                       </p>
+
+                      <div className="w-full space-y-2 mt-6">
+                        <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider text-left px-1">
+                          Starter Prompts
+                        </div>
+                        {[
+                          `What key knowledge and documents are loaded into ${activeAssistant.name}?`,
+                          "Summarize the main topics and instructions you are configured to help with.",
+                          "Provide a concrete example of how you extract information with verified citations.",
+                        ].map((promptText, pIdx) => (
+                          <button
+                            key={pIdx}
+                            type="button"
+                            onClick={() => handleSendMessageWithText(promptText)}
+                            className="w-full p-2.5 px-3 text-left rounded-xl bg-white hover:bg-gray-50 border border-gray-200 text-[11px] text-gray-800 hover:border-gray-300 transition cursor-pointer flex items-center justify-between group shadow-xs"
+                          >
+                            <span className="truncate pr-2">{promptText}</span>
+                            <ChevronRight className="w-3.5 h-3.5 text-gray-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition shrink-0" />
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   ) : (
-                    messages.map((m) => {
+                    messages.map((m, mIdx) => {
                       const isUser = m.sender_type === "user";
+                      const isLatestAssistant =
+                        !isUser &&
+                        (mIdx === messages.length - 1 ||
+                          (mIdx === messages.length - 2 && messages[messages.length - 1].sender_type === "user"));
                       return (
                         <div
                           key={m.id}
@@ -580,10 +712,10 @@ export default function AssistantsChatPage() {
                           } max-w-3xl mx-auto`}
                         >
                           <div className="flex items-center gap-2 mb-1 px-1">
-                            <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                            <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
                               {isUser ? "You" : activeAssistant.name}
                             </span>
-                            <span className="text-[9px] text-slate-600 font-mono">
+                            <span className="text-[9px] text-gray-400 font-mono">
                               {new Date(m.created_at).toLocaleTimeString([], {
                                 hour: "2-digit",
                                 minute: "2-digit",
@@ -592,87 +724,41 @@ export default function AssistantsChatPage() {
                           </div>
 
                           <div
-                            className={`p-4 rounded-2xl text-xs leading-relaxed max-w-2xl transition shadow-sm ${
+                            className={`p-4 rounded-2xl text-xs leading-relaxed max-w-2xl transition shadow-xs ${
                               isUser
-                                ? "bg-sky-600 text-white rounded-br-sm"
-                                : "bg-slate-900 border border-slate-800 text-slate-200 rounded-bl-sm"
+                                ? "bg-blue-600 text-white rounded-br-sm"
+                                : "bg-white border border-gray-200 text-gray-900 rounded-bl-sm"
                             }`}
                           >
-                            <div className="whitespace-pre-wrap font-sans">
-                              {isUser || !m.citations || m.citations.length === 0
-                                ? m.content
-                                : m.content.split(/(\[\d+\])/g).map((part, pIdx) => {
-                                    const match = part.match(/^\[(\d+)\]$/);
-                                    if (match) {
-                                      const cNum = parseInt(match[1], 10);
-                                      const matchedCitation = m.citations.find(
-                                        (c) => c.citation_num === cNum
-                                      );
-                                      if (matchedCitation) {
-                                        return (
-                                          <button
-                                            key={pIdx}
-                                            type="button"
-                                            onClick={() => {
-                                              setActiveCitation(matchedCitation);
-                                              setCitationTab("visual");
-                                            }}
-                                            className="inline-flex items-center px-1.5 py-0.5 mx-0.5 rounded bg-sky-500/20 hover:bg-sky-500/35 text-sky-300 font-mono text-[10px] font-bold border border-sky-500/40 transition cursor-pointer shadow-sm hover:scale-105 active:scale-95"
-                                            title={`View Citation [${cNum}] — ${matchedCitation.document_name}`}
-                                          >
-                                            [{cNum}]
-                                          </button>
-                                        );
-                                      }
-                                    }
-                                    return <span key={pIdx}>{part}</span>;
-                                  })}
+                            <div className="font-sans">
+                              {isUser || !m.citations || m.citations.length === 0 ? (
+                                <p className="whitespace-pre-wrap">{m.content}</p>
+                              ) : (
+                                <MarkdownRenderer
+                                  content={m.content}
+                                  citations={m.citations}
+                                  onCitationClick={(cit) => {
+                                    setActiveCitation(cit);
+                                    setCitationTab("visual");
+                                  }}
+                                  className="text-xs"
+                                />
+                              )}
                             </div>
 
-                            {!isUser && m.citations && m.citations.length > 0 && (
-                              <div className="mt-3 pt-3 border-t border-slate-800/80">
-                                <div className="text-[10px] font-semibold text-slate-400 mb-1.5 flex items-center justify-between">
-                                  <div className="flex items-center gap-1">
-                                    <FileText className="w-3 h-3 text-sky-400" />
-                                    <span>Verified Document Citations:</span>
-                                  </div>
-                                </div>
-                                <div className="flex flex-wrap gap-1.5">
-                                  {m.citations.map((c) => (
-                                    <button
-                                      key={c.id || c.citation_num}
-                                      onClick={() => {
-                                        setActiveCitation(c);
-                                        setCitationTab("visual");
-                                      }}
-                                      className="px-2.5 py-1 rounded-lg bg-slate-950/90 hover:bg-sky-950/40 text-[10px] text-slate-300 border border-slate-800 hover:border-sky-500/40 transition cursor-pointer flex items-center gap-1.5 shadow-sm group"
-                                    >
-                                      <span className="font-mono text-sky-400 font-bold group-hover:scale-110 transition">
-                                        [{c.citation_num}]
-                                      </span>
-                                      <span className="truncate max-w-[130px] font-medium text-slate-200">
-                                        {c.document_name}
-                                      </span>
-                                      <span className="px-1 py-0.2 rounded bg-slate-800/80 text-[9px] text-slate-400 font-mono">
-                                        p.{c.page_number || 1}
-                                      </span>
-                                    </button>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
+
                           </div>
 
                           {!isUser && m.content && (
-                            <div className="flex items-center gap-2 mt-1 px-1 text-slate-500">
+                            <div className="flex items-center gap-3 mt-1.5 px-1 text-gray-400">
                               <button
                                 onClick={() => handleCopy(m.id, m.content)}
-                                className="hover:text-slate-300 transition text-[10px] flex items-center gap-1"
+                                className="hover:text-gray-600 transition text-[10px] flex items-center gap-1 cursor-pointer"
                               >
                                 {copiedId === m.id ? (
                                   <>
-                                    <Check className="w-3 h-3 text-sky-400" />
-                                    <span className="text-sky-400">Copied</span>
+                                    <Check className="w-3 h-3 text-blue-600" />
+                                    <span className="text-blue-600 font-medium">Copied</span>
                                   </>
                                 ) : (
                                   <>
@@ -681,6 +767,18 @@ export default function AssistantsChatPage() {
                                   </>
                                 )}
                               </button>
+                              {isLatestAssistant && (
+                                <button
+                                  type="button"
+                                  onClick={handleRegenerateResponse}
+                                  disabled={streaming}
+                                  className="hover:text-gray-600 transition text-[10px] flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                                  title="Regenerate response"
+                                >
+                                  <RotateCcw className="w-3 h-3" />
+                                  <span>Retry</span>
+                                </button>
+                              )}
                             </div>
                           )}
                         </div>
@@ -691,7 +789,7 @@ export default function AssistantsChatPage() {
                 </div>
 
                 {/* Input Box */}
-                <div className="p-4 px-6 border-t border-slate-800/80 bg-slate-900/60 backdrop-blur-md">
+                <div className="p-4 px-6 border-t border-gray-200 bg-white">
                   <form onSubmit={handleSendMessage} className="max-w-3xl mx-auto flex gap-2">
                     <input
                       type="text"
@@ -699,7 +797,7 @@ export default function AssistantsChatPage() {
                       onChange={(e) => setInputMessage(e.target.value)}
                       placeholder={`Ask ${activeAssistant.name} a test question...`}
                       disabled={streaming}
-                      className="flex-1 px-4 py-3 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 text-xs focus:border-sky-500 outline-none transition disabled:opacity-50"
+                      className="flex-1 px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 placeholder:text-gray-400 text-xs focus:border-blue-600 focus:bg-white outline-none transition disabled:opacity-50"
                     />
 
                     {streaming ? (
@@ -709,7 +807,7 @@ export default function AssistantsChatPage() {
                           abortControllerRef.current?.abort();
                           setStreaming(false);
                         }}
-                        className="px-4 py-3 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
+                        className="px-4 py-3 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
                       >
                         <Square className="w-3.5 h-3.5 fill-current" />
                         <span>Stop</span>
@@ -718,7 +816,7 @@ export default function AssistantsChatPage() {
                       <button
                         type="submit"
                         disabled={!inputMessage.trim()}
-                        className="px-5 py-3 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50 shadow-lg shadow-sky-600/20"
+                        className="px-5 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50 shadow-sm"
                       >
                         <Send className="w-3.5 h-3.5" />
                         <span>Send</span>
@@ -732,17 +830,17 @@ export default function AssistantsChatPage() {
         ) : (
           /* Empty State */
           <div className="h-full flex flex-col items-center justify-center text-center p-6">
-            <div className="w-14 h-14 rounded-2xl bg-sky-500/10 text-sky-400 flex items-center justify-center mb-4 border border-sky-500/20">
+            <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mb-4 border border-blue-100">
               <Bot className="w-7 h-7" />
             </div>
-            <h3 className="text-base font-bold text-slate-200">Welcome to Assistant Studio</h3>
-            <p className="text-xs text-slate-400 mt-2 max-w-sm leading-relaxed">
+            <h3 className="text-base font-bold text-gray-900">Welcome to Assistant Studio</h3>
+            <p className="text-xs text-gray-500 mt-2 max-w-sm leading-relaxed">
               Create purpose-specific AI assistants with guided 5-step creation, safe instructions,
               version history, and optional knowledge integration.
             </p>
             <button
               onClick={() => setShowWizard(true)}
-              className="mt-6 px-5 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold transition cursor-pointer flex items-center gap-2 shadow-lg shadow-sky-600/20"
+              className="mt-6 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition cursor-pointer flex items-center gap-2 shadow-sm"
             >
               <Plus className="w-4 h-4" />
               <span>Create Your First Assistant</span>
@@ -754,19 +852,19 @@ export default function AssistantsChatPage() {
         {/* 3. CITATION PREVIEW / INSPECTOR MODAL */}
         {/* ================================================================= */}
         {activeCitation && (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-3 md:p-6 overflow-y-auto">
-            <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-4xl w-full shadow-2xl flex flex-col max-h-[92vh] overflow-hidden animate-fadeIn">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950/70">
+          <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-3 md:p-6 overflow-y-auto animate-fadeIn">
+            <div className="bg-white border border-gray-200 rounded-3xl max-w-4xl w-full shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
                 <div className="flex items-center gap-3 min-w-0">
-                  <span className="w-8 h-8 rounded-xl bg-sky-500/20 text-sky-400 font-mono text-sm font-bold flex items-center justify-center shrink-0 border border-sky-500/30">
+                  <span className="w-8 h-8 rounded-xl bg-blue-100 text-blue-700 font-mono text-sm font-bold flex items-center justify-center shrink-0 border border-blue-200">
                     [{activeCitation.citation_num}]
                   </span>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-bold text-slate-100 truncate">
+                      <h3 className="text-sm font-bold text-gray-900 truncate">
                         {activeCitation.document_name}
                       </h3>
-                      <span className="px-2 py-0.5 rounded-full bg-slate-800 text-[10px] font-mono text-slate-300 border border-slate-700">
+                      <span className="px-2 py-0.5 rounded-full bg-gray-100 text-[10px] font-mono text-gray-700 border border-gray-200">
                         Page {activeCitation.page_number || 1}
                       </span>
                     </div>
@@ -774,14 +872,14 @@ export default function AssistantsChatPage() {
                 </div>
 
                 <div className="flex items-center gap-3 shrink-0">
-                  <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800">
+                  <div className="flex items-center bg-gray-100 p-1 rounded-xl border border-gray-200">
                     <button
                       type="button"
                       onClick={() => setCitationTab("visual")}
                       className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition cursor-pointer ${
                         citationTab === "visual"
-                          ? "bg-sky-600 text-white shadow-sm"
-                          : "text-slate-400 hover:text-slate-200"
+                          ? "bg-white text-blue-600 font-semibold shadow-xs"
+                          : "text-gray-600 hover:text-gray-900"
                       }`}
                     >
                       <Eye className="w-3.5 h-3.5" />
@@ -792,8 +890,8 @@ export default function AssistantsChatPage() {
                       onClick={() => setCitationTab("text")}
                       className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition cursor-pointer ${
                         citationTab === "text"
-                          ? "bg-sky-600 text-white shadow-sm"
-                          : "text-slate-400 hover:text-slate-200"
+                          ? "bg-white text-blue-600 font-semibold shadow-xs"
+                          : "text-gray-600 hover:text-gray-900"
                       }`}
                     >
                       <FileText className="w-3.5 h-3.5" />
@@ -804,7 +902,7 @@ export default function AssistantsChatPage() {
                   <button
                     type="button"
                     onClick={() => setActiveCitation(null)}
-                    className="p-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition cursor-pointer"
+                    className="p-1.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-gray-800 transition cursor-pointer"
                     title="Close"
                   >
                     <X className="w-4 h-4" />
@@ -812,12 +910,12 @@ export default function AssistantsChatPage() {
                 </div>
               </div>
 
-              <div className="p-6 overflow-y-auto flex-1 bg-slate-950/40">
+              <div className="p-6 overflow-y-auto flex-1 bg-gray-50/50">
                 {citationTab === "visual" ? (
                   <div className="flex flex-col items-center">
-                    <div className="w-full max-w-2xl mb-3 flex items-center justify-between text-[11px] text-slate-400 px-2">
+                    <div className="w-full max-w-2xl mb-3 flex items-center justify-between text-[11px] text-gray-500 px-2">
                       <div className="flex items-center gap-2">
-                        <Layers className="w-3.5 h-3.5 text-sky-400" />
+                        <Layers className="w-3.5 h-3.5 text-blue-600" />
                         <span>Interactive PDF Viewport</span>
                       </div>
                       <div className="font-mono text-[10px]">
@@ -825,20 +923,20 @@ export default function AssistantsChatPage() {
                       </div>
                     </div>
 
-                    <div className="relative w-full max-w-2xl bg-slate-950 border-2 border-slate-800 rounded-2xl shadow-2xl p-8 flex flex-col justify-between">
-                      <p className="text-slate-100 text-xs leading-relaxed font-sans font-medium select-text">
+                    <div className="relative w-full max-w-2xl bg-white border border-gray-200 rounded-2xl shadow-sm p-8 flex flex-col justify-between">
+                      <p className="text-gray-900 text-xs leading-relaxed font-sans font-medium select-text">
                         &ldquo;{activeCitation.citation_text || activeCitation.snippet}&rdquo;
                       </p>
                     </div>
                   </div>
                 ) : (
                   <div className="space-y-4 max-w-2xl mx-auto">
-                    <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800">
-                      <div className="text-[11px] font-bold text-slate-400 mb-2 flex items-center justify-between">
+                    <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
+                      <div className="text-[11px] font-bold text-gray-500 mb-2 flex items-center justify-between">
                         <span>SOURCE EXCERPT</span>
-                        <span className="font-mono text-sky-400">Page {activeCitation.page_number || 1}</span>
+                        <span className="font-mono text-blue-600">Page {activeCitation.page_number || 1}</span>
                       </div>
-                      <div className="text-xs text-slate-200 leading-relaxed font-sans whitespace-pre-wrap select-text">
+                      <div className="text-xs text-gray-900 leading-relaxed font-sans whitespace-pre-wrap select-text">
                         {activeCitation.citation_text || activeCitation.snippet}
                       </div>
                     </div>

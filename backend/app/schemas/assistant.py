@@ -113,6 +113,11 @@ class ConversationCreateRequest(BaseModel):
     title: Optional[str] = Field(default="New Conversation", max_length=255)
 
 
+class ConversationUpdateRequest(BaseModel):
+    title: Optional[str] = Field(default=None, max_length=255)
+    status: Optional[str] = Field(default=None, max_length=50)
+
+
 class MessageCitationResponse(BaseModel):
     id: uuid.UUID
     citation_num: int = 1

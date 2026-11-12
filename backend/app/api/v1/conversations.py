@@ -17,6 +17,7 @@ from app.models.user import User
 from app.schemas.assistant import (
     ConversationCreateRequest,
     ConversationResponse,
+    ConversationUpdateRequest,
     MessageCitationResponse,
     MessageResponse,
     SendMessageRequest,
@@ -84,6 +85,32 @@ async def get_conversation(
     conv = (await db.execute(stmt)).scalar_one_or_none()
     if not conv or (not ctx.is_admin and conv.user_id != current_user.id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+    return ConversationResponse.model_validate(conv)
+
+
+@router.patch("/{conversation_id}", response_model=ConversationResponse)
+async def update_conversation(
+    conversation_id: uuid.UUID,
+    payload: ConversationUpdateRequest,
+    ctx: TenantContext = Depends(require_permission(PermissionName.ASSISTANT_READ.value)),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ConversationResponse:
+    stmt = select(Conversation).where(
+        Conversation.id == conversation_id,
+        Conversation.tenant_id == ctx.tenant.id,
+    )
+    conv = (await db.execute(stmt)).scalar_one_or_none()
+    if not conv or (not ctx.is_admin and conv.user_id != current_user.id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+
+    if payload.title is not None:
+        conv.title = payload.title.strip() or "Untitled Conversation"
+    if payload.status is not None:
+        conv.status = payload.status
+
+    await db.commit()
+    await db.refresh(conv)
     return ConversationResponse.model_validate(conv)
 
 

@@ -9,6 +9,15 @@ from app.models.knowledge import KnowledgeBase
 from app.repositories.base import TenantScopedRepository
 from app.repositories.tenant_repository import slugify
 
+VALID_ASSISTANT_PROVIDERS = {
+    "omniroute",
+    "openai",
+    "anthropic",
+    "gemini",
+    "groq",
+    "mock",
+}
+
 
 class AssistantRepository(TenantScopedRepository[Assistant]):
     def __init__(self, session: AsyncSession, tenant_id: uuid.UUID):
@@ -73,10 +82,9 @@ class AssistantRepository(TenantScopedRepository[Assistant]):
     ) -> Assistant:
         if not default_model or not default_model.strip():
             raise ValueError("default_model cannot be empty")
-        valid_providers = {"omniroute", "openai", "mock"}
-        if llm_provider.lower() not in valid_providers:
+        if llm_provider.lower() not in VALID_ASSISTANT_PROVIDERS:
             raise ValueError(
-                f"Unsupported LLM provider '{llm_provider}'. Supported: {sorted(valid_providers)}"
+                f"Unsupported LLM provider '{llm_provider}'. Supported: {sorted(VALID_ASSISTANT_PROVIDERS)}"
             )
 
         base_slug = slug or slugify(name)
@@ -204,10 +212,9 @@ class AssistantRepository(TenantScopedRepository[Assistant]):
             assistant.citation_style = citation_style
             changed = True
         if llm_provider is not None:
-            valid_providers = {"omniroute", "openai", "mock"}
-            if llm_provider.lower() not in valid_providers:
+            if llm_provider.lower() not in VALID_ASSISTANT_PROVIDERS:
                 raise ValueError(
-                    f"Unsupported LLM provider '{llm_provider}'. Supported: {sorted(valid_providers)}"
+                    f"Unsupported LLM provider '{llm_provider}'. Supported: {sorted(VALID_ASSISTANT_PROVIDERS)}"
                 )
             if llm_provider.lower() != assistant.llm_provider:
                 assistant.llm_provider = llm_provider.lower()

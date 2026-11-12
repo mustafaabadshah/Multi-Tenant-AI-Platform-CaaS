@@ -130,6 +130,8 @@ class RetrievalService:
             timing["lexical_latency_ms"] = int((time.perf_counter() - t0) * 1000)
 
         # 5. Semantic Search Phase
+        fallback_to_lexical = False
+        embedding_error: Optional[str] = None
         if target_mode in ("semantic", "hybrid"):
             t0 = time.perf_counter()
             plain_key = decrypt_secret(ret_cfg.encrypted_api_key) if ret_cfg and ret_cfg.encrypted_api_key else None
@@ -142,16 +144,27 @@ class RetrievalService:
                 timeout_seconds=settings.EMBEDDING_TIMEOUT_SECONDS,
                 max_retries=settings.EMBEDDING_MAX_RETRIES,
             )
-            query_emb = await provider.embed_text(query, prov_cfg)
-            timing["embedding_latency_ms"] = int((time.perf_counter() - t0) * 1000)
+            try:
+                query_emb = await provider.embed_text(query, prov_cfg)
+                timing["embedding_latency_ms"] = int((time.perf_counter() - t0) * 1000)
 
-            t1 = time.perf_counter()
-            semantic_candidates = await target_vstore.search(
-                query_emb.vector,
-                filter_criteria,
-                top_k=effective_top_k * 2 if target_mode == "hybrid" else effective_top_k,
-            )
-            timing["vector_search_latency_ms"] = int((time.perf_counter() - t1) * 1000)
+                t1 = time.perf_counter()
+                semantic_candidates = await target_vstore.search(
+                    query_emb.vector,
+                    filter_criteria,
+                    top_k=effective_top_k * 2 if target_mode == "hybrid" else effective_top_k,
+                )
+                timing["vector_search_latency_ms"] = int((time.perf_counter() - t1) * 1000)
+            except Exception as emb_err:
+                fallback_to_lexical = True
+                embedding_error = str(emb_err)
+                logger.warning(f"Semantic search phase failed ({emb_err}); gracefully continuing with lexical candidates")
+                if target_mode == "semantic" and not lexical_candidates:
+                    lexical_candidates = await fts_store.search_lexical(
+                        query,
+                        filter_criteria,
+                        top_k=effective_top_k,
+                    )
 
         # 6. Candidate Merging / Fusion
         candidates: list[VectorSearchResult] = []
@@ -165,7 +178,7 @@ class RetrievalService:
             )
             timing["fusion_latency_ms"] = int((time.perf_counter() - t0) * 1000)
         elif target_mode == "semantic":
-            candidates = semantic_candidates[:effective_top_k]
+            candidates = semantic_candidates[:effective_top_k] if semantic_candidates else lexical_candidates[:effective_top_k]
         else:
             candidates = lexical_candidates[:effective_top_k]
 
@@ -188,8 +201,13 @@ class RetrievalService:
         total_latency_ms = int((time.perf_counter() - start_time) * 1000)
         timing["total_latency_ms"] = total_latency_ms
 
+        retrieval_mode_actual = "lexical" if (fallback_to_lexical and not semantic_candidates) else target_mode
+
         diagnostics = {
             "retrieval_mode": target_mode,
+            "retrieval_mode_actual": retrieval_mode_actual,
+            "fallback_to_lexical": fallback_to_lexical,
+            "embedding_error": embedding_error,
             "vector_store": target_store_type,
             "embedding_provider": emb_provider_name if target_mode != "lexical" else "none",
             "embedding_model": emb_model if target_mode != "lexical" else "none",

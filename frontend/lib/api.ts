@@ -1,4 +1,42 @@
-export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+export function getApiBase(): string {
+  // 1. Explicitly configured production / environment backend URL
+  const explicitUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL;
+  if (explicitUrl && explicitUrl.trim()) {
+    return explicitUrl.trim().replace(/\/+$/, "");
+  }
+
+  // 2. Client-side browser execution (Local & LAN development fallback)
+  if (typeof window !== "undefined" && window.location) {
+    const { protocol, hostname } = window.location;
+    const isLocalhost =
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "[::1]" ||
+      hostname.startsWith("192.168.") ||
+      hostname.startsWith("10.") ||
+      hostname.startsWith("172.16.") ||
+      hostname.endsWith(".local");
+
+    // Preserve the current protocol (http/https) and map to backend port 8000 for local/LAN
+    if (isLocalhost || process.env.NODE_ENV !== "production") {
+      return `${protocol}//${hostname}:8000`;
+    }
+
+    // Fail closed in production with clear diagnostic rather than silently calling localhost
+    throw new Error(
+      "[Configuration Error] NEXT_PUBLIC_API_BASE_URL is not configured for production. " +
+      "Please set NEXT_PUBLIC_API_BASE_URL to your deployed backend URL."
+    );
+  }
+
+  // 3. Server-side rendering (SSR) fallback (safe for Next.js build prerendering)
+  if (process.env.NODE_ENV === "production") {
+    return "";
+  }
+  return "http://127.0.0.1:8000";
+}
+
+export const API_BASE = typeof window !== "undefined" ? getApiBase() : (process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000");
 export const API_V1 = `${API_BASE}/api/v1`;
 
 export interface WorkspaceSummary {
@@ -606,15 +644,156 @@ export interface EmbeddingJobItem {
   completed_at?: string | null;
 }
 
+export interface EvalDatasetItem {
+  id: string;
+  dataset_id: string;
+  question: string;
+  expected_answer?: string | null;
+  expected_chunk_ids: string[];
+  is_unanswerable: boolean;
+  is_adversarial: boolean;
+  item_metadata: Record<string, any>;
+  created_at: string;
+}
+
+export interface EvalDataset {
+  id: string;
+  tenant_id: string;
+  name: string;
+  description?: string | null;
+  version: number;
+  is_system: boolean;
+  item_count: number;
+  created_by?: string | null;
+  created_at: string;
+  updated_at: string;
+  items?: EvalDatasetItem[];
+}
+
+export interface EvalRunResult {
+  id: string;
+  run_id: string;
+  item_id: string;
+  question?: string | null;
+  expected_answer?: string | null;
+  generated_answer?: string | null;
+  retrieved_chunks: Array<{ chunk_id: string; document_name: string; score: number; content: string }>;
+  citations: Array<{ chunk_id: string; document_name: string }>;
+  recall_score: number;
+  mrr_score: number;
+  faithfulness_score: number;
+  citation_score: number;
+  latency_ms: number;
+  error_message?: string | null;
+  created_at: string;
+}
+
+export interface EvalRun {
+  id: string;
+  tenant_id: string;
+  assistant_id: string;
+  dataset_id: string;
+  status: string;
+  eval_type: string;
+  judge_provider?: string | null;
+  judge_model?: string | null;
+  metrics_summary: {
+    total_items?: number;
+    mean_recall_at_5?: number;
+    mean_mrr?: number;
+    mean_faithfulness?: number;
+    mean_citation_score?: number;
+    mean_latency_ms?: number;
+    unanswerable_tested?: number;
+    adversarial_tested?: number;
+    error?: string;
+    [key: string]: any;
+  };
+  created_by?: string | null;
+  created_at: string;
+  completed_at?: string | null;
+  result_count: number;
+  results?: EvalRunResult[];
+}
+
+export interface EvalRunComparison {
+  run_a_id: string;
+  run_b_id: string;
+  assistant_id: string;
+  metrics_delta: {
+    recall_delta: number;
+    mrr_delta: number;
+    faithfulness_delta: number;
+    citation_delta: number;
+    latency_delta_ms: number;
+  };
+  summary_a: Record<string, any>;
+  summary_b: Record<string, any>;
+}
+
+export interface TraceSpanItem {
+  span_id: string;
+  name: string;
+  duration_ms?: number | null;
+  status: string;
+  attributes: Record<string, any>;
+  error?: string | null;
+}
+
+export interface AssistantTraceItem {
+  trace_id: string;
+  tenant_id: string;
+  assistant_id: string;
+  assistant_name: string;
+  conversation_id: string;
+  traffic_type: string;
+  status: string;
+  created_at: string;
+  total_duration_ms?: number | null;
+  ttft_ms?: number | null;
+  provider?: string | null;
+  model?: string | null;
+  credential_source: string;
+  retrieval_mode?: string | null;
+  retrieved_chunk_count: number;
+  citation_count: number;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  error?: string | null;
+  span_count: number;
+  spans?: TraceSpanItem[];
+}
+
+export interface ObservabilityMetrics {
+  total_requests: number;
+  error_rate: number;
+  avg_latency_ms: number;
+  p95_latency_ms: number;
+  avg_ttft_ms: number;
+  total_tokens: number;
+  by_status: Record<string, number>;
+  by_traffic_type: Record<string, number>;
+  by_provider: Record<string, number>;
+}
+
 class ApiClient {
-  private getToken(): string | null {
+  public getToken(): string | null {
     if (typeof window === "undefined") return null;
-    return localStorage.getItem("mmaip_token");
+    return localStorage.getItem("mmaip_token") || localStorage.getItem("token");
   }
 
-  private getActiveTenantId(): string | null {
+  public getActiveTenantId(): string | null {
     if (typeof window === "undefined") return null;
     return localStorage.getItem("mmaip_active_tenant_id");
+  }
+
+  public getApiBase(): string {
+    return getApiBase();
+  }
+
+  public getApiV1(): string {
+    return `${this.getApiBase()}/api/v1`;
   }
 
   private async request<T>(
@@ -641,7 +820,7 @@ class ApiClient {
       headers["X-Tenant-ID"] = tenantId;
     }
 
-    const response = await fetch(`${API_V1}${endpoint}`, {
+    const response = await fetch(`${this.getApiV1()}${endpoint}`, {
       ...options,
       headers,
     });
@@ -773,6 +952,16 @@ class ApiClient {
 
   async getKnowledgeBase(id: string): Promise<KnowledgeBaseItem> {
     return this.request<KnowledgeBaseItem>(`/knowledge/${id}`, { method: "GET" }, true);
+  }
+
+  async updateKnowledgeBase(
+    id: string,
+    payload: { name?: string; description?: string; status?: string }
+  ): Promise<KnowledgeBaseItem> {
+    return this.request<KnowledgeBaseItem>(`/knowledge/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }, true);
   }
 
   async deleteKnowledgeBase(id: string): Promise<void> {
@@ -1063,10 +1252,10 @@ class ApiClient {
     onEvent: (event: string, data: any) => void,
     signal?: AbortSignal
   ): Promise<void> {
-    const token = typeof window !== "undefined" ? localStorage.getItem("mmaip_token") : null;
-    const tenantId = typeof window !== "undefined" ? localStorage.getItem("mmaip_active_tenant_id") : null;
+    const token = this.getToken();
+    const tenantId = this.getActiveTenantId();
 
-    const res = await fetch(`${API_V1}/assistants/preview-test`, {
+    const res = await fetch(`${this.getApiV1()}/assistants/preview-test`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -1132,6 +1321,16 @@ class ApiClient {
 
   async deleteConversation(conversationId: string): Promise<void> {
     await this.request<void>(`/conversations/${conversationId}`, { method: "DELETE" }, true);
+  }
+
+  async updateConversation(
+    conversationId: string,
+    payload: { title?: string; status?: string }
+  ): Promise<ConversationItem> {
+    return this.request<ConversationItem>(`/conversations/${conversationId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }, true);
   }
 
   async listMessages(conversationId: string): Promise<MessageItem[]> {
@@ -1247,7 +1446,7 @@ class ApiClient {
     if (token) headers["Authorization"] = `Bearer ${token}`;
     if (activeTenantId) headers["X-Tenant-ID"] = activeTenantId;
 
-    const res = await fetch(`${API_V1}/conversations/${conversationId}/messages/stream`, {
+    const res = await fetch(`${this.getApiV1()}/conversations/${conversationId}/messages/stream`, {
       method: "POST",
       headers,
       body: JSON.stringify({ content }),
@@ -1358,6 +1557,89 @@ class ApiClient {
     });
   }
 
+  // AI Evaluation & Benchmarking (M09)
+  async listEvalDatasets(): Promise<EvalDataset[]> {
+    return this.request<EvalDataset[]>("/evaluations/datasets");
+  }
+
+  async getEvalDataset(id: string): Promise<EvalDataset> {
+    return this.request<EvalDataset>(`/evaluations/datasets/${id}`);
+  }
+
+  async createEvalDataset(payload: {
+    name: string;
+    description?: string;
+    items?: Array<{
+      question: string;
+      expected_answer?: string;
+      expected_chunk_ids?: string[];
+      is_unanswerable?: boolean;
+      is_adversarial?: boolean;
+      item_metadata?: Record<string, any>;
+    }>;
+  }): Promise<EvalDataset> {
+    return this.request<EvalDataset>("/evaluations/datasets", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async seedStarterBenchmarks(): Promise<EvalDataset[]> {
+    return this.request<EvalDataset[]>("/evaluations/datasets/seed-starter", {
+      method: "POST",
+    });
+  }
+
+  async listEvalRuns(assistantId?: string): Promise<EvalRun[]> {
+    const url = assistantId ? `/evaluations/runs?assistant_id=${assistantId}` : "/evaluations/runs";
+    return this.request<EvalRun[]>(url);
+  }
+
+  async getEvalRun(runId: string): Promise<EvalRun> {
+    return this.request<EvalRun>(`/evaluations/runs/${runId}`);
+  }
+
+  async triggerEvalRun(payload: {
+    assistant_id: string;
+    dataset_id: string;
+    eval_type?: string;
+    judge_provider?: string;
+    judge_model?: string;
+  }): Promise<EvalRun> {
+    return this.request<EvalRun>("/evaluations/runs", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async compareEvalRuns(runIdA: string, runIdB: string): Promise<EvalRunComparison> {
+    return this.request<EvalRunComparison>(`/evaluations/runs/${runIdA}/compare/${runIdB}`);
+  }
+
+  // Platform Observability & Tracing (M09)
+  async listTraces(params?: {
+    assistant_id?: string;
+    status?: string;
+    traffic_type?: string;
+    limit?: number;
+  }): Promise<AssistantTraceItem[]> {
+    const q = new URLSearchParams();
+    if (params?.assistant_id) q.set("assistant_id", params.assistant_id);
+    if (params?.status) q.set("status", params.status);
+    if (params?.traffic_type) q.set("traffic_type", params.traffic_type);
+    if (params?.limit) q.set("limit", String(params.limit));
+    const qs = q.toString() ? `?${q.toString()}` : "";
+    return this.request<AssistantTraceItem[]>(`/observability/traces${qs}`);
+  }
+
+  async getTraceDetail(traceId: string): Promise<AssistantTraceItem> {
+    return this.request<AssistantTraceItem>(`/observability/traces/${traceId}`);
+  }
+
+  async getObservabilityMetrics(): Promise<ObservabilityMetrics> {
+    return this.request<ObservabilityMetrics>("/observability/metrics");
+  }
+
   // Public Chat Endpoints (Zero Auth / Anonymous Visitor)
   async getPublicAssistant(publicId: string): Promise<PublicAssistantMetadata> {
     const res = await fetch(`${API_V1}/public/assistants/${publicId}`);
@@ -1389,7 +1671,7 @@ class ApiClient {
       onError?: (error: string) => void;
     }
   ): Promise<void> {
-    const res = await fetch(`${API_V1}/public/assistants/${publicId}/chat`, {
+    const res = await fetch(`${this.getApiV1()}/public/assistants/${publicId}/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
