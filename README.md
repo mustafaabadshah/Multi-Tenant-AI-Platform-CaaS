@@ -380,7 +380,7 @@ API documentation and OpenAPI output are disabled in staging. Health and readine
 
 ## Screenshots
 
-The screenshots show the private staging workspace using synthetic data only. They are being captured separately into `docs/assets/screenshots/`; the links below are the planned set, and any missing image will be removed when the capture set is finalized.
+The screenshots below show the private staging workspace using synthetic data only.
 
 | Login | Dashboard |
 |---|---|
