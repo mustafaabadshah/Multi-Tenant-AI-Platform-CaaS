@@ -10,6 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.assistant import Assistant
 from app.services.publishing_service import is_origin_allowed
 
+pytestmark = pytest.mark.usefixtures("enable_public_features")
+
 
 def _raw(domains: list[str]) -> str:
     return json.dumps(domains)

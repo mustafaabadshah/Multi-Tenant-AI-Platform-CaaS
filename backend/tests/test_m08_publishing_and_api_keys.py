@@ -11,6 +11,8 @@ from app.models.assistant import Assistant, AssistantKnowledgeBase
 from app.models.knowledge import Document, DocumentChunk, KnowledgeBase
 from app.models.publishing import APIKey
 
+pytestmark = pytest.mark.usefixtures("enable_public_features")
+
 
 async def _create_test_assistant(db: AsyncSession, tenant_id: uuid.UUID, name: str = "Test Assistant") -> Assistant:
     asst = Assistant(

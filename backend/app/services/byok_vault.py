@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.crypto import decrypt_secret, encrypt_secret, mask_secret
 from app.llm.base import LLMConfig
+from app.llm.endpoint_validation import validate_custom_provider_endpoint
 from app.llm.registry import get_llm_registry
 from app.models.provider import ProviderCredential
 
@@ -52,6 +53,14 @@ class BYOKVaultService:
     ) -> ProviderCredential:
         """Encrypt and store a provider credential."""
         p_name = provider_name.strip().lower()
+        # Reject tenant-supplied custom endpoints before any HTTP request or
+        # persistence occurs. Official providers omit base_url and use their
+        # built-in public endpoints.
+        validated_base_url = (
+            validate_custom_provider_endpoint(base_url.strip())
+            if base_url and base_url.strip()
+            else None
+        )
         encrypted = encrypt_secret(api_key.strip())
         masked = mask_secret(api_key.strip())
 
@@ -72,7 +81,7 @@ class BYOKVaultService:
             display_name=display_name.strip(),
             encrypted_api_key=encrypted,
             api_key_masked=masked,
-            base_url=base_url.strip() if base_url else None,
+            base_url=validated_base_url,
             is_active=True,
             is_default=is_default,
             status="HEALTHY",
@@ -92,6 +101,18 @@ class BYOKVaultService:
         if not cred:
             return False, "Credential not found"
 
+        try:
+            validated_base_url = (
+                validate_custom_provider_endpoint(cred.base_url)
+                if cred.base_url
+                else None
+            )
+        except ValueError as exc:
+            cred.status = "UNHEALTHY"
+            cred.error_message = str(exc)
+            await self.session.commit()
+            return False, str(exc)
+
         plaintext_key = decrypt_secret(cred.encrypted_api_key)
         if not plaintext_key:
             cred.status = "UNHEALTHY"
@@ -105,7 +126,7 @@ class BYOKVaultService:
             cfg = LLMConfig(
                 provider=cred.provider_name,
                 api_key=plaintext_key,
-                base_url=cred.base_url,
+                base_url=validated_base_url,
                 timeout_seconds=10,
             )
             is_valid = await provider.validate_key(cfg)

@@ -5,6 +5,27 @@ import uuid
 from abc import ABC, abstractmethod
 
 
+class StorageError(Exception):
+    """Base class for storage provider failures.
+
+    Providers raise a subclass instead of swallowing provider errors or
+    converting arbitrary exceptions into "not found" results.
+    """
+
+
+class StorageNotFoundError(StorageError):
+    """The requested object does not exist in the storage backend."""
+
+
+class StorageUnavailableError(StorageError):
+    """The storage backend could not be used safely.
+
+    Raised for authentication/authorization failures, network or timeout
+    errors, throttling, and provider-side 5xx responses. Callers must treat
+    the object state as unknown rather than absent.
+    """
+
+
 def sanitize_filename(filename: str) -> str:
     """Sanitize user-provided filename to prevent path traversal or unsafe characters."""
     # Strip directory components

@@ -1,4 +1,4 @@
-﻿"""Standalone background ingestion worker process.
+"""Standalone background ingestion worker process.
 
 Jobs are claimed atomically through ``claim_next_job`` before execution, so
 multiple worker processes (or a worker plus the API dispatcher) cannot process
@@ -13,7 +13,11 @@ import signal
 from app.core.config import settings
 from app.database.session import async_session_factory
 from app.models.knowledge import IngestionJob
-from app.services.ingestion.job_queue import claim_next_job, recover_stale_jobs
+from app.services.ingestion.job_queue import (
+    claim_next_job,
+    get_ingestion_semaphore,
+    recover_stale_jobs,
+)
 from app.services.ingestion.service import IngestionService
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -61,15 +65,16 @@ class IngestionWorker:
         if job_id is None:
             return
 
-        async with async_session_factory() as session:
-            job = await session.get(IngestionJob, job_id)
-            if job is None:
-                logger.error("Claimed ingestion job disappeared before execution: %s", job_id)
-                return
+        async with get_ingestion_semaphore():
+            async with async_session_factory() as session:
+                job = await session.get(IngestionJob, job_id)
+                if job is None:
+                    logger.error("Claimed ingestion job disappeared before execution: %s", job_id)
+                    return
 
-            service = IngestionService(session, job.tenant_id)
-            logger.info("Worker claimed job %s for tenant %s", job_id, job.tenant_id)
-            await service.execute_job(job_id, claimed=True)
+                service = IngestionService(session, job.tenant_id)
+                logger.info("Worker claimed job %s for tenant %s", job_id, job.tenant_id)
+                await service.execute_job(job_id, claimed=True)
 
 
 def main() -> None:

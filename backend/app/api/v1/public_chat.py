@@ -1,8 +1,10 @@
 """Public Assistant Web Chat, Embed Widget Configuration, and Streaming Inference Endpoints."""
 
+import json
 import logging
 import uuid
 from typing import Optional
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from fastapi.responses import StreamingResponse
@@ -18,12 +20,87 @@ from app.schemas.publishing import (
     PublicAssistantMetadataResponse,
     PublicChatRequest,
 )
-from app.services.publishing_service import PublishingService, is_origin_allowed
+from app.services.publishing_service import (
+    PublishingService,
+    ensure_public_publishing_enabled,
+    is_origin_allowed,
+    public_publishing_enabled,
+)
 from app.services.quota_service import QuotaService
 
 logger = logging.getLogger("mmaip.api.public_chat")
 
 router = APIRouter(prefix="/public", tags=["Public Assistant & Embed Widget"])
+
+
+def _embed_frontend_origin() -> str | None:
+    """Resolve the frontend origin used by the embed loader.
+
+    Returns None (inert loader, no inference) when public publishing is
+    disabled, FRONTEND_URL is missing or malformed, or a non-development
+    environment is not served over HTTPS. There is deliberately no fallback to
+    the backend script origin or to localhost.
+    """
+    if not public_publishing_enabled():
+        return None
+
+    raw = (settings.FRONTEND_URL or "").strip().rstrip("/")
+    if not raw:
+        return None
+
+    try:
+        parsed = urlparse(raw)
+        port = parsed.port
+    except (TypeError, ValueError):
+        return None
+
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return None
+    if parsed.username or parsed.password:
+        return None
+    if port is not None and not 1 <= port <= 65535:
+        return None
+
+    is_dev = (settings.ENVIRONMENT or "").strip().lower() == "development"
+    if not is_dev:
+        host = (parsed.hostname or "").strip(".").lower()
+        if parsed.scheme != "https" or host in {"localhost", "127.0.0.1", "::1"}:
+            return None
+
+    return raw
+
+
+_INERT_EMBED_SCRIPT = """/* Embed loader unavailable: public publishing is disabled or FRONTEND_URL is not a valid HTTPS origin for this environment. */
+"""
+
+_EMBED_SCRIPT_TEMPLATE = """(function() {
+  var scriptTag = document.currentScript || document.querySelector('script[data-assistant]');
+  if (!scriptTag) return;
+  var publicId = scriptTag.getAttribute('data-assistant');
+  if (!publicId) return;
+
+  var embedBase = __EMBED_BASE__;
+
+  var container = document.createElement('div');
+  container.id = 'mmaip-widget-container';
+  container.style.position = 'fixed';
+  container.style.bottom = '20px';
+  container.style.right = '20px';
+  container.style.zIndex = '999999';
+
+  var iframe = document.createElement('iframe');
+  iframe.src = embedBase + '/embed/' + encodeURIComponent(publicId);
+  iframe.style.width = '400px';
+  iframe.style.height = '620px';
+  iframe.style.border = 'none';
+  iframe.style.borderRadius = '16px';
+  iframe.style.boxShadow = '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)';
+  iframe.style.display = 'block';
+  iframe.setAttribute('allow', 'clipboard-write');
+
+  container.appendChild(iframe);
+  document.body.appendChild(container);
+})();"""
 
 
 @router.get("/assistants/{public_id}", response_model=PublicAssistantMetadataResponse)
@@ -32,6 +109,13 @@ async def get_public_assistant_metadata(
     db: AsyncSession = Depends(get_db),
 ) -> PublicAssistantMetadataResponse:
     """Fetch public metadata for an active published assistant."""
+    if not public_publishing_enabled():
+        logger.warning("Blocked public metadata request: PUBLIC_PUBLISHING_ENABLED is disabled")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Assistant publication not found or expired",
+        )
+
     svc = PublishingService(db, uuid.UUID(int=0))
     res = await svc.get_by_public_id(public_id)
     if not res:
@@ -68,6 +152,9 @@ async def public_chat_stream(
     db: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
     """Stream chat responses for public web and embedded widget visitors."""
+    # Global kill switch must reject before session creation, quota checks, or LLM calls.
+    ensure_public_publishing_enabled("public chat request")
+
     # Rate limit before quota checks and anonymous session creation so rotating
     # session tokens cannot create unlimited sessions or provider calls.
     await enforce_rate_limit(
@@ -174,6 +261,13 @@ async def get_embed_config(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Fetch configuration required by the embed widget."""
+    if not public_publishing_enabled():
+        logger.warning("Blocked embed config request: PUBLIC_PUBLISHING_ENABLED is disabled")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Embed configuration not found",
+        )
+
     metadata = await get_public_assistant_metadata(public_id, db=db)
     frontend_base = settings.FRONTEND_URL.rstrip("/")
     backend_base = settings.BACKEND_URL.rstrip("/")
@@ -189,33 +283,10 @@ async def get_embed_config(
 
 @router.get("/embed.js")
 async def get_embed_script() -> Response:
-    """Serve the lightweight JavaScript embed loader script."""
-    js_code = """(function() {
-  var scriptTag = document.currentScript || document.querySelector('script[data-assistant]');
-  if (!scriptTag) return;
-  var publicId = scriptTag.getAttribute('data-assistant');
-  if (!publicId) return;
-
-  var hostUrl = scriptTag.src ? new URL(scriptTag.src).origin : window.location.origin;
-
-  var container = document.createElement('div');
-  container.id = 'mmaip-widget-container';
-  container.style.position = 'fixed';
-  container.style.bottom = '20px';
-  container.style.right = '20px';
-  container.style.zIndex = '999999';
-
-  var iframe = document.createElement('iframe');
-  iframe.src = hostUrl + '/embed/' + publicId;
-  iframe.style.width = '400px';
-  iframe.style.height = '620px';
-  iframe.style.border = 'none';
-  iframe.style.borderRadius = '16px';
-  iframe.style.boxShadow = '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)';
-  iframe.style.display = 'block';
-  iframe.setAttribute('allow', 'clipboard-write');
-
-  container.appendChild(iframe);
-  document.body.appendChild(container);
-})();"""
+    """Serve the embed loader, inert unless publishing and a safe origin are configured."""
+    frontend_origin = _embed_frontend_origin()
+    if frontend_origin is None:
+        js_code = _INERT_EMBED_SCRIPT
+    else:
+        js_code = _EMBED_SCRIPT_TEMPLATE.replace("__EMBED_BASE__", json.dumps(frontend_origin))
     return Response(content=js_code, media_type="application/javascript")

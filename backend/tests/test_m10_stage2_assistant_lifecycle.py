@@ -40,6 +40,8 @@ from app.repositories.user_repository import UserRepository
 from app.retrieval.service import SearchResponse
 from app.vectorstores.base import VectorSearchResult
 
+pytestmark = pytest.mark.usefixtures("enable_public_features")
+
 
 @pytest.mark.asyncio
 async def test_01_individual_assistant_creation(

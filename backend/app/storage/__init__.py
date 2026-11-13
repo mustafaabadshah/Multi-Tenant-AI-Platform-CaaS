@@ -3,7 +3,13 @@
 from functools import lru_cache
 
 from app.core.config import Settings, settings
-from app.storage.base import StorageProvider, sanitize_filename
+from app.storage.base import (
+    StorageError,
+    StorageNotFoundError,
+    StorageProvider,
+    StorageUnavailableError,
+    sanitize_filename,
+)
 from app.storage.local import LocalStorageProvider
 from app.storage.s3 import S3StorageProvider
 
@@ -61,7 +67,10 @@ def get_storage_provider() -> StorageProvider:
 
 
 __all__ = [
+    "StorageError",
+    "StorageNotFoundError",
     "StorageProvider",
+    "StorageUnavailableError",
     "LocalStorageProvider",
     "S3StorageProvider",
     "get_storage_provider",

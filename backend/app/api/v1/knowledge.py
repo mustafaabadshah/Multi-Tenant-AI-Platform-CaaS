@@ -30,6 +30,7 @@ from app.schemas.retrieval import (
     RetrievalConfigRead,
     RetrievalConfigUpdate,
 )
+from app.services.ingestion.limits import UploadTooLargeError, read_upload_bounded
 from app.services.ingestion.service import IngestionService, run_ingestion_in_background
 
 router = APIRouter(prefix="/knowledge", tags=["Knowledge Base Foundation"])
@@ -277,7 +278,19 @@ async def upload_documents(
 
     for upload_file in files:
         filename = upload_file.filename or f"uploaded_{uuid.uuid4().hex[:8]}"
-        content = await upload_file.read()
+
+        # Stream one file at a time with a hard byte budget. The whole request
+        # is never materialized at once and nothing is stored or parsed for a
+        # file that exceeds the limit.
+        try:
+            content = await read_upload_bounded(upload_file, settings.MAX_FILE_SIZE_BYTES)
+        except UploadTooLargeError as err:
+            raise HTTPException(
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                detail=str(err),
+            )
+        finally:
+            await upload_file.close()
 
         try:
             doc, job, is_dup = await service.upload_document(

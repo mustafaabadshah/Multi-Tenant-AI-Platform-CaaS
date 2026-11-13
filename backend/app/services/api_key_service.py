@@ -12,6 +12,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.models.publishing import APIKey
 from app.models.tenant import Tenant
 from app.schemas.publishing import APIKeyCreate
@@ -21,6 +22,22 @@ logger = logging.getLogger("mmaip.services.api_key")
 DEFAULT_SCOPES = ["assistant:read", "assistant:chat"]
 VALID_SCOPES = {"assistant:read", "assistant:chat", "assistant:eval", "knowledge:read"}
 KEY_PREFIX = "mmaip_live_"
+
+
+def developer_api_enabled() -> bool:
+    """Return whether the developer API is enabled (read dynamically)."""
+    return bool(settings.DEVELOPER_API_ENABLED)
+
+
+def ensure_developer_api_enabled() -> None:
+    """Reject developer API operations when the global kill switch is disabled."""
+    if developer_api_enabled():
+        return
+    logger.warning("Blocked developer API request: DEVELOPER_API_ENABLED is disabled")
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Developer API is disabled",
+    )
 
 
 def hash_api_key(raw_key: str) -> str:
@@ -45,6 +62,7 @@ class APIKeyService:
         Returns (APIKey model record, raw_key string).
         The raw_key is only returned ONCE to the caller.
         """
+        ensure_developer_api_enabled()
         if not self.tenant_id:
             raise ValueError("Tenant ID is required to generate an API key")
 
@@ -94,6 +112,7 @@ class APIKeyService:
 
         Returns (APIKey, Tenant).
         """
+        ensure_developer_api_enabled()
         cleaned_key = raw_key.strip()
         if not cleaned_key.startswith(KEY_PREFIX):
             raise HTTPException(

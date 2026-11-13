@@ -6,6 +6,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from fastapi.responses import StreamingResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import TenantContext, get_db, require_permission
@@ -25,7 +26,7 @@ from app.schemas.publishing import (
     APIKeyResponse,
     DeveloperChatRequest,
 )
-from app.services.api_key_service import APIKeyService
+from app.services.api_key_service import APIKeyService, ensure_developer_api_enabled
 
 router = APIRouter(prefix="/developer", tags=["Developer Platform & APIs"])
 
@@ -73,6 +74,7 @@ async def create_api_key(
     db: AsyncSession = Depends(get_db),
 ) -> APIKeyCreatedResponse:
     """Generate a new scoped developer API key. The secret token is returned ONLY ONCE."""
+    ensure_developer_api_enabled()
     svc = APIKeyService(db, ctx.tenant.id)
     key_record, raw_key = await svc.generate_api_key(payload, user_id=ctx.membership.user_id)
     serialized = _serialize_api_key(key_record)
@@ -108,6 +110,7 @@ def require_developer_api_key(required_scope: Optional[str] = None):
         db: AsyncSession = Depends(get_db),
     ) -> tuple[APIKey, Tenant]:
         """Dependency validating developer Bearer API keys with optional scope requirement."""
+        ensure_developer_api_enabled()
         if not authorization or not authorization.startswith("Bearer "):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -151,6 +154,7 @@ async def developer_chat_stream(
     db: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
     """Stream chat responses programmatically using scoped Developer API key."""
+    ensure_developer_api_enabled()
     api_key, tenant = auth_data
 
     # Per-API-key limit; the key id is an opaque identifier, not the raw secret.
@@ -176,9 +180,22 @@ async def developer_chat_stream(
             detail=f"Assistant {assistant_id} not found in authorized organization",
         )
 
-    # Resolve or create conversation
+    # Resolve or create conversation. Supplied IDs must belong to this tenant,
+    # this path assistant, and (when the key carries a creator) this user.
     conv_id = payload.conversation_id
-    if not conv_id:
+    if conv_id:
+        conv_stmt = select(Conversation).where(
+            Conversation.id == conv_id,
+            Conversation.tenant_id == tenant.id,
+            Conversation.assistant_id == asst.id,
+        )
+        conv = (await db.execute(conv_stmt)).scalar_one_or_none()
+        if not conv or (api_key.user_id is not None and conv.user_id != api_key.user_id):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Conversation not found in authorized organization",
+            )
+    else:
         conv_id = uuid.uuid4()
         conv = Conversation(
             id=conv_id,
@@ -202,6 +219,8 @@ async def developer_chat_stream(
         user_message=payload.message,
         is_public=False,
         traffic_type="developer_api",
+        expected_assistant_id=asst.id,
+        require_conversation_owner=api_key.user_id is not None,
     )
 
     return StreamingResponse(

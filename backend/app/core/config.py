@@ -17,6 +17,13 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Multi-Tenant AI Platform-CaaS"
     API_V1_STR: str = "/api/v1"
 
+    # Feature gates (default-off; opt in explicitly per environment)
+    PUBLIC_PUBLISHING_ENABLED: bool = False
+    DEVELOPER_API_ENABLED: bool = False
+    CUSTOM_PROVIDER_ENDPOINTS_ENABLED: bool = False
+    # None = derive from ENVIRONMENT (docs enabled only in development).
+    ENABLE_API_DOCS: bool | None = None
+
     FRONTEND_URL: str = "http://localhost:3000"
     BACKEND_URL: str = "http://localhost:8000"
     ALLOWED_ORIGINS: str = ""
@@ -66,9 +73,9 @@ class Settings(BaseSettings):
     S3_ACCESS_KEY_ID: str | None = None
     S3_SECRET_ACCESS_KEY: str | None = None
     S3_REGION_NAME: str = "us-east-1"
-    MAX_FILE_SIZE_BYTES: int = 50 * 1024 * 1024  # 50 MB
-    MAX_FILES_PER_REQUEST: int = 10
-    MAX_EXTRACTED_TEXT_SIZE_BYTES: int = 20 * 1024 * 1024  # 20 MB
+    MAX_FILE_SIZE_BYTES: int = 10 * 1024 * 1024  # 10 MiB
+    MAX_FILES_PER_REQUEST: int = 2
+    MAX_EXTRACTED_TEXT_SIZE_BYTES: int = 5 * 1024 * 1024  # 5 MiB
     MAX_ARCHIVE_EXPANSION_BYTES: int = 100 * 1024 * 1024  # 100 MB
     MAX_PROCESSING_DURATION_SECONDS: int = 600
     MAX_DOCUMENT_PAGES: int = 1000
@@ -135,6 +142,18 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+def api_docs_enabled(app_settings: Settings) -> bool:
+    """Return whether API documentation endpoints should be exposed."""
+    if app_settings.ENABLE_API_DOCS is not None:
+        return app_settings.ENABLE_API_DOCS
+    return (app_settings.ENVIRONMENT or "").strip().lower() == "development"
+
+
+def should_initialize_schema(app_settings: Settings) -> bool:
+    """Return whether startup should create missing tables (development only)."""
+    return app_settings.ENVIRONMENT == "development"
 
 
 def registration_allowed(cfg: Settings) -> bool:

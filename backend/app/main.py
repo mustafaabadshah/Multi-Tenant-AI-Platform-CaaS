@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -7,12 +8,14 @@ from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import api_v1_router
-from app.core.config import Settings, settings
+from app.core.config import Settings, api_docs_enabled, settings, should_initialize_schema
 from app.core.cors import build_cors_policy
 from app.database.session import async_session_maker, check_db_connection, engine
 from app.models import Base
 from app.repositories.role_repository import RoleRepository
 from app.schemas.health import HealthResponse, ReadinessResponse
+
+logger = logging.getLogger("mmaip.main")
 
 
 @asynccontextmanager
@@ -27,8 +30,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Startup: ensure tables exist if running on sqlite/local dev, and seed system roles
     try:
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+        if should_initialize_schema(settings):
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
 
         async with async_session_maker() as session:
             role_repo = RoleRepository(session)
@@ -110,13 +114,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 def create_app(app_settings: Settings = settings) -> FastAPI:
     """Application factory with centralized, environment-aware CORS policy."""
+    # API docs are development-only by default; ENABLE_API_DOCS overrides the
+    # environment-derived default. When disabled the routes are never mounted.
+    docs_enabled = api_docs_enabled(app_settings)
     app = FastAPI(
         title=app_settings.PROJECT_NAME,
         description="Enterprise Multi-Tenant AI Knowledge & Chatbot Platform API",
         version="0.1.0",
         lifespan=lifespan,
-        docs_url="/docs",
-        redoc_url="/redoc",
+        docs_url="/docs" if docs_enabled else None,
+        redoc_url="/redoc" if docs_enabled else None,
+        openapi_url="/openapi.json" if docs_enabled else None,
     )
 
     # CORS configuration (centralized policy: explicit production origins,
@@ -134,7 +142,7 @@ def create_app(app_settings: Settings = settings) -> FastAPI:
 
     @app.get("/health", response_model=HealthResponse, tags=["System Health"])
     async def health_check() -> HealthResponse:
-        """Verifies that the application process is running and alive."""
+        """Liveness probe: confirms the process is running without touching the DB."""
         return HealthResponse(
             status="healthy",
             timestamp=datetime.now(UTC),
@@ -143,8 +151,19 @@ def create_app(app_settings: Settings = settings) -> FastAPI:
 
     @app.get("/ready", response_model=ReadinessResponse, tags=["System Health"])
     async def readiness_check() -> ReadinessResponse:
-        """Verifies database connectivity and readiness to serve traffic."""
-        is_ready = await check_db_connection()
+        """Readiness probe: verifies database connectivity.
+
+        This endpoint is public (no authentication). Each call performs a real
+        database round-trip, so external monitors hitting it wake an idle Neon
+        compute. Do not add in-app periodic polling against this route; rely on
+        the hosting platform health check instead.
+        """
+        try:
+            is_ready = await check_db_connection()
+        except Exception as exc:
+            # Never surface driver errors, DSNs, or stack details to the caller.
+            logger.warning("Readiness database probe failed: %s", type(exc).__name__)
+            is_ready = False
         if not is_ready:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

@@ -29,20 +29,20 @@ def test_render_blueprint_structure():
 
     # Simple YAML validation without requiring extra third-party libraries
     assert "services:" in content
-    assert "databases:" in content
 
-    # Verify Web Service specification
+    # M13 free-tier topology: Docker web service, external Neon database.
     assert "name: mmaip-backend" in content
     assert "type: web" in content
-    assert "rootDir: backend" in content
-    assert "buildCommand:" in content
-    assert "preDeployCommand: \"alembic upgrade head\"" in content
-    assert "startCommand:" in content
+    assert "runtime: docker" in content
+    assert "dockerfilePath: infrastructure/docker/backend.Dockerfile" in content
+    assert "dockerContext: backend" in content
+    assert "dockerCommand:" in content
+    assert "alembic upgrade head" in content
     assert "healthCheckPath: /health" in content
 
-    # Verify PostgreSQL specification
-    assert "name: mmaip-postgres" in content
-    assert "postgresMajorVersion: \"16\"" in content
+    # Postgres is external Neon; the blueprint intentionally defines no database.
+    assert "databases:" not in content
+    assert "Neon Free PostgreSQL 16" in content
 
     # Verify critical environment variable keys
     critical_env_vars = [

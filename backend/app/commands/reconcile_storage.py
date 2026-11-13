@@ -8,7 +8,9 @@ Usage:
 
 Dry-run is the default. ``--delete-orphans`` is ignored unless ``--fix`` is
 also supplied. The command never performs a cloud or cross-tenant deletion
-outside the explicitly scoped tenant prefix.
+outside the explicitly scoped tenant prefix. ``--fix`` refuses to run when the
+storage inventory is incomplete unless ``--allow-incomplete-inventory`` is
+explicitly supplied; even then orphan deletion remains disabled.
 """
 
 from __future__ import annotations
@@ -45,6 +47,14 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="With --fix, delete objects that have no DB reference in the scanned tenant.",
     )
     parser.add_argument(
+        "--allow-incomplete-inventory",
+        action="store_true",
+        help=(
+            "With --fix, apply only definitive per-object findings when the storage "
+            "inventory is incomplete. Orphan deletion remains disabled."
+        ),
+    )
+    parser.add_argument(
         "--tenant",
         type=uuid.UUID,
         default=None,
@@ -62,9 +72,26 @@ async def _run(args: argparse.Namespace) -> int:
             tenant_id=args.tenant,
             fix=bool(args.fix),
             delete_orphans=bool(args.delete_orphans),
+            allow_incomplete_inventory=bool(args.allow_incomplete_inventory),
         )
 
     print(json.dumps(report, indent=2, default=str))
+
+    if report.get("fix_refused"):
+        print(
+            "Reconciliation refused: storage inventory is incomplete; no documents "
+            "or objects were changed. Re-run with --allow-incomplete-inventory to "
+            "apply only definitive findings.",
+            file=sys.stderr,
+        )
+        return 2
+
+    cleanup = report.get("orphan_cleanup") or {}
+    if cleanup.get("requested") and not cleanup.get("performed"):
+        print(
+            f"NOTE: orphan deletion skipped ({cleanup.get('skipped_reason')}).",
+            file=sys.stderr,
+        )
     return 0
 
 
@@ -78,7 +105,7 @@ def main(argv: list[str] | None = None) -> None:
     try:
         exit_code = asyncio.run(_run(args))
     except Exception as exc:
-        print(f"Reconciliation failed: {type(exc).__name__}", file=sys.stderr)
+        print(f"Reconciliation failed: {type(exc).__name__}: {exc}", file=sys.stderr)
         exit_code = 1
     sys.exit(exit_code)
 

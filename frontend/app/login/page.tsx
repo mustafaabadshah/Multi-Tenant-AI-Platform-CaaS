@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
-import { Bot, Lock, Mail, ArrowRight, ShieldCheck, Sparkles } from "lucide-react";
+import { Bot, Lock, Mail, ArrowRight, ShieldCheck } from "lucide-react";
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -27,11 +27,6 @@ export default function LoginPage() {
     } finally {
       setSubmitting(false);
     }
-  };
-
-  const handleQuickFill = (demoEmail: string) => {
-    setEmail(demoEmail);
-    setPassword("Password123!");
   };
 
   return (
@@ -116,32 +111,6 @@ export default function LoginPage() {
               )}
             </button>
           </form>
-
-          {/* Quick Demo Pre-fills */}
-          <div className="mt-6 pt-5 border-t border-gray-100">
-            <p className="text-[11px] text-gray-500 font-medium uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-              Quick demo accounts:
-            </p>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <button
-                type="button"
-                onClick={() => handleQuickFill("owner_a@companya.com")}
-                className="p-2.5 rounded-xl bg-gray-50 border border-gray-200 hover:border-gray-300 hover:bg-gray-100/60 text-left transition"
-              >
-                <span className="font-semibold text-blue-600 block">Company A</span>
-                <span className="text-[11px] text-gray-500 truncate block">owner_a@companya.com</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickFill("owner_b@companyb.com")}
-                className="p-2.5 rounded-xl bg-gray-50 border border-gray-200 hover:border-gray-300 hover:bg-gray-100/60 text-left transition"
-              >
-                <span className="font-semibold text-purple-600 block">Company B</span>
-                <span className="text-[11px] text-gray-500 truncate block">owner_b@companyb.com</span>
-              </button>
-            </div>
-          </div>
 
           {/* Footer link */}
           <div className="mt-6 text-center">

@@ -12,11 +12,46 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.models.assistant import Assistant, AssistantVersion
 from app.models.publishing import AssistantPublication, PublicChatSession
 from app.schemas.publishing import AssistantPublicationCreate, AssistantPublicationUpdate
 
 logger = logging.getLogger("mmaip.services.publishing")
+
+
+def public_publishing_enabled() -> bool:
+    """Return whether externally served public publishing is enabled (read dynamically)."""
+    return bool(settings.PUBLIC_PUBLISHING_ENABLED)
+
+
+def ensure_public_publishing_enabled(action: str = "public publishing request") -> None:
+    """Reject public publishing operations when the global kill switch is disabled.
+
+    The setting is read at call time so configuration changes take effect
+    immediately without restarting the process.
+    """
+    if public_publishing_enabled():
+        return
+    logger.warning("Blocked %s: PUBLIC_PUBLISHING_ENABLED is disabled", action)
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Public publishing is disabled",
+    )
+
+
+def ensure_publication_change_allowed(visibility: Optional[str], is_active: Optional[bool]) -> None:
+    """Reject publish-state changes that enable public distribution while disabled.
+
+    Unpublishing (is_active=False), private/workspace visibility updates, and
+    unrelated metadata edits remain allowed so operators can always withdraw
+    public exposure during an incident.
+    """
+    if public_publishing_enabled():
+        return
+    wants_public_visibility = bool(visibility) and visibility.strip().upper() == "PUBLIC"
+    if wants_public_visibility or is_active is True:
+        ensure_public_publishing_enabled("publication enablement")
 
 
 def generate_opaque_public_id() -> str:
@@ -170,6 +205,7 @@ class PublishingService:
         user_id: Optional[uuid.UUID] = None,
     ) -> AssistantPublication:
         """Publish an assistant, setting public identifier and active state."""
+        ensure_public_publishing_enabled("assistant publish")
         pub = await self.get_or_create_publication(assistant_id)
 
         pub.visibility = payload.visibility.upper()
@@ -216,6 +252,7 @@ class PublishingService:
         payload: AssistantPublicationUpdate,
     ) -> AssistantPublication:
         """Update publication properties."""
+        ensure_publication_change_allowed(payload.visibility, payload.is_active)
         pub = await self.get_or_create_publication(assistant_id)
 
         if payload.visibility is not None:

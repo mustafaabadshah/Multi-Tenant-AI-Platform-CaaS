@@ -19,6 +19,8 @@ from app.core.rate_limit import (
 )
 from app.models.assistant import Assistant
 
+pytestmark = pytest.mark.usefixtures("enable_public_features")
+
 RATE_LIMIT_DETAIL = "Too many requests. Please try again later."
 
 

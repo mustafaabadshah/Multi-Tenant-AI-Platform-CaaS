@@ -29,6 +29,8 @@ from app.storage.s3 import S3StorageProvider
 from app.vectorstores.base import VectorStoreFilter
 from app.vectorstores.qdrant_store import QdrantVectorStore
 
+pytestmark = pytest.mark.usefixtures("enable_public_features")
+
 
 async def _create_test_assistant(db: AsyncSession, tenant_id: uuid.UUID, name: str = "Test Asst") -> Assistant:
     asst = Assistant(

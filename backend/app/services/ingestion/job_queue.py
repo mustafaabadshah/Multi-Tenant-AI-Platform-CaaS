@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 import uuid
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
@@ -24,6 +25,7 @@ from typing import Any
 from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.models.knowledge import (
     ChunkEmbedding,
     Document,
@@ -38,6 +40,37 @@ TERMINAL_JOB_STATUSES = frozenset({"COMPLETED", "FAILED", "CANCELLED"})
 LEASE_EXPIRED_CATEGORY = "LEASE_EXPIRED"
 MAX_RECOVERY_NOTES = 10
 _CLAIM_SELECTION_ATTEMPTS = 10
+
+_semaphore_guard = threading.Lock()
+_ingestion_semaphore: asyncio.Semaphore | None = None
+_ingestion_semaphore_limit: int | None = None
+_ingestion_semaphore_loop: asyncio.AbstractEventLoop | None = None
+
+
+def get_ingestion_semaphore() -> asyncio.Semaphore:
+    """Return the process-wide ingestion semaphore for the running loop.
+
+    Upload-triggered tasks, the inline dispatcher, and the standalone worker
+    all acquire this semaphore before parsing, so total concurrent ingestion
+    is bounded by ``settings.INGESTION_MAX_CONCURRENCY`` even when several
+    execution paths run in the same process. The semaphore is recreated when
+    the bound changes or the event loop differs (tests and reloads).
+    """
+    global _ingestion_semaphore, _ingestion_semaphore_limit, _ingestion_semaphore_loop
+
+    limit = max(1, int(settings.INGESTION_MAX_CONCURRENCY or 1))
+    loop = asyncio.get_running_loop()
+
+    with _semaphore_guard:
+        if (
+            _ingestion_semaphore is None
+            or _ingestion_semaphore_limit != limit
+            or _ingestion_semaphore_loop is not loop
+        ):
+            _ingestion_semaphore = asyncio.Semaphore(limit)
+            _ingestion_semaphore_limit = limit
+            _ingestion_semaphore_loop = loop
+        return _ingestion_semaphore
 
 
 def _utcnow() -> datetime:
@@ -423,18 +456,22 @@ async def _ensure_recoverable(session_factory: Callable[[], Any], job_id: uuid.U
 
 async def _execute_claimed_job(session_factory: Callable[[], Any], job_id: uuid.UUID) -> None:
     try:
-        async with session_factory() as session:
-            job = await session.get(IngestionJob, job_id)
-            if job is None:
-                logger.error("Claimed ingestion job disappeared before execution: %s", job_id)
-                return
+        # The shared semaphore bounds dispatcher execution together with
+        # upload-triggered background tasks in this process. A job stays
+        # claimed while a slot waits, so the durable lease still applies.
+        async with get_ingestion_semaphore():
+            async with session_factory() as session:
+                job = await session.get(IngestionJob, job_id)
+                if job is None:
+                    logger.error("Claimed ingestion job disappeared before execution: %s", job_id)
+                    return
 
-            # Local import avoids a module cycle: service imports the queue
-            # helpers for its own claim guard.
-            from app.services.ingestion.service import IngestionService
+                # Local import avoids a module cycle: service imports the queue
+                # helpers for its own claim guard.
+                from app.services.ingestion.service import IngestionService
 
-            service = IngestionService(session, job.tenant_id)
-            await service.execute_job(job_id, claimed=True)
+                service = IngestionService(session, job.tenant_id)
+                await service.execute_job(job_id, claimed=True)
     except asyncio.CancelledError:
         raise
     except Exception as exc:

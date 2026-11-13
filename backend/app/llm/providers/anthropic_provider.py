@@ -19,6 +19,10 @@ from app.llm.base import (
     LLMStreamChunk,
     LLMTimeoutError,
 )
+from app.llm.endpoint_validation import (
+    validate_custom_provider_endpoint,
+    validate_provider_endpoint,
+)
 
 logger = logging.getLogger("mmaip.llm.anthropic")
 
@@ -38,6 +42,11 @@ class AnthropicLLMProvider(LLMProvider):
 
     def _resolve_api_key(self, config: LLMConfig) -> Optional[str]:
         return config.api_key or os.environ.get("ANTHROPIC_API_KEY")
+
+    def _resolve_base_url(self, config: LLMConfig) -> str:
+        if config.base_url:
+            return validate_custom_provider_endpoint(config.base_url)
+        return validate_provider_endpoint(self._default_base_url, allow_local=False)
 
     def _format_payload(self, messages: list[LLMMessage], config: LLMConfig, stream: bool = False) -> dict:
         system_parts = []
@@ -77,13 +86,13 @@ class AnthropicLLMProvider(LLMProvider):
         if not api_key:
             raise LLMAuthenticationError("Anthropic API key is required but not configured.")
 
-        base_url = config.base_url or self._default_base_url
+        base_url = self._resolve_base_url(config)
         url = f"{base_url.rstrip('/')}/messages"
         headers = self._get_headers(api_key)
         payload = self._format_payload(messages, config, stream=False)
 
         try:
-            async with httpx.AsyncClient(timeout=config.timeout_seconds) as client:
+            async with httpx.AsyncClient(timeout=config.timeout_seconds, follow_redirects=False) as client:
                 resp = await client.post(url, headers=headers, json=payload)
 
             if resp.status_code == 401 or resp.status_code == 403:
@@ -129,13 +138,13 @@ class AnthropicLLMProvider(LLMProvider):
         if not api_key:
             raise LLMAuthenticationError("Anthropic API key is required but not configured.")
 
-        base_url = config.base_url or self._default_base_url
+        base_url = self._resolve_base_url(config)
         url = f"{base_url.rstrip('/')}/messages"
         headers = self._get_headers(api_key)
         payload = self._format_payload(messages, config, stream=True)
 
         try:
-            async with httpx.AsyncClient(timeout=config.timeout_seconds) as client:
+            async with httpx.AsyncClient(timeout=config.timeout_seconds, follow_redirects=False) as client:
                 async with client.stream("POST", url, headers=headers, json=payload) as resp:
                     if resp.status_code == 401 or resp.status_code == 403:
                         raise LLMAuthenticationError("Anthropic authentication failed. Invalid API key.")
@@ -177,7 +186,7 @@ class AnthropicLLMProvider(LLMProvider):
         api_key = self._resolve_api_key(config)
         if not api_key:
             return False
-        base_url = config.base_url or self._default_base_url
+        base_url = self._resolve_base_url(config)
         url = f"{base_url.rstrip('/')}/messages"
         headers = self._get_headers(api_key)
         test_payload = {
@@ -187,7 +196,7 @@ class AnthropicLLMProvider(LLMProvider):
         }
 
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
                 res = await client.post(url, headers=headers, json=test_payload)
                 return res.status_code == 200
         except Exception as exc:

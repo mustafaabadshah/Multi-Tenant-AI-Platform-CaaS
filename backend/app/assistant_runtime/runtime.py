@@ -62,6 +62,8 @@ class AssistantRuntime:
         user_message: str,
         is_public: bool = False,
         traffic_type: str = "internal",
+        expected_assistant_id: Optional[uuid.UUID] = None,
+        require_conversation_owner: bool = False,
     ) -> AsyncIterator[str]:
         """Stream an assistant response with citations via Server-Sent Events."""
         start_time = time.perf_counter()
@@ -72,7 +74,12 @@ class AssistantRuntime:
             Conversation.tenant_id == self.tenant_id,
         )
         conv = (await self.session.execute(conv_stmt)).scalar_one_or_none()
-        if not conv or (not is_public and not self.is_admin and conv.user_id != self.user_id):
+        owner_check_required = require_conversation_owner or not self.is_admin
+        if (
+            not conv
+            or (expected_assistant_id is not None and conv.assistant_id != expected_assistant_id)
+            or (not is_public and owner_check_required and conv.user_id != self.user_id)
+        ):
             yield format_sse("message_error", {"error": "Conversation not found or unauthorized"})
             return
 

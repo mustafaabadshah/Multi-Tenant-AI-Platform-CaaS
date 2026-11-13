@@ -1,4 +1,4 @@
-"""Stage 3 remediation tests — STOR-1: production storage safety (fail-closed)."""
+"""Stage 3 remediation tests â€” STOR-1: production storage safety (fail-closed)."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -6,7 +6,7 @@ import pytest
 
 from app.core.config import Settings
 from app.storage import get_storage_provider, validate_storage_configuration
-from app.storage.base import sanitize_filename
+from app.storage.base import StorageError, sanitize_filename
 from app.storage.local import LocalStorageProvider
 from app.storage.s3 import S3StorageProvider
 
@@ -124,7 +124,9 @@ async def test_s3_operation_error_does_not_leak_secrets():
     mock_aioboto3.Session.return_value = mock_session_inst
 
     with patch.dict("sys.modules", {"aioboto3": mock_aioboto3}):
-        with pytest.raises(RuntimeError) as exc_info:
+        # M13.2: S3 provider operations now wrap unexpected provider failures
+        # in the typed StorageError hierarchy instead of leaking raw exceptions.
+        with pytest.raises(StorageError) as exc_info:
             await provider.save("tenant-A", "doc.txt", b"data")
 
     assert secret not in str(exc_info.value)

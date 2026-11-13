@@ -61,13 +61,13 @@ class GroqLLMProvider(OpenAICompatibleLLMProvider):
         api_key = config.api_key or self._resolve_api_key(config)
         if not api_key:
             return False
-        base_url = config.base_url or self._default_base_url
+        base_url = self._resolve_base_url(config)
         url = f"{base_url.rstrip('/')}/models"
         headers = {"Authorization": f"Bearer {api_key}"}
 
         try:
             import httpx
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
                 res = await client.get(url, headers=headers)
                 return res.status_code == 200
         except Exception as exc:

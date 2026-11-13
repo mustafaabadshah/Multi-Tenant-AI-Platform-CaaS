@@ -1,5 +1,6 @@
 """Document Ingestion Service orchestrating upload, storage, parsing, OCR, and chunking."""
 
+import asyncio
 import hashlib
 import logging
 import time
@@ -17,9 +18,11 @@ from app.models.knowledge import Document, IngestionJob
 from app.ocr import OCRConfiguration, get_ocr_registry
 from app.parsers import ExtractedDocument, get_parser_registry
 from app.repositories.document_repository import DocumentRepository, IngestionJobRepository
+from app.services.ingestion import limits as ingestion_limits
 from app.services.ingestion.job_queue import (
     TERMINAL_JOB_STATUSES,
     claim_job,
+    get_ingestion_semaphore,
     purge_failed_version_artifacts,
     sanitize_error_message,
 )
@@ -40,6 +43,47 @@ class IngestionService:
         self.parser_registry = get_parser_registry()
         self.ocr_registry = get_ocr_registry()
         self.chunking_registry = get_chunking_registry()
+
+    @staticmethod
+    def _processing_remaining_seconds(start_time: float) -> float:
+        """Remaining time in the configured per-job processing budget."""
+        limit = max(1, int(settings.MAX_PROCESSING_DURATION_SECONDS or 1))
+        return limit - (time.perf_counter() - start_time)
+
+    async def _run_bounded(
+        self,
+        func: Any,
+        *args: Any,
+        timeout: float,
+        stage: str,
+        **kwargs: Any,
+    ) -> Any:
+        """Run blocking parser/OCR/chunking work in a worker thread with a bound.
+
+        Python threads cannot be force-killed. When the deadline expires the
+        await returns a timeout error and the job is failed, but a worker
+        already inside ``func`` continues until it returns on its own. The
+        semantics are therefore cooperative at await points, not a hard kill.
+        """
+        if timeout <= 0:
+            raise ingestion_limits.IngestionTimeoutError(
+                f"Document processing exceeded the maximum allowed duration during {stage}."
+            )
+
+        try:
+            return await asyncio.wait_for(
+                asyncio.to_thread(
+                    ingestion_limits.resolve_awaitable_sync,
+                    func,
+                    *args,
+                    **kwargs,
+                ),
+                timeout=timeout,
+            )
+        except TimeoutError as exc:
+            raise ingestion_limits.IngestionTimeoutError(
+                f"Document processing exceeded the maximum allowed duration during {stage}."
+            ) from exc
 
     async def upload_document(
         self,
@@ -236,8 +280,17 @@ class IngestionService:
     async def _handle_pipeline_failure(
         self, job_id: uuid.UUID, exc: Exception, start_time: float
     ) -> IngestionJob:
-        """Roll back a failed pipeline and persist a retryable or terminal state."""
-        logger.exception("Ingestion failed for job %s (%s)", job_id, type(exc).__name__)
+        """Roll back a failed pipeline and persist a retryable or terminal state.
+
+        Resource-limit and timeout violations are permanent: retrying the same
+        document cannot succeed, so the job/document become terminal FAILED and
+        any partial chunks or embeddings for the failed version are purged.
+        """
+        is_permanent = isinstance(exc, ingestion_limits.PERMANENT_INGESTION_ERRORS)
+        if is_permanent:
+            logger.warning("Ingestion limit failure for job %s (%s)", job_id, type(exc).__name__)
+        else:
+            logger.exception("Ingestion failed for job %s (%s)", job_id, type(exc).__name__)
         try:
             await self.session.rollback()
         except Exception:
@@ -261,7 +314,7 @@ class IngestionService:
 
         doc = await self.doc_repo.get_by_id(job.document_id) if job.document_id else None
 
-        if job.retry_count <= job.max_retries:
+        if not is_permanent and job.retry_count <= job.max_retries:
             job.status = "QUEUED"
             job.stage = "RETRY_QUEUED"
             job.started_at = None
@@ -291,18 +344,27 @@ class IngestionService:
                 job.document_id,
                 job.document_version_id,
             )
+            if is_permanent:
+                failure_message = (
+                    f"Job permanently failed due to a resource limit after "
+                    f"{job.retry_count} attempt(s). Removed {removed_chunks} partial "
+                    "chunk(s) for the failed version."
+                )
+            else:
+                failure_message = (
+                    f"Job permanently failed after {job.retry_count} attempts. "
+                    f"Removed {removed_chunks} partial chunk(s) for the failed version."
+                )
             await self.job_repo.record_event(
                 job_id=job.id,
                 document_id=job.document_id,
                 stage="FAILURE",
                 status="FAILED",
-                message=(
-                    f"Job permanently failed after {job.retry_count} attempts. "
-                    f"Removed {removed_chunks} partial chunk(s) for the failed version."
-                ),
+                message=failure_message,
                 details={
                     "error_category": type(exc).__name__,
                     "chunks_removed": removed_chunks,
+                    "permanent": is_permanent,
                 },
             )
 
@@ -418,7 +480,24 @@ class IngestionService:
             # 1. Load document bytes from storage
             content = await self.storage.get(str(self.tenant_id), doc.file_path)
 
-            # 2. Select parser from registry
+            # 2. Pre-parse resource checks: ZIP expansion/member safety for
+            # OOXML containers and page count for PDFs. Both run before the
+            # parser is selected, so rejected files are never extracted.
+            max_archive_bytes = max(0, int(settings.MAX_ARCHIVE_EXPANSION_BYTES or 0))
+            max_pages = max(1, int(settings.MAX_DOCUMENT_PAGES or 1))
+            max_text_bytes = max(0, int(settings.MAX_EXTRACTED_TEXT_SIZE_BYTES or 0))
+            await self._run_bounded(
+                ingestion_limits.enforce_pre_extraction_limits,
+                doc.filename,
+                content,
+                doc.mime_type,
+                max_archive_expansion_bytes=max_archive_bytes,
+                max_document_pages=max_pages,
+                timeout=self._processing_remaining_seconds(start_time),
+                stage="preflight inspection",
+            )
+
+            # 3. Select parser from registry
             parser = self.parser_registry.resolve_parser(doc.filename, content, doc.mime_type)
             await self.job_repo.record_event(
                 job_id=job.id,
@@ -428,8 +507,31 @@ class IngestionService:
                 message=f"Parser selected: {parser.parser_name}",
             )
 
-            # 3. Extract structured document
-            extracted_doc: ExtractedDocument = await parser.extract(content, doc.filename, doc.mime_type)
+            # 4. Extract structured document in a worker thread. The await is
+            # bounded; a parser already running in the thread cannot be killed.
+            extracted_doc: ExtractedDocument = await self._run_bounded(
+                parser.extract,
+                content,
+                doc.filename,
+                doc.mime_type,
+                timeout=self._processing_remaining_seconds(start_time),
+                stage="parser extraction",
+            )
+
+            ingestion_limits.enforce_extracted_page_limit(len(extracted_doc.pages), max_pages)
+            text_stats = ingestion_limits.truncate_extracted_text(extracted_doc, max_text_bytes)
+            if text_stats["truncated"]:
+                await self.job_repo.record_event(
+                    job_id=job.id,
+                    document_id=doc.id,
+                    stage="LIMITS",
+                    status="WARNING",
+                    message=(
+                        "Extracted text was truncated at a UTF-8 character boundary "
+                        f"to {max_text_bytes} bytes."
+                    ),
+                    details=text_stats,
+                )
 
             job.stage = "PARSED"
             job.progress_pct = 50
@@ -463,12 +565,35 @@ class IngestionService:
                     provider=ocr_provider_name,
                     language=ocr_language,
                 )
-                ocr_res = await ocr_prov.process_pdf(content, scanned_pages, ocr_cfg)
+                ocr_res = await self._run_bounded(
+                    ocr_prov.process_pdf,
+                    content,
+                    scanned_pages,
+                    ocr_cfg,
+                    timeout=self._processing_remaining_seconds(start_time),
+                    stage="OCR",
+                )
                 if ocr_res.success:
                     ocr_applied = True
-                    # Append OCR recognized text to document text
+                    # Append OCR recognized text to document text, then re-apply
+                    # the byte limit so persistence and embeddings stay bounded.
                     if ocr_res.text:
                         extracted_doc.text += f"\n\n### OCR Extracted Text:\n{ocr_res.text}"
+                        ocr_text_stats = ingestion_limits.truncate_extracted_text(
+                            extracted_doc, max_text_bytes
+                        )
+                        if ocr_text_stats["truncated"]:
+                            await self.job_repo.record_event(
+                                job_id=job.id,
+                                document_id=doc.id,
+                                stage="LIMITS",
+                                status="WARNING",
+                                message=(
+                                    "OCR text was truncated at a UTF-8 character boundary "
+                                    f"to {max_text_bytes} bytes."
+                                ),
+                                details=ocr_text_stats,
+                            )
                     await self.job_repo.record_event(
                         job_id=job.id,
                         document_id=doc.id,
@@ -502,7 +627,14 @@ class IngestionService:
                 "document_version_id": job.document_version_id,
             }
 
-            chunks = strategy.chunk(extracted_doc, context_meta, chunking_cfg)
+            chunks = await self._run_bounded(
+                strategy.chunk,
+                extracted_doc,
+                context_meta,
+                chunking_cfg,
+                timeout=self._processing_remaining_seconds(start_time),
+                stage="chunking",
+            )
 
             # 6. Persist Chunks & Update Version Record
             chunks_data = [
@@ -529,7 +661,9 @@ class IngestionService:
             # Update DocumentVersion record with extracted data
             latest_version = await self.doc_repo.get_latest_version(doc.id)
             if latest_version:
-                latest_version.extracted_text = extracted_doc.text[:settings.MAX_EXTRACTED_TEXT_SIZE_BYTES]
+                latest_version.extracted_text = ingestion_limits.truncate_utf8_text(
+                    extracted_doc.text, max_text_bytes
+                )[0]
                 latest_version.structured_data = extracted_doc.to_dict()
                 latest_version.extraction_stats = extracted_doc.extraction_stats
                 latest_version.parser_name = parser.parser_name
@@ -777,7 +911,13 @@ class IngestionService:
 
 
 async def run_ingestion_in_background(tenant_id: uuid.UUID, job_id: uuid.UUID) -> None:
-    """Safely spawn ingestion execution in a background session."""
-    async with async_session_factory() as session:
-        service = IngestionService(session, tenant_id)
-        await service.execute_job(job_id)
+    """Safely spawn ingestion execution in a background session.
+
+    Every upload/retry/reprocess path enters through this function, so the
+    shared semaphore bounds upload-triggered tasks together with dispatcher and
+    worker execution. Waiting for a slot happens before a session is opened.
+    """
+    async with get_ingestion_semaphore():
+        async with async_session_factory() as session:
+            service = IngestionService(session, tenant_id)
+            await service.execute_job(job_id)

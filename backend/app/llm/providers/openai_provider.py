@@ -1,10 +1,8 @@
-import ipaddress
 import json
 import logging
 import os
 from collections.abc import AsyncIterator
 from typing import Optional
-from urllib.parse import urlparse
 
 import httpx
 
@@ -20,38 +18,12 @@ from app.llm.base import (
     LLMStreamChunk,
     LLMTimeoutError,
 )
+from app.llm.endpoint_validation import (
+    validate_custom_provider_endpoint,
+    validate_provider_endpoint,
+)
 
 logger = logging.getLogger("mmaip.llm.openai")
-
-
-def validate_provider_endpoint(url: str, allow_local: bool = True) -> str:
-    """Validate provider endpoint URL against SSRF, cloud metadata addresses, and invalid protocols."""
-    if not url or not url.strip():
-        raise ValueError("Provider endpoint URL cannot be empty")
-
-    parsed = urlparse(url.strip())
-    if parsed.scheme not in ("http", "https"):
-        raise ValueError(f"Invalid URL scheme '{parsed.scheme}'. Only http and https are permitted.")
-
-    hostname = parsed.hostname
-    if not hostname:
-        raise ValueError("Invalid provider endpoint: missing hostname")
-
-    # Check for link-local / cloud metadata IPs (e.g. 169.254.169.254)
-    try:
-        ip = ipaddress.ip_address(hostname)
-        if ip.is_link_local:
-            raise ValueError(f"Access to link-local / cloud metadata address '{hostname}' is forbidden.")
-        if not allow_local and (ip.is_loopback or ip.is_private):
-            raise ValueError(f"Access to private/local address '{hostname}' is forbidden.")
-    except ValueError as e:
-        if "forbidden" in str(e):
-            raise
-        # If hostname is not an IP literal, block known cloud metadata hostnames
-        if hostname.lower() in ("metadata.google.internal", "instance-data", "metadata"):
-            raise ValueError("Access to cloud metadata endpoint is forbidden.")
-
-    return url.rstrip("/")
 
 
 class OpenAICompatibleLLMProvider(LLMProvider):
@@ -72,19 +44,28 @@ class OpenAICompatibleLLMProvider(LLMProvider):
         return self._name
 
     def _resolve_base_url(self, config: LLMConfig) -> str:
-        raw_url = ""
+        # Tenant/BYOK supplied URLs never get localhost privileges and must
+        # pass the custom-endpoint feature gate.
         if config.base_url:
-            raw_url = config.base_url
-        elif self._default_base_url:
-            raw_url = self._default_base_url
-        elif self._name == "omniroute":
-            raw_url = os.environ.get("LLM_BASE_URL", "http://localhost:20128/v1")
-        elif self._name == "groq":
-            raw_url = "https://api.groq.com/openai/v1"
-        else:
-            raw_url = "https://api.openai.com/v1"
+            return validate_custom_provider_endpoint(config.base_url)
 
-        return validate_provider_endpoint(raw_url, allow_local=True)
+        # OmniRoute is the operator-controlled built-in gateway. Only this
+        # provider may use a loopback/private operator-configured endpoint.
+        if self._name == "omniroute":
+            raw_url = (
+                self._default_base_url
+                or os.environ.get("LLM_BASE_URL")
+                or "http://localhost:20128/v1"
+            )
+            return validate_provider_endpoint(raw_url, allow_local=True)
+
+        if self._default_base_url:
+            return validate_provider_endpoint(self._default_base_url, allow_local=False)
+        if self._name == "groq":
+            return validate_provider_endpoint(
+                "https://api.groq.com/openai/v1", allow_local=False
+            )
+        return validate_provider_endpoint("https://api.openai.com/v1", allow_local=False)
 
     def _resolve_api_key(self, config: LLMConfig) -> str:
         if config.api_key:
@@ -98,10 +79,10 @@ class OpenAICompatibleLLMProvider(LLMProvider):
         return os.environ.get("OPENAI_API_KEY", "")
 
     async def generate(self, messages: list[LLMMessage], config: LLMConfig) -> LLMResponse:
-        base_url = self._resolve_base_url(config)
         api_key = self._resolve_api_key(config)
         if not api_key:
             raise LLMAuthenticationError(f"No API key configured for provider '{self._name}'. Please configure your BYOK key or environment credentials.")
+        base_url = self._resolve_base_url(config)
         url = f"{base_url}/chat/completions"
 
         extra_h = getattr(config, "extra_headers", {}) or {}
@@ -120,7 +101,7 @@ class OpenAICompatibleLLMProvider(LLMProvider):
 
         timeout = httpx.Timeout(connect=10.0, read=config.timeout_seconds, write=10.0, pool=10.0)
         try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
+            async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
                 resp = await client.post(url, headers=headers, json=payload)
                 if resp.status_code != 200:
                     self._handle_http_error(resp.status_code, resp.text)
@@ -151,10 +132,10 @@ class OpenAICompatibleLLMProvider(LLMProvider):
     async def generate_stream(
         self, messages: list[LLMMessage], config: LLMConfig
     ) -> AsyncIterator[LLMStreamChunk]:
-        base_url = self._resolve_base_url(config)
         api_key = self._resolve_api_key(config)
         if not api_key:
             raise LLMAuthenticationError(f"No API key configured for provider '{self._name}'. Please configure your BYOK key or environment credentials.")
+        base_url = self._resolve_base_url(config)
         url = f"{base_url}/chat/completions"
 
         extra_h = getattr(config, "extra_headers", {}) or {}
@@ -173,7 +154,7 @@ class OpenAICompatibleLLMProvider(LLMProvider):
 
         timeout = httpx.Timeout(connect=10.0, read=config.timeout_seconds, write=10.0, pool=10.0)
         try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
+            async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
                 async with client.stream("POST", url, headers=headers, json=payload) as resp:
                     if resp.status_code != 200:
                         err_body = await resp.aread()
@@ -234,13 +215,15 @@ class OpenAICompatibleLLMProvider(LLMProvider):
         raise LLMProviderError(f"Provider '{self._name}' server error (HTTP {status_code}){detail}")
 
     async def validate_key(self, config: LLMConfig) -> bool:
-        base_url = self._resolve_base_url(config)
         api_key = self._resolve_api_key(config)
+        if not api_key:
+            return False
+        base_url = self._resolve_base_url(config)
         url = f"{base_url}/models"
         headers = {"Authorization": f"Bearer {api_key}"}
 
         try:
-            async with httpx.AsyncClient(timeout=10) as client:
+            async with httpx.AsyncClient(timeout=10, follow_redirects=False) as client:
                 resp = await client.get(url, headers=headers)
                 return resp.status_code == 200
         except Exception as e:

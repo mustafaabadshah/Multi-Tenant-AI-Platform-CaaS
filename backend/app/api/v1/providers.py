@@ -6,10 +6,9 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import TenantContext, get_current_user, get_db, require_permission
+from app.api.deps import TenantContext, get_db, require_permission
 from app.core.constants import PermissionName
 from app.llm.registry import get_llm_registry
-from app.models.user import User
 from app.schemas.provider import (
     ProviderCredentialCreate,
     ProviderCredentialResponse,
@@ -51,13 +50,19 @@ async def create_credential(
 ) -> ProviderCredentialResponse:
     """Securely encrypt and store a BYOK provider credential using Fernet."""
     vault = BYOKVaultService(db, ctx.tenant.id)
-    cred = await vault.add_credential(
-        provider_name=payload.provider_name,
-        display_name=payload.display_name,
-        api_key=payload.api_key,
-        base_url=payload.base_url,
-        is_default=payload.is_default,
-    )
+    try:
+        cred = await vault.add_credential(
+            provider_name=payload.provider_name,
+            display_name=payload.display_name,
+            api_key=payload.api_key,
+            base_url=payload.base_url,
+            is_default=payload.is_default,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
     return ProviderCredentialResponse.model_validate(cred)
 
 

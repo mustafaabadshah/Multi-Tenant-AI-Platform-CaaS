@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import TenantContext, get_current_user, require_permission
+from app.core.config import settings
 from app.core.constants import PermissionName
 from app.database.session import get_db
 from app.models.knowledge import Document
@@ -293,6 +294,15 @@ async def ingest_url(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Failed to fetch content from URL: {str(err)}",
+        )
+
+    if len(content_bytes) > settings.MAX_FILE_SIZE_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail=(
+                f"Fetched content size ({len(content_bytes)} bytes) exceeds the "
+                f"maximum permitted limit ({settings.MAX_FILE_SIZE_BYTES} bytes)."
+            ),
         )
 
     ext = ".html" if "html" in mime_type else ".txt"

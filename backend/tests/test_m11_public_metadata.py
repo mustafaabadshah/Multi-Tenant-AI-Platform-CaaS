@@ -8,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.assistant import Assistant
 
+pytestmark = pytest.mark.usefixtures("enable_public_features")
+
 WHITELISTED_FIELDS = {
     "public_id",
     "name",
