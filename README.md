@@ -2,16 +2,38 @@
 
 ## Status
 
-**Status: `CONDITIONAL_READY`** — a private, synthetic-data staging environment is deployed and technically validated (M14). Access is invitation-only. The platform is **not production-ready** and is **not approved for real or customer documents**; manual UI acceptance is pending.
+**Status: `STAGING_VERIFIED_OPERATOR_ACCEPTED`** — a private, synthetic-data staging environment is deployed, technically validated, and manually accepted by the operator (M15.4 `RELEASE_PASS`). Access is invitation-only. The platform is running Observability 2.0 on Render Free + Neon PostgreSQL 16 + Backblaze B2.
 
 - Staging frontend: <https://mmaip-frontend.onrender.com>
 - Staging backend: <https://mmaip-backend.onrender.com>
+- Observability console: <https://mmaip-frontend.onrender.com/dashboard/observability>
 
 Public registration is closed, onboarding is invitation-only, and no test credentials are provided.
 
 ## Overview
 
-Multi-Tenant AI Platform (CaaS) is a security-first, multi-tenant AI knowledge and assistant platform for individuals and organizations. It combines private knowledge ingestion, grounded retrieval, configurable assistants, and streaming chat with tenant-scoped administration and developer integration.
+Multi-Tenant AI Platform (CaaS) is a security-first, multi-tenant AI knowledge and assistant platform for individuals and organizations. It combines private knowledge ingestion, grounded retrieval, configurable assistants, and streaming chat with tenant-scoped administration, developer integration, and end-to-end request observability.
+
+## Screenshots
+
+The screenshots below show the private staging workspace using synthetic data only.
+
+| Login | Dashboard |
+|---|---|
+| ![Login — light theme, synthetic staging workspace](docs/assets/screenshots/login.png) | ![Dashboard — synthetic staging workspace](docs/assets/screenshots/dashboard.png) |
+| **Login.** Light theme, synthetic staging workspace. | **Dashboard.** Workspace overview with synthetic data. |
+
+| Assistants | Knowledge |
+|---|---|
+| ![Assistants — synthetic staging workspace](docs/assets/screenshots/assistants.png) | ![Knowledge — synthetic staging workspace](docs/assets/screenshots/knowledge.png) |
+| **Assistants.** Assistant studio and configuration views. | **Knowledge.** Knowledge bases, ingestion, and retrieval views. |
+
+| Conversations | Mobile |
+|---|---|
+| ![Conversations — synthetic staging workspace](docs/assets/screenshots/conversations.png) | ![Mobile dashboard — synthetic staging workspace](docs/assets/screenshots/mobile-dashboard.png) |
+| **Conversations.** Grounded chat with streamed answers and citations. | **Mobile.** Responsive dashboard layout. |
+
+All screenshots contain synthetic data only.
 
 ## Features
 
@@ -23,10 +45,11 @@ Multi-Tenant AI Platform (CaaS) is a security-first, multi-tenant AI knowledge a
 - **Hybrid retrieval** over PostgreSQL full-text search, pgvector semantic search, and optional Qdrant, fused with Reciprocal Rank Fusion (RRF).
 - **Citations and grounded answers** with document, page, chunk, and snippet provenance carried through streaming responses.
 - **Streaming conversations** over Server-Sent Events (SSE), with persisted messages, citations, and usage accounting.
+- **Observability 2.0 and AI request intelligence**: durable request tracing, span waterfalls (`retrieval`, `context_assembly`, `provider_generation`), RAG diagnostics, token & cost tracking, zero-trust `METADATA_ONLY` privacy policies, and retention management.
 - **BYOK provider management** with encrypted credentials, strict no-platform-fallback behavior for supported commercial chat providers, and optional OmniRoute gateway routing.
 - **Publishing and developer platform**: gated public assistant pages, embed widgets, scoped API keys, developer REST endpoints, and Python/TypeScript SDKs.
-- **Evaluation and observability**: evaluation datasets, runs and comparisons with deterministic metrics; in-process traces, metrics, and trace identifiers.
-- **Operational controls**: health/readiness probes, audit logs, Alembic migrations, Docker Compose profiles, and CI quality gates.
+- **Evaluation and testing**: evaluation datasets, runs and comparisons with deterministic metrics; automated regression suites.
+- **Operational controls**: health/readiness probes, audit logs, Alembic migrations (0001–0011), Docker Compose profiles, and CI quality gates.
 
 ## Architecture
 
@@ -78,13 +101,13 @@ The diagram shows the hybrid path. Lexical mode uses PostgreSQL FTS only; semant
 flowchart TB
     U["Users and operators"] --> FE["Render Free · Node runtime<br/>Next.js frontend"]
     FE -->|HTTPS and SSE| BE["Render Free · Docker runtime<br/>FastAPI · one Uvicorn worker"]
-    BE --> PG[("Neon Free PostgreSQL 16<br/>pgvector · Alembic 0010 · 47 tables")]
+    BE --> PG[("Neon Free PostgreSQL 16<br/>pgvector · Alembic 0011 · 49 tables")]
     BE --> B2[("Backblaze B2<br/>private bucket · us-east-005")]
     BE --> EMB["CPU-local embeddings<br/>384 dimensions"]
     BE --> MOCK["Mock LLM provider<br/>synthetic smoke tests"]
 ```
 
-The M14 staging topology uses the components shown above. Redis, Qdrant, Phoenix, and the standalone worker are not deployed there.
+The M15 staging topology uses the components shown above with in-process failure-isolated tracing and durable PostgreSQL persistence. Redis, Qdrant, Phoenix, and the standalone worker are not deployed there.
 
 ## Tech stack
 
@@ -104,19 +127,19 @@ The M14 staging topology uses the components shown above. Redis, Qdrant, Phoenix
 ```text
 .
 ├── backend/            FastAPI application, tests, Alembic migrations, lockfiles
-│   ├── app/            api/v1, core, models, schemas, repositories, services
+│   ├── app/            api/v1, assistant_runtime, core, models, observability, repositories, schemas, services
 │   ├── app/parsers/    PDF, DOCX, XLSX, PPTX, CSV, JSON, SQL, TXT, Markdown
 │   ├── app/retrieval/  lexical, semantic, hybrid RRF, citations, authorization
 │   ├── app/storage/    local and S3-compatible object storage providers
 │   ├── tests/          unit, security, and environment-gated integration tests
-│   └── alembic/        migrations 0001 through 0010
+│   └── alembic/        migrations 0001 through 0011 (including durable request traces)
 ├── frontend/           Next.js App Router frontend
-│   ├── app/            login, register, dashboard, public assistant, embed
+│   ├── app/            login, register, dashboard (assistants, knowledge, chat, observability), public assistant, embed
 │   ├── components/     UI, assistant, knowledge, and chat components
 │   └── lib/            typed API client and SSE reader
 ├── sdk/                Python and TypeScript developer clients
 ├── infrastructure/     Dockerfiles and operational scripts
-├── docs/               architecture, API, security, product, and runbook documentation
+├── docs/               architecture, API, security, product, runbook, and milestone documentation (M01–M15)
 ├── docker-compose.yml  local core services and optional profiles
 └── render.yaml         free-tier staging blueprint
 ```
@@ -170,31 +193,34 @@ Access is enforced at the request boundary and again in tenant-scoped data acces
 - **Parser and OCR threads are not killable.** A timeout stops the task from being awaited, but Python cannot force-kill a thread already inside parser or OCR code. A stuck job may consume CPU until the process is recycled.
 - **Public application URLs are not network-private.** The Render `onrender.com` endpoints are internet-reachable. Application authentication and tenant isolation are the boundary; CORS is not access control.
 
-## Deployment (M14 staging, verified)
+## Deployment (M15 staging, verified)
 
-The deployed environment is private, synthetic-only staging on free tiers. It is not a production deployment.
+The deployed environment is private, synthetic-only staging on free tiers running Observability 2.0 at release commit `089b632`.
 
-| Layer | M14 configuration |
+| Layer | M15 configuration |
 |---|---|
 | Frontend | Render Free, Node runtime, Next.js: <https://mmaip-frontend.onrender.com> |
 | Backend | Render Free, Docker runtime, FastAPI, one Uvicorn worker: <https://mmaip-backend.onrender.com> |
-| Database | Neon Free PostgreSQL 16 with pgvector 0.8.7; Alembic head `0010_m10_remediation_schema_alignment`; 47 public tables |
+| Database | Neon Free PostgreSQL 16 with pgvector 0.8.7; Alembic head `0011_m15_durable_request_traces`; 49 public tables |
 | Object storage | Backblaze B2 private bucket in `us-east-005`, accessed through the S3-compatible adapter |
 | Embeddings | CPU-local `local-feature-projection`, 384 dimensions |
 | LLM | Mock provider for smoke tests; no platform-paid LLM fallback |
+| Observability | In-process failure-isolated tracer; durable PostgreSQL persistence; zero-trust `METADATA_ONLY` policy |
 | Optional services | Redis, Qdrant, Phoenix, and the standalone worker are not deployed |
 | Data class | Synthetic data only; no real, customer, or regulated documents |
 
-Verified in M14 staging:
+Verified in M15 staging:
 
 - `/health` returned `200` and `/ready` returned `200` with `database: connected`.
-- CORS accepted the exact frontend origin and rejected a hostile origin without an allow-origin header.
+- Alembic migration `0011_m15_durable_request_traces` applied cleanly; runtime DML grants verified for `mmaip_app`.
+- SSE chat stream delivered 33 events and created durable trace `tr_fa8349df047b4cd1` in Neon PostgreSQL.
+- Zero-trust privacy verified: `METADATA_ONLY` captures zero raw prompts or completions in production logs/tables.
+- Observability 2.0 dashboard at `/dashboard/observability` verified with KPI summaries, latency waterfall, and RAG diagnostics.
+- Manual UI acceptance: inspected and approved by operator (`M15_4_RELEASE_PASS`).
+- CORS accepted the exact frontend origin and rejected hostile origins.
 - Registration, the developer API, and API documentation gates behaved as closed (`403`, `403`, `404`).
-- Authentication, B2 upload persistence, ingestion, pgvector indexing, SSE streaming, and persisted citations were exercised with a synthetic account and synthetic content.
-- The deployed backend connected to Neon using the restricted runtime role; the B2 object size and SHA-256 matched the uploaded synthetic file.
-- The frontend `/login` route served successfully with the backend API base baked into the build.
 
-**Access and data restrictions:** registration is closed, onboarding is invite-only, no test credentials are provided, and real documents are not approved. Real or customer documents remain blocked until B2-aware backup/export and operational restore gates close; manual UI acceptance is also pending.
+**Access and data restrictions:** registration is closed, onboarding is invite-only, no test credentials are provided, and real documents are not approved. Real or customer documents remain blocked until B2-aware backup/export and operational restore gates close.
 
 Free-tier services can spin down when idle; first requests after idle may incur a cold start.
 
@@ -274,8 +300,10 @@ Latest available evidence:
 | Focused M13.2/M13.3 suite (M14.0) | 161 passed, 0 skipped |
 | M14 focused storage/isolation and auth validation | 44 passed focused storage run; 45 passed focused storage/isolation run; live login, refresh, logout, and protected-endpoint checks passed in staging |
 | M14 live staging validation | Auth, B2 upload/persistence, database identity, SSE streaming, citations, CORS, and closed feature gates |
+| M15.1 Observability hardening suite | 59 passed in 69s (telemetry failure isolation, idempotent upsert, deep secret scrub, non-admin masking, migration 0011) |
+| M15.4 Live staging verification | Real-time SSE streaming (33 events), durable trace in PostgreSQL, zero-trust privacy, operator UI accepted |
 | Frontend typecheck | 0 TypeScript errors |
-| Frontend production build | 18 routes: 16 static plus 2 partial-prerender |
+| Frontend production build | 20 routes prerendered (including `/dashboard/observability`) |
 | Python SDK | 2 passed |
 | TypeScript SDK | 0 type errors |
 | Frontend lint | 122 inherited problems (38 errors, 84 warnings); pre-existing debt |
@@ -372,32 +400,11 @@ All application endpoints are versioned under `/api/v1`. Tenant-scoped routes re
 | `/api/v1/developer` | Developer API keys and developer chat endpoints, feature-gated |
 | `/api/v1/providers`, `/embedding-providers`, `/vector-stores` | Provider credentials and model metadata, embedding providers, and vector-store metadata |
 | `/api/v1/evaluation` | Evaluation datasets, runs, and run comparisons |
-| `/api/v1/observability` | Recent traces, trace detail, and metrics |
+| `/api/v1/observability` | Request traces list/detail, span waterfalls, RAG diagnostics, latency/error/cost metrics, capture policy configuration, and scoped trace purge |
 | `/api/v1/audit`, `/templates` | Tenant audit logs and assistant templates |
 | `/health`, `/ready` | Liveness and readiness probes at the service root |
 
 API documentation and OpenAPI output are disabled in staging. Health and readiness are intentionally outside `/api/v1`.
-
-## Screenshots
-
-The screenshots below show the private staging workspace using synthetic data only.
-
-| Login | Dashboard |
-|---|---|
-| ![Login — light theme, synthetic staging workspace](docs/assets/screenshots/login.png) | ![Dashboard — synthetic staging workspace](docs/assets/screenshots/dashboard.png) |
-| **Login.** Light theme, synthetic staging workspace. | **Dashboard.** Workspace overview with synthetic data. |
-
-| Assistants | Knowledge |
-|---|---|
-| ![Assistants — synthetic staging workspace](docs/assets/screenshots/assistants.png) | ![Knowledge — synthetic staging workspace](docs/assets/screenshots/knowledge.png) |
-| **Assistants.** Assistant studio and configuration views. | **Knowledge.** Knowledge bases, ingestion, and retrieval views. |
-
-| Conversations | Mobile |
-|---|---|
-| ![Conversations — synthetic staging workspace](docs/assets/screenshots/conversations.png) | ![Mobile dashboard — synthetic staging workspace](docs/assets/screenshots/mobile-dashboard.png) |
-| **Conversations.** Grounded chat with streamed answers and citations. | **Mobile.** Responsive dashboard layout. |
-
-All screenshots contain synthetic data only.
 
 ## Project milestones
 
@@ -416,11 +423,14 @@ All screenshots contain synthetic data only.
 | M11 | Private staging readiness: PostgreSQL migration validation, dependency locks, job reliability, storage/backup drills, and optional-infrastructure decisions. |
 | M12 | Staging architecture and cost review: free-tier/private staging plan, configuration inventory, manual acceptance checklist, and conditional readiness. |
 | M13 | Free-tier deployment configuration: Render blueprint, Neon/B2 runbooks, security remediation, and local validation. |
-| M14 | Private free-tier staging deployed: Render backend/frontend, Neon PostgreSQL 16 + pgvector, private B2, local embeddings, and mock-LLM smoke tests. Technical validation complete; manual UI acceptance pending; real documents not approved. |
+| M14 | Private free-tier staging deployed: Render backend/frontend, Neon PostgreSQL 16 + pgvector, private B2, local embeddings, and mock-LLM smoke tests. |
+| M15 | Observability 2.0: Durable request tracing, span waterfalls, RAG diagnostics, token & cost tracking, zero-trust `METADATA_ONLY` privacy policies, and high-density dashboard UI. |
+| M15.1 | Release Candidate Hardening: PostgreSQL boolean migration fixes, deep regex sanitization (DB URLs, JWTs, API keys, XSS), failure isolation, and 59/59 regression tests passing. |
+| M15.2–M15.4 | Live Staging Release & Acceptance: Neon recovery checkpoint created, Alembic 0011 migrated, Render services deployed at commit `089b632`, live SSE/trace verified, and operator manual UI accepted (`M15_4_RELEASE_PASS`). |
 
 ## Limitations and roadmap
 
-- **Manual UI acceptance** of the deployed frontend remains pending.
+- **Observability 2.0 manual UI acceptance** has been verified and approved by the operator (`M15_4_RELEASE_PASS`).
 - **B2 runtime is verified**, but B2-aware backup/export and operational restore for real documents remain gates. A synthetic paired restore drill passed; real-document recovery is not approved.
 - **RLS and database-role hardening**: add tenant RLS policies and continue least-privilege role work before broadening access.
 - **Account lifecycle**: add password reset, email verification, and token revocation/denylisting.
@@ -428,7 +438,7 @@ All screenshots contain synthetic data only.
 - **Frontend lint debt**: resolve the inherited ESLint findings before treating the frontend quality gate as clean.
 - **MinIO recovery drill**: complete the deferred MinIO validation for the M05 recovery matrix.
 - **Optional infrastructure**: validate Qdrant live if it becomes part of the deployment envelope; Redis, Phoenix, and the standalone worker remain outside the current staging topology.
-- **Real documents** remain blocked until storage/recovery gates close; manual UI acceptance remains pending.
+- **Real documents** remain blocked until storage/recovery gates close.
 
 ## Security policy
 
