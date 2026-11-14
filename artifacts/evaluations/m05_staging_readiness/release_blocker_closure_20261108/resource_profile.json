@@ -1,0 +1,14 @@
+{
+  "timestamp": "2026-11-07T20:45:49.179007+00:00",
+  "host_profile": {
+    "cpu": "Intel Core i3-7100U (2 cores, 4 threads)",
+    "ram": "8 GB (1041.5 MB free physical RAM)",
+    "gpu": "None"
+  },
+  "staging_deployment_profile": {
+    "backend": "Render Web Service (Starter, 512 MB RAM, 2 Uvicorn workers)",
+    "database": "Render Managed PostgreSQL 16 (Starter, 1 GB storage, pgvector enabled)",
+    "frontend": "Vercel Hobby / Pro",
+    "vector_store": "pgvector (in-database, no separate Qdrant container needed on small staging)"
+  }
+}

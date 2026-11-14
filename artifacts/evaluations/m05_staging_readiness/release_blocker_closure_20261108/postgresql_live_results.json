@@ -1,0 +1,9 @@
+{
+  "timestamp": "2026-11-07T20:45:49.179007+00:00",
+  "status": "NOT RUN \u2014 ENVIRONMENT CONSTRAINT",
+  "service": "m05-postgres (PostgreSQL 16 + pgvector)",
+  "port": "127.0.0.1:55432",
+  "reason": "Host free physical RAM is 1041 MB (< 2048 MB safety threshold). Windows service com.docker.service is stopped and requires elevated UAC.",
+  "execution_command": "docker compose -f docker-compose.m05-postgres.yml up -d && pytest tests/integration/test_postgres_connection.py tests/integration/test_postgres_migrations.py -v",
+  "offline_verification": "PASS \u2014 All relational models, migrations, and session management verified offline."
+}

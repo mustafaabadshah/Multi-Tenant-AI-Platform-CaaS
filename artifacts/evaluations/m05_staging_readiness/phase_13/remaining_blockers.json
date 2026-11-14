@@ -1,0 +1,23 @@
+{
+  "milestone": "M05",
+  "phase": 13,
+  "component": "Remaining Blockers for Staging Deployment",
+  "timestamp": "2026-11-08T01:00:00Z",
+  "blocker_count": 2,
+  "blockers": [
+    {
+      "id": "BLK-01",
+      "severity": "CRITICAL_FOR_CLOUD_STAGING",
+      "title": "Live Container Integration Execution",
+      "description": "17 integration tests covering live PostgreSQL 16 pgvector operations, schema migrations, and Qdrant collection isolation were withheld due to host available physical RAM constraint (467.7 MB – 1,057.8 MB < 2048 MB threshold).",
+      "closure_action": "Execute docker compose integration commands on a runner with >= 2048 MB free RAM prior to pushing to Render."
+    },
+    {
+      "id": "BLK-02",
+      "severity": "OPERATIONAL_REQUIREMENT",
+      "title": "Paired Storage Volume Snapshotting for Raw Uploads",
+      "description": "PostgreSQL backups restore document metadata and extracted text, but raw uploaded PDF/DOCX binaries in STORAGE_PATH or S3 bucket must be snapshotted concurrently.",
+      "closure_action": "Configure storage volume snapshot or S3 bucket versioning/replication in staging environment setup."
+    }
+  ]
+}

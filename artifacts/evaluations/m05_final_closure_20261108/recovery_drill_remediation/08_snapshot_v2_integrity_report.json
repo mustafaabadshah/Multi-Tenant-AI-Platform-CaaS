@@ -1,0 +1,25 @@
+{
+  "timestamp": "2026-11-08T04:13:00Z",
+  "snapshot_version": "V2 (Corrected)",
+  "archive_path": "artifacts/evaluations/m05_final_closure_20261108/portable_runner_v2/m05_live_test_snapshot_v2.zip",
+  "manifest_path": "artifacts/evaluations/m05_final_closure_20261108/portable_runner_v2/snapshot_manifest_v2.json",
+  "checksum_file_path": "artifacts/evaluations/m05_final_closure_20261108/portable_runner_v2/snapshot_sha256_v2.txt",
+  "physical_size_bytes": 755050,
+  "measured_sha256": "24aa3baebfcabbd22d62cca967376f2b2469dc9b1c6798c316c91c1465fb77f4",
+  "total_files_in_manifest": 433,
+  "sandbox_extraction_audit": {
+    "extracted_entries": 433,
+    "missing_files_count": 0,
+    "hash_mismatches_count": 0,
+    "path_traversal_entries": 0,
+    "duplicate_entries": 0,
+    "integrity_status": "100% MATCH"
+  },
+  "secret_scanner_status": "PASSED (0 exposed secrets detected)",
+  "historical_baseline_preservation": {
+    "original_snapshot_v1_path": "artifacts/evaluations/m05_final_closure_20261108/portable_runner/m05_live_test_snapshot.zip",
+    "original_snapshot_v1_size": 710948,
+    "original_snapshot_v1_sha256": "3c97b830261542a6a27dd1d0ee93cc76b63cebbb91f99fa9f54e50dcc8eeed6f",
+    "original_snapshot_v1_preserved_unmodified": true
+  }
+}

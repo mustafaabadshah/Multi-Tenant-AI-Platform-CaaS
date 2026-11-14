@@ -1,0 +1,22 @@
+{
+  "timestamp": "2026-11-08T15:21:09.339050",
+  "status": "PASS_READABLE",
+  "tar_path": "E:\\MM Office\\DockerData\\docker-desktop-data-backup.tar",
+  "size_bytes": 2144706560,
+  "size_mb": 2045.35,
+  "size_gb": 2.0,
+  "sha256": "603cd9b26cb93589a17b5d6f36edcb690a99398ca97a7c91dd0949be344f2b08",
+  "total_tar_entries": 15929,
+  "sample_entries": [
+    ".",
+    "./lib",
+    "./wsl-keepalive",
+    "./.docker",
+    "./isocache",
+    "./init",
+    "./bin",
+    "./run",
+    "./usr",
+    "./etc"
+  ]
+}

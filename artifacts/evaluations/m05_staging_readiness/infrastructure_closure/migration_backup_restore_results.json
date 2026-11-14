@@ -1,0 +1,15 @@
+{
+  "milestone": "M05",
+  "component": "Database Migration, Backup & Restore",
+  "timestamp": "2026-11-08T00:50:00Z",
+  "alembic_graph_status": "PASS — Linear DAG confirmed across 4 revisions with tested downgrade() drop statements",
+  "role_seeding_idempotency": "PASS — SeedSystemRoles idempotent across 3 repeated runs",
+  "backup_restore_scripts": {
+    "backup_script": "infrastructure/scripts/backup-postgres.ps1",
+    "verification_script": "infrastructure/scripts/verify-backup.ps1",
+    "restore_script": "infrastructure/scripts/restore-postgres.ps1",
+    "archive_format": "PostgreSQL custom format (.dump) via pg_dump -Fc",
+    "offline_verification": "PASS — Script syntax, error handling, manifest JSON generation, and checksum hashing verified"
+  },
+  "live_container_restore_status": "NOT RUN — ENVIRONMENT CONSTRAINT (Pending runner with >= 2048 MB RAM)"
+}

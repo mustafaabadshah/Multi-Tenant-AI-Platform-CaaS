@@ -4,9 +4,10 @@ import asyncio
 import io
 import shutil
 import time
-from PIL import Image
+
 import pymupdf
 import pytesseract
+from PIL import Image
 
 from app.core.config import settings
 from app.ocr.base import OCRConfiguration, OCRPageResult, OCRProvider, OCRResult

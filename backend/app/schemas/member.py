@@ -31,5 +31,7 @@ class MemberResponse(BaseModel):
     status: str
     created_at: datetime
     updated_at: datetime
+    invitation_token: str | None = None
+    invitation_expires_at: datetime | None = None
 
     model_config = {"from_attributes": True}

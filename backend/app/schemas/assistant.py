@@ -1,23 +1,49 @@
 import uuid
 from datetime import datetime
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
 
 class AssistantCreateRequest(BaseModel):
     name: str = Field(min_length=2, max_length=255)
-    slug: str | None = Field(default=None, max_length=255)
-    description: str | None = Field(default=None, max_length=1000)
+    slug: Optional[str] = Field(default=None, max_length=255)
+    description: Optional[str] = Field(default=None, max_length=1000)
+    template_id: Optional[str] = Field(default=None, max_length=100)
+    audience_level: str = Field(default="general", max_length=50)
+    response_style: str = Field(default="balanced", max_length=50)
+    uncertainty_behavior: str = Field(default="admit", max_length=50)
+    citation_style: str = Field(default="strict", max_length=50)
+    llm_provider: str = Field(default="omniroute")
     default_model: str = Field(default="auto")
-    system_prompt: str | None = None
+    temperature: float = Field(default=0.7, ge=0.0, le=2.0)
+    max_tokens: int = Field(default=1024, ge=64, le=8192)
+    visibility: str = Field(default="workspace")
+    retrieval_mode: str = Field(default="hybrid")
+    top_k: int = Field(default=5, ge=1, le=20)
+    system_prompt: Optional[str] = None
+    knowledge_base_ids: list[uuid.UUID] = Field(default_factory=list)
 
 
 class AssistantUpdateRequest(BaseModel):
-    name: str | None = Field(default=None, min_length=2, max_length=255)
-    description: str | None = None
-    default_model: str | None = None
-    system_prompt: str | None = None
-    status: str | None = None
+    name: Optional[str] = Field(default=None, min_length=2, max_length=255)
+    description: Optional[str] = None
+    template_id: Optional[str] = None
+    audience_level: Optional[str] = None
+    response_style: Optional[str] = None
+    uncertainty_behavior: Optional[str] = None
+    citation_style: Optional[str] = None
+    llm_provider: Optional[str] = None
+    default_model: Optional[str] = None
+    temperature: Optional[float] = Field(default=None, ge=0.0, le=2.0)
+    max_tokens: Optional[int] = Field(default=None, ge=64, le=8192)
+    visibility: Optional[str] = None
+    retrieval_mode: Optional[str] = None
+    top_k: Optional[int] = Field(default=None, ge=1, le=20)
+    system_prompt: Optional[str] = None
+    status: Optional[str] = None
+    knowledge_base_ids: Optional[list[uuid.UUID]] = None
+    change_summary: Optional[str] = Field(default=None, max_length=500)
 
 
 class AssistantResponse(BaseModel):
@@ -25,11 +51,112 @@ class AssistantResponse(BaseModel):
     tenant_id: uuid.UUID
     name: str
     slug: str
-    description: str | None = None
-    default_model: str
-    system_prompt: str | None = None
+    description: Optional[str] = None
+    template_id: Optional[str] = None
+    audience_level: str = "general"
+    response_style: str = "balanced"
+    uncertainty_behavior: str = "admit"
+    citation_style: str = "strict"
+    llm_provider: str = "omniroute"
+    default_model: str = "auto"
+    temperature: float = 0.7
+    max_tokens: int = 1024
+    visibility: str = "workspace"
+    retrieval_mode: str = "hybrid"
+    top_k: int = 5
+    system_prompt: Optional[str] = None
+    status: str
+    current_version_num: int = 1
+    connected_kb_ids: list[uuid.UUID] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class AssistantVersionResponse(BaseModel):
+    id: uuid.UUID
+    tenant_id: uuid.UUID
+    assistant_id: uuid.UUID
+    version_num: int
+    model_name: str
+    system_prompt: Optional[str] = None
+    config_snapshot: dict[str, Any] = Field(default_factory=dict)
+    actor_id: Optional[uuid.UUID] = None
+    change_summary: Optional[str] = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class AssistantRollbackRequest(BaseModel):
+    target_version_num: int = Field(ge=1, description="Version number to roll back to")
+    change_summary: Optional[str] = Field(
+        default=None, max_length=500, description="Optional explanation for rollback"
+    )
+
+
+class AssistantTestPreviewRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=4000)
+    system_prompt: Optional[str] = None
+    llm_provider: Optional[str] = "mock"
+    default_model: Optional[str] = "mock-model"
+    temperature: Optional[float] = Field(default=0.7, ge=0.0, le=2.0)
+    max_tokens: Optional[int] = Field(default=1024, ge=64, le=4096)
+    retrieval_mode: Optional[str] = Field(default="hybrid")
+    top_k: Optional[int] = Field(default=5, ge=1, le=20)
+    knowledge_base_ids: list[uuid.UUID] = Field(default_factory=list)
+
+
+class ConversationCreateRequest(BaseModel):
+    assistant_id: uuid.UUID
+    title: Optional[str] = Field(default="New Conversation", max_length=255)
+
+
+class ConversationUpdateRequest(BaseModel):
+    title: Optional[str] = Field(default=None, max_length=255)
+    status: Optional[str] = Field(default=None, max_length=50)
+
+
+class MessageCitationResponse(BaseModel):
+    id: uuid.UUID
+    citation_num: int = 1
+    chunk_id: Optional[uuid.UUID] = None
+    document_name: str
+    citation_text: str
+    page_number: Optional[int] = 1
+    heading_path: Optional[str] = None
+    snippet: Optional[str] = None
+    score: Optional[float] = None
+    bounding_box: Optional[dict[str, Any]] = None
+
+    model_config = {"from_attributes": True}
+
+
+class MessageResponse(BaseModel):
+    id: uuid.UUID
+    conversation_id: uuid.UUID
+    sender_type: str
+    content: str
+    token_count: int = 0
+    citations: list[MessageCitationResponse] = Field(default_factory=list)
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ConversationResponse(BaseModel):
+    id: uuid.UUID
+    tenant_id: uuid.UUID
+    assistant_id: uuid.UUID
+    user_id: uuid.UUID
+    title: str
     status: str
     created_at: datetime
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class SendMessageRequest(BaseModel):
+    content: str = Field(min_length=1, max_length=16000)

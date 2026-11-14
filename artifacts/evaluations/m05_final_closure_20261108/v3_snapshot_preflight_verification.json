@@ -1,0 +1,13 @@
+{
+  "size_bytes": 760423,
+  "size_match": true,
+  "sha256": "6776cf077941c913d794076bcd076340211c00c2d263291791169170a609f64e",
+  "sha256_match": true,
+  "path_traversal_issues": [],
+  "path_traversal_safe": true,
+  "manifest_declared_count": 434,
+  "count_match": true,
+  "missing_files": [],
+  "hash_mismatches": [],
+  "secret_alerts": []
+}

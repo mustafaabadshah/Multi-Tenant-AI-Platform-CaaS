@@ -1,0 +1,38 @@
+{
+  "timestamp": "2026-11-08T04:11:39Z",
+  "test_suites": [
+    "tests/test_m05_database_recovery.py",
+    "tests/test_m05_recovery_drills_unit.py",
+    "tests/test_m05_security_audit.py"
+  ],
+  "platform": "win32 -- Python 3.12.3",
+  "total_collected": 40,
+  "total_passed": 39,
+  "total_failed": 0,
+  "total_skipped": 1,
+  "duration_seconds": 39.10,
+  "pass_rate_percentage": 100.0,
+  "skipped_tests": [
+    {
+      "nodeid": "tests/test_m05_database_recovery.py::test_live_postgres_container_safety_check",
+      "reason": "Gracefully skipped because host physical RAM < 2048 MB (RAM safety gate)"
+    }
+  ],
+  "suites_summary": {
+    "test_m05_database_recovery": {
+      "passed": 11,
+      "skipped": 1,
+      "failed": 0
+    },
+    "test_m05_recovery_drills_unit": {
+      "passed": 14,
+      "skipped": 0,
+      "failed": 0
+    },
+    "test_m05_security_audit": {
+      "passed": 14,
+      "skipped": 0,
+      "failed": 0
+    }
+  }
+}

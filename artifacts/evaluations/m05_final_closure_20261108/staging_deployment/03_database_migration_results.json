@@ -1,0 +1,34 @@
+{
+  "audit_timestamp": "2026-11-08T19:50:00+05:00",
+  "target_platform": "Render Managed PostgreSQL 16",
+  "migration_order": [
+    {
+      "revision": "0001_initial_schema",
+      "description": "Initial multi-tenant schema with pgvector & uuid-ossp",
+      "type": "HISTORICAL_PRESERVED"
+    },
+    {
+      "revision": "0002_user_status_and_sessions",
+      "description": "User lifecycle status & active sessions",
+      "type": "HISTORICAL_PRESERVED"
+    },
+    {
+      "revision": "0003_knowledge_bases_and_documents",
+      "description": "Knowledge bases, documents, and chunk vectors",
+      "type": "HISTORICAL_PRESERVED"
+    },
+    {
+      "revision": "0004_assistants_and_conversations",
+      "description": "Assistants, conversations, messages, and citations",
+      "type": "HISTORICAL_PRESERVED"
+    },
+    {
+      "revision": "0005_add_assistant_byok_encrypted_key",
+      "description": "Forward migration: optional byok_encrypted_key column on assistants",
+      "type": "FORWARD_EXTENSION"
+    }
+  ],
+  "head_revision": "0005_add_assistant_byok_encrypted_key",
+  "pre_deploy_hook": "alembic upgrade head",
+  "status": "VALIDATED_MIGRATION_SEQUENCE_READY"
+}

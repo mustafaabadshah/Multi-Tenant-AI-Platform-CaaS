@@ -12,7 +12,7 @@ reports its blocked status until valid API specifications and credentials are pr
 """
 
 from app.core.config import settings
-from app.ocr.base import OCRConfiguration, OCRPageResult, OCRProvider, OCRResult
+from app.ocr.base import OCRConfiguration, OCRProvider, OCRResult
 
 
 class BadhoOCRProvider(OCRProvider):

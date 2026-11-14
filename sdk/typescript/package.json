@@ -1,0 +1,19 @@
+{
+  "name": "@mmaip/client",
+  "version": "0.1.0",
+  "description": "Official TypeScript & JavaScript client SDK for the Multi-Tenant AI Platform (CaaS)",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "keywords": [
+    "ai",
+    "assistant",
+    "caas",
+    "sdk",
+    "rag"
+  ],
+  "author": "Multi-Tenant AI Platform Engineering",
+  "license": "Apache-2.0"
+}

@@ -1,0 +1,19 @@
+{
+  "rebuild_mechanism": "IngestionService.reindex_knowledge_base",
+  "live_runner_drill_script": "infrastructure/scripts/drill-live-qdrant-rebuild.sh",
+  "source_of_truth": "PostgreSQL (document_chunks table with preserved vector embeddings)",
+  "binary_dependency": "None. Reindexing does NOT require re-parsing original uploaded binaries because chunk embeddings are stored relationally.",
+  "live_drill_implementation": {
+    "drill_collection": "m05_drill_rebuild_collection",
+    "dimension": 768,
+    "metric": "Cosine",
+    "verified_properties": [
+      "Collection creation via Qdrant REST API",
+      "Vector upsert with tenant_id, knowledge_base_id, and document_id payloads",
+      "Simulated collection deletion",
+      "Collection recreation and vector restoration",
+      "Filtered payload retrieval post-restoration"
+    ],
+    "execution_status": "INTEGRATED_INTO_RUNNER (Executes in external Linux container run)"
+  }
+}

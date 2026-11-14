@@ -1,0 +1,31 @@
+{
+  "timestamp": "2026-11-07T17:35:00+05:00",
+  "milestone": "M05",
+  "phase": "Phase 7",
+  "storage_recovery_inventory": {
+    "authoritative_source_of_truth": {
+      "database": "PostgreSQL 16",
+      "stored_content": [
+        "Tenants, users, roles, permissions, memberships",
+        "Knowledge bases and documents metadata",
+        "Document versions and extracted raw text",
+        "Document chunks (content, index, metadata_json, tenant_id, department_id)",
+        "Chunk embeddings (vector, embedding_version, dimensions, provider, model)",
+        "Assistants, conversations, messages, and citations"
+      ],
+      "recovery_method": "Full database restore from verified pg_dump"
+    },
+    "reconstructible_secondary_stores": {
+      "qdrant_vector_store": {
+        "status": "FULLY_RECONSTRUCTIBLE_FROM_POSTGRES",
+        "rebuild_strategy": "Iterate over document_chunks and chunk_embeddings in PostgreSQL to re-upsert into Qdrant collections ({collection}_{dims}) with tenant and department payload filters. Zero data loss."
+      },
+      "local_filesystem_storage": {
+        "configured_path": "./data/storage",
+        "content": "Raw uploaded source files (PDF, DOCX, XLSX, etc.)",
+        "backup_strategy": "Tar/zip archive synchronized to S3/R2 or persistent disk snapshot",
+        "fallback": "Extracted text and chunks are permanently preserved in PostgreSQL document_versions and document_chunks even if raw binary is lost."
+      }
+    }
+  }
+}

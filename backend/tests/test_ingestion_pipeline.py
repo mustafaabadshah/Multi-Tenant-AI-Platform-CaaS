@@ -1,6 +1,5 @@
 """Integration tests for document upload, ingestion pipeline, chunks, and reprocessing."""
 
-import io
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession

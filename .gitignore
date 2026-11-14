@@ -11,6 +11,7 @@ downloads/
 eggs/
 .eggs/
 lib/
+!frontend/lib/
 lib64/
 parts/
 sdist/
@@ -55,7 +56,12 @@ local_storage/
 # IDE & OS
 .vscode/
 .idea/
+.obsidian/
+*.canvas
 *.swp
 *.swo
+*.tar
+*.vhdx
 .DS_Store
 Thumbs.db
+

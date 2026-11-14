@@ -1,9 +1,29 @@
 """Storage provider interface for MM AI Platform."""
 
-from abc import ABC, abstractmethod
-from typing import AsyncIterator
 import re
 import uuid
+from abc import ABC, abstractmethod
+
+
+class StorageError(Exception):
+    """Base class for storage provider failures.
+
+    Providers raise a subclass instead of swallowing provider errors or
+    converting arbitrary exceptions into "not found" results.
+    """
+
+
+class StorageNotFoundError(StorageError):
+    """The requested object does not exist in the storage backend."""
+
+
+class StorageUnavailableError(StorageError):
+    """The storage backend could not be used safely.
+
+    Raised for authentication/authorization failures, network or timeout
+    errors, throttling, and provider-side 5xx responses. Callers must treat
+    the object state as unknown rather than absent.
+    """
 
 
 def sanitize_filename(filename: str) -> str:
@@ -49,6 +69,17 @@ class StorageProvider(ABC):
     @abstractmethod
     async def get_size(self, tenant_id: str, relative_key: str) -> int:
         """Return the size in bytes of the stored file."""
+        pass
+
+    @abstractmethod
+    async def list_keys(self, tenant_id: str, prefix: str = "") -> list[str]:
+        """List stored keys for a tenant, relative to the storage root.
+
+        Returned keys use the same format as ``Document.file_path`` (for example
+        ``tenants/{tenant_id}/kbs/...``). Providers that cannot enumerate
+        objects must raise ``NotImplementedError`` rather than return an empty
+        list, so reconciliation can report the capability as unsupported.
+        """
         pass
 
     def build_storage_key(

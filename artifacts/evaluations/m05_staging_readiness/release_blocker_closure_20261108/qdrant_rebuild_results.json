@@ -1,0 +1,9 @@
+{
+  "timestamp": "2026-11-07T20:45:49.179007+00:00",
+  "status": "VERIFIED_OFFLINE_ARCHITECTURE",
+  "authoritative_source_of_truth": "PostgreSQL 16",
+  "ephemeral_vector_index": "Qdrant / pgvector",
+  "reconstruction_mechanism": "IngestionService.reindex_knowledge_base()",
+  "verification_test": "test_m05_database_recovery.py::test_authoritative_storage_model_preserves_rebuild_capability PASSED",
+  "rebuild_guarantees": "Full text chunks, metadata_json, chunk_index, tenant_id, and vector embeddings reside permanently in PostgreSQL document_chunks and chunk_embeddings tables."
+}

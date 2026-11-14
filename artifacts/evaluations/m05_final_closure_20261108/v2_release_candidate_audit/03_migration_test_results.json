@@ -1,0 +1,29 @@
+{
+  "test_suite": "tests/test_m05_migration_compatibility.py",
+  "scenarios": {
+    "scenario_a_fresh_database": {
+      "description": "Verify fresh linear DAG from 0001 through 0005 head",
+      "result": "PASS",
+      "head_revision": "0005_add_assistant_byok_encrypted_key",
+      "total_revisions": 5
+    },
+    "scenario_b_existing_database_at_0004": {
+      "description": "Simulate existing database at 0004 with existing records and upgrade to 0005 without data loss",
+      "result": "PASS",
+      "data_loss_detected": false,
+      "column_nullable": true
+    },
+    "scenario_c_downgrade_and_reupgrade": {
+      "description": "Downgrade 0005 removes only byok_encrypted_key; records remain intact; re-upgrade restores column",
+      "result": "PASS",
+      "table_intact_after_downgrade": true,
+      "column_restored_on_reupgrade": true
+    }
+  },
+  "database_recovery_suite": {
+    "test_suite": "tests/test_m05_database_recovery.py",
+    "passed": 11,
+    "skipped": 1,
+    "failed": 0
+  }
+}

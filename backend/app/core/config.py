@@ -1,43 +1,95 @@
-from functools import lru_cache
+﻿from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(".env", "backend/.env"),
         env_file_encoding="utf-8",
         extra="ignore",
     )
 
     ENVIRONMENT: str = "development"
+    ALLOW_PUBLIC_REGISTRATION: bool | None = None
     DEBUG: bool = True
     PROJECT_NAME: str = "Multi-Tenant AI Platform-CaaS"
     API_V1_STR: str = "/api/v1"
 
+    # Feature gates (default-off; opt in explicitly per environment)
+    PUBLIC_PUBLISHING_ENABLED: bool = False
+    DEVELOPER_API_ENABLED: bool = False
+    CUSTOM_PROVIDER_ENDPOINTS_ENABLED: bool = False
+    # None = derive from ENVIRONMENT (docs enabled only in development).
+    ENABLE_API_DOCS: bool | None = None
+
     FRONTEND_URL: str = "http://localhost:3000"
     BACKEND_URL: str = "http://localhost:8000"
+    ALLOWED_ORIGINS: str = ""
+    ALLOW_DEV_LAN_ORIGINS: bool = False  # Explicit opt-in: enable LAN regex in development only
+    CORS_ORIGIN_REGEX: str = r"^https://mmaip-frontend(-[a-zA-Z0-9_-]+)?\.vercel\.app$"
 
     # Security & JWT
     SECRET_KEY: str = "dev-secret-key-change-me-in-production-min-32-bytes-long"
+    PREVIOUS_SECRET_KEYS: str = ""  # Comma-separated previous secret keys for seamless decryption during key rotation
+    SECRET_ENCRYPTION_KEY: str = ""  # Dedicated Fernet key material for BYOK secrets; falls back to SECRET_KEY when unset
     JWT_SECRET: str = "dev-jwt-secret-key-change-me-in-production-min-32-bytes"
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
-    # Database
+    # Database & Connection Pooling
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/mmaip_dev"
     DATABASE_SYNC_URL: str = "postgresql://postgres:postgres@localhost:5432/mmaip_dev"
+
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def assemble_async_database_url(cls, v: str) -> str:
+        if isinstance(v, str):
+            if v.startswith("postgres://"):
+                return v.replace("postgres://", "postgresql+asyncpg://", 1)
+            elif v.startswith("postgresql://") and not v.startswith("postgresql+"):
+                return v.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return v
+
+    @field_validator("DATABASE_SYNC_URL", mode="before")
+    @classmethod
+    def assemble_sync_database_url(cls, v: str) -> str:
+        if isinstance(v, str) and v.startswith("postgres://"):
+            return v.replace("postgres://", "postgresql://", 1)
+        return v
+
+    DB_POOL_SIZE: int = 5
+    DB_MAX_OVERFLOW: int = 10
+    DB_POOL_TIMEOUT: int = 30
+    DB_POOL_RECYCLE: int = 1800
 
     # Storage & Upload Limits
     STORAGE_BACKEND: str = "local"
     STORAGE_PATH: str = "./data/storage"
-    MAX_FILE_SIZE_BYTES: int = 50 * 1024 * 1024  # 50 MB
-    MAX_FILES_PER_REQUEST: int = 10
-    MAX_EXTRACTED_TEXT_SIZE_BYTES: int = 20 * 1024 * 1024  # 20 MB
+    S3_BUCKET_NAME: str | None = None
+    S3_ENDPOINT_URL: str | None = None
+    S3_ACCESS_KEY_ID: str | None = None
+    S3_SECRET_ACCESS_KEY: str | None = None
+    S3_REGION_NAME: str = "us-east-1"
+    MAX_FILE_SIZE_BYTES: int = 10 * 1024 * 1024  # 10 MiB
+    MAX_FILES_PER_REQUEST: int = 2
+    MAX_EXTRACTED_TEXT_SIZE_BYTES: int = 5 * 1024 * 1024  # 5 MiB
     MAX_ARCHIVE_EXPANSION_BYTES: int = 100 * 1024 * 1024  # 100 MB
     MAX_PROCESSING_DURATION_SECONDS: int = 600
     MAX_DOCUMENT_PAGES: int = 1000
+
+    # Background Ingestion Dispatch & Lease (Milestone 11)
+    # In-process dispatcher used by the API lifespan for single-process staging.
+    INGESTION_INLINE_DISPATCHER_ENABLED: bool = True
+    # How often the dispatcher polls when the queue is empty.
+    INGESTION_DISPATCHER_POLL_SECONDS: int = 2
+    # Lease age after which a PROCESSING job is considered stale. Must exceed
+    # the longest expected ingestion job because there is no heartbeat yet.
+    INGESTION_LEASE_SECONDS: int = 3600
+    # Number of jobs a single process may execute concurrently.
+    INGESTION_MAX_CONCURRENCY: int = 1
 
     # OCR Settings
     OCR_ENABLED_DEFAULT: bool = False
@@ -51,6 +103,7 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
     QDRANT_URL: str = "http://localhost:6333"
     QDRANT_API_KEY: str | None = None
+    QDRANT_COLLECTION_NAME: str = "mmaip_knowledge_chunks"
     PHOENIX_ENABLED: bool = False
 
     # OmniRoute Gateway Settings
@@ -59,10 +112,55 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str | None = None
     LLM_DEFAULT_MODEL: str = "auto"
 
+    # Rate Limiting (first-stage, per-process; no Redis dependency)
+    RATE_LIMIT_ENABLED: bool = True
+    # Comma-separated proxy IPs allowed to supply X-Forwarded-For (must be exact peers)
+    TRUSTED_PROXY_IPS: str = ""
+    RATE_LIMIT_LOGIN_PER_MINUTE: int = 10
+    RATE_LIMIT_REGISTER_PER_HOUR: int = 20
+    RATE_LIMIT_INVITE_ACCEPT_PER_HOUR: int = 20
+    RATE_LIMIT_PUBLIC_MESSAGE_PER_MINUTE: int = 20
+    RATE_LIMIT_DEVELOPER_PER_MINUTE: int = 60
+    RATE_LIMIT_UPLOAD_PER_HOUR: int = 60
+
+    # Embeddings & Vector Stores (Milestone 03)
+    DEFAULT_RETRIEVAL_MODE: str = "hybrid"  # "lexical", "semantic", "hybrid"
+    DEFAULT_VECTOR_STORE: str = "pgvector"  # "pgvector", "qdrant", "fts"
+    DEFAULT_EMBEDDING_PROVIDER: str = "omniroute"  # "omniroute", "openai", "local", "mock"
+    DEFAULT_EMBEDDING_MODEL: str = "text-embedding-3-small"
+    DEFAULT_EMBEDDING_DIMENSIONS: int = 1536
+    EMBEDDING_BATCH_SIZE: int = 32
+    EMBEDDING_TIMEOUT_SECONDS: int = 30
+    EMBEDDING_MAX_RETRIES: int = 3
+    RRF_K_CONSTANT: int = 60
+    RERANKING_ENABLED_DEFAULT: bool = False
+    ENCRYPTION_KEY: str | None = None
+    MAX_EMBEDDING_TOKENS_PER_REQUEST: int = 8192
+    MAX_TOP_K: int = 50
+
 
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+def api_docs_enabled(app_settings: Settings) -> bool:
+    """Return whether API documentation endpoints should be exposed."""
+    if app_settings.ENABLE_API_DOCS is not None:
+        return app_settings.ENABLE_API_DOCS
+    return (app_settings.ENVIRONMENT or "").strip().lower() == "development"
+
+
+def should_initialize_schema(app_settings: Settings) -> bool:
+    """Return whether startup should create missing tables (development only)."""
+    return app_settings.ENVIRONMENT == "development"
+
+
+def registration_allowed(cfg: Settings) -> bool:
+    """Return whether open self-service registration is permitted."""
+    if cfg.ALLOW_PUBLIC_REGISTRATION is not None:
+        return cfg.ALLOW_PUBLIC_REGISTRATION
+    return (cfg.ENVIRONMENT or "").strip().lower() == "development"
 
 
 settings = get_settings()

@@ -1,0 +1,104 @@
+{
+  "milestone": "M05",
+  "phase": "Phase 4 - Tenant Isolation, Resource ACL & Assistant Security",
+  "timestamp": "2026-11-07T13:48:00Z",
+  "implemented_roles": [
+    "platform_superadmin",
+    "tenant_owner",
+    "org_admin",
+    "dept_admin",
+    "assistant_manager",
+    "knowledge_editor",
+    "employee",
+    "viewer"
+  ],
+  "permission_count": 35,
+  "role_permission_mappings": {
+    "platform_superadmin": ["*"],
+    "tenant_owner": [
+      "tenant.read", "tenant.update", "tenant.delete", "tenant.billing",
+      "member.invite", "member.read", "member.update", "member.remove",
+      "department.create", "department.read", "department.update", "department.delete",
+      "group.create", "group.read", "group.update", "group.delete",
+      "assistant.create", "assistant.read", "assistant.update", "assistant.delete", "assistant.execute",
+      "knowledge.create", "knowledge.read", "knowledge.upload", "knowledge.delete",
+      "document.upload", "document.read", "document.delete", "document.reprocess", "document.read_content", "document.read_chunks",
+      "ingestion.read", "ingestion.retry", "ingestion.cancel", "ingestion.configure",
+      "retrieval.search", "retrieval.preview", "retrieval.configure",
+      "index.read", "index.reindex",
+      "conversation.create", "conversation.read", "conversation.delete",
+      "audit.read", "usage.read"
+    ],
+    "org_admin": [
+      "tenant.read", "tenant.update",
+      "member.invite", "member.read", "member.update", "member.remove",
+      "department.create", "department.read", "department.update", "department.delete",
+      "group.create", "group.read", "group.update", "group.delete",
+      "assistant.create", "assistant.read", "assistant.update", "assistant.execute",
+      "knowledge.create", "knowledge.read", "knowledge.upload",
+      "document.upload", "document.read", "document.delete", "document.reprocess", "document.read_content", "document.read_chunks",
+      "ingestion.read", "ingestion.retry", "ingestion.cancel", "ingestion.configure",
+      "retrieval.search", "retrieval.preview", "retrieval.configure",
+      "index.read", "index.reindex",
+      "conversation.create", "conversation.read", "conversation.delete",
+      "audit.read", "usage.read"
+    ],
+    "dept_admin": [
+      "tenant.read", "member.read", "department.read", "department.update", "group.read",
+      "assistant.read", "assistant.execute",
+      "knowledge.read", "knowledge.upload",
+      "document.upload", "document.read", "document.read_content", "document.read_chunks",
+      "ingestion.read", "ingestion.retry",
+      "retrieval.search", "retrieval.preview",
+      "index.read",
+      "conversation.create", "conversation.read", "conversation.delete"
+    ],
+    "assistant_manager": [
+      "tenant.read",
+      "assistant.create", "assistant.read", "assistant.update", "assistant.delete", "assistant.execute",
+      "knowledge.read",
+      "document.read", "document.read_content", "document.read_chunks",
+      "retrieval.search", "retrieval.preview",
+      "index.read",
+      "conversation.create", "conversation.read"
+    ],
+    "knowledge_editor": [
+      "tenant.read",
+      "knowledge.create", "knowledge.read", "knowledge.upload", "knowledge.delete",
+      "document.upload", "document.read", "document.delete", "document.reprocess", "document.read_content", "document.read_chunks",
+      "ingestion.read", "ingestion.retry", "ingestion.configure",
+      "retrieval.search", "retrieval.preview", "retrieval.configure",
+      "index.read", "index.reindex",
+      "assistant.read",
+      "conversation.create", "conversation.read"
+    ],
+    "employee": [
+      "tenant.read", "member.read", "department.read", "group.read",
+      "assistant.read", "assistant.execute",
+      "knowledge.read",
+      "document.read", "document.read_content", "document.read_chunks",
+      "ingestion.read",
+      "retrieval.search",
+      "conversation.create", "conversation.read"
+    ],
+    "viewer": [
+      "tenant.read", "member.read", "department.read", "group.read",
+      "assistant.read",
+      "knowledge.read",
+      "document.read", "document.read_content", "document.read_chunks",
+      "retrieval.search",
+      "conversation.read"
+    ]
+  },
+  "resource_authorization_conditions": {
+    "tenant": "Requires valid verified JWT. User must have active membership in the target workspace. Forged X-Tenant-ID headers rejected with 403.",
+    "department": "Scanned strictly within active tenant_id. Cross-tenant access returns 404.",
+    "group": "Scoped strictly to active tenant_id. Cannot reference foreign department or tenant.",
+    "knowledge_base": "Scoped to tenant_id. When department_id is set, only members of that department or tenant administrators may access.",
+    "document": "Scoped to tenant_id. When department_id is set, only members of that department or administrators may read metadata, content, or chunks.",
+    "assistant": "Scoped to tenant_id. Can only be attached to knowledge bases belonging to the same tenant. Foreign KB attachment rejected with 400.",
+    "conversation": "Scoped to tenant_id and user_id. Non-admin members can only access their own conversations. Administrators can access for audit.",
+    "message": "Scoped to tenant_id and parent conversation. In-tenant cross-user access blocked.",
+    "citation": "Scoped to message and tenant_id. Source text and references bound to authorized document candidates."
+  }
+}

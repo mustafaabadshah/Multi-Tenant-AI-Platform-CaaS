@@ -6,7 +6,7 @@ from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.constants import MembershipStatus, UserStatus
+from app.core.constants import MembershipStatus, SystemRole, UserStatus
 from app.core.security import decode_token
 from app.database.session import get_db
 from app.models.membership import TenantMembership
@@ -25,6 +25,25 @@ class TenantContext:
     membership: TenantMembership
     role: Role
     permissions: set[str]
+
+    @property
+    def user_id(self) -> uuid.UUID:
+        return self.membership.user_id
+
+    @property
+    def is_admin(self) -> bool:
+        return self.role.name in (
+            SystemRole.PLATFORM_SUPERADMIN.value,
+            SystemRole.TENANT_OWNER.value,
+            SystemRole.ORG_ADMIN.value,
+        )
+
+    @property
+    def is_owner(self) -> bool:
+        return self.role.name in (
+            SystemRole.PLATFORM_SUPERADMIN.value,
+            SystemRole.TENANT_OWNER.value,
+        )
 
 
 async def get_current_user(

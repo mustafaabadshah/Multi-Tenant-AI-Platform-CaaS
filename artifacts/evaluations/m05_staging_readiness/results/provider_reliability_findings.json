@@ -1,0 +1,46 @@
+[
+  {
+    "id": "FINDING-LLM-01",
+    "title": "Unvalidated Custom Endpoint Base URL Allowed Arbitrary Cloud Metadata SSRF",
+    "severity": "HIGH",
+    "affected_component": "app.llm.providers.openai_provider.OpenAICompatibleLLMProvider",
+    "reproduction_steps": "Configure an OpenAI-compatible provider with base_url='http://169.254.169.254/latest/meta-data/'. An outbound HTTP request was previously issued to AWS/Azure metadata services.",
+    "evidence": "SSRF vulnerability verified prior to Phase 6 hardening.",
+    "fix_status": "RESOLVED",
+    "regression_test": "tests/test_m05_provider_reliability.py::test_validate_provider_endpoint_blocks_ssrf_cloud_metadata",
+    "residual_risk": "Low. Scheme and IP/hostname checks strictly reject link-local and cloud metadata destinations while allowing local development on localhost/127.0.0.1."
+  },
+  {
+    "id": "FINDING-LLM-02",
+    "title": "Raw HTTPX Network and Auth Exceptions Could Bubble Up Unnormalized",
+    "severity": "MEDIUM",
+    "affected_component": "app.llm.providers.openai_provider.OpenAICompatibleLLMProvider",
+    "reproduction_steps": "Simulate connection timeout, socket error, or HTTP 401/429/500 from LLM endpoint. Without normalization, internal socket details and stack traces could be exposed to callers.",
+    "evidence": "Observed unmapped httpx.ConnectTimeout in direct provider calls.",
+    "fix_status": "RESOLVED",
+    "regression_test": "tests/test_m05_provider_reliability.py (tests 9 to 13)",
+    "residual_risk": "None. Structured exception hierarchy (LLMTimeoutError, LLMConnectionError, LLMAuthenticationError, LLMRateLimitError, LLMProviderError) normalizes all provider errors."
+  },
+  {
+    "id": "FINDING-LLM-03",
+    "title": "Assistant Model and Provider Fields Lacked Server-Side Whitelisting",
+    "severity": "MEDIUM",
+    "affected_component": "app.repositories.assistant_repository.AssistantRepository",
+    "reproduction_steps": "Create or update an assistant with default_model='' or llm_provider='unsupported_arbitrary_backend'. Was previously accepted and caused late failures during conversation streaming.",
+    "evidence": "Unconstrained string fields in Assistant model allowed arbitrary inputs.",
+    "fix_status": "RESOLVED",
+    "regression_test": "tests/test_m05_provider_reliability.py::test_assistant_creation_rejects_unsupported_provider",
+    "residual_risk": "None. Strict whitelist {'omniroute', 'openai', 'mock'} and non-empty model checks enforced at repository level."
+  },
+  {
+    "id": "FINDING-LLM-04",
+    "title": "Empty Response Stream from LLM Provider Could Commit Blank Messages",
+    "severity": "LOW",
+    "affected_component": "app.assistant_runtime.runtime.AssistantRuntime",
+    "reproduction_steps": "If an upstream provider returns zero tokens before finishing, an empty assistant Message record could be inserted and committed to the database.",
+    "evidence": "Stream completion previously committed final_content without validating whether any non-whitespace tokens were generated.",
+    "fix_status": "RESOLVED",
+    "regression_test": "tests/test_m05_provider_reliability.py::test_sse_streaming_empty_response_stream_fails_safely",
+    "residual_risk": "None. AssistantRuntime now intercepts empty final content, emits message_error, and prevents database write."
+  }
+]

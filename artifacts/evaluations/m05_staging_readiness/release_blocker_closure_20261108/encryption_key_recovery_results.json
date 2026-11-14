@@ -1,0 +1,20 @@
+{
+  "timestamp": "2026-11-07T20:45:49.179007+00:00",
+  "status": "PASS (OFFLINE VERIFIED)",
+  "algorithms": [
+    "Fernet",
+    "MultiFernet"
+  ],
+  "key_rotation_service": "backend/app/commands/rotate_encryption_keys.py",
+  "features": [
+    "Resumable batch processing",
+    "MultiFernet fallback decryption using PREVIOUS_SECRET_KEYS",
+    "Zero plaintext leakage in logs or error messages",
+    "Deterministic tamper rejection"
+  ],
+  "verification_tests": [
+    "test_m05_database_recovery.py::test_fernet_byok_encryption_tamper_rejection PASSED",
+    "test_m05_database_recovery.py::test_multifernet_fallback_decryption_with_previous_keys PASSED",
+    "test_m05_database_recovery.py::test_rotate_tenant_byok_secrets_in_database PASSED"
+  ]
+}

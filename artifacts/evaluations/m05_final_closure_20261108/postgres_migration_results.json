@@ -1,0 +1,7 @@
+{
+  "migration_head_revision": "0004_assistants_and_conversations",
+  "current_schema_version": "head",
+  "migration_offline_verification": "PASSED (Alembic configuration and syntax validated)",
+  "migration_live_run": "PENDING_PORTABLE_RUNNER",
+  "expected_database": "m05_integration"
+}

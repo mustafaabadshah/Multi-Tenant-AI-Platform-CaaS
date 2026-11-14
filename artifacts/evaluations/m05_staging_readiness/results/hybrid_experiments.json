@@ -1,0 +1,82 @@
+[
+  {
+    "configuration": "Standard RRF (k=60, w_lex=1.0, w_sem=1.0)",
+    "k": 60,
+    "w_lex": 1.0,
+    "w_sem": 1.0,
+    "recall@1": 0.8182,
+    "recall@3": 0.9545,
+    "mrr": 0.8977,
+    "ndcg@3": 0.9042
+  },
+  {
+    "configuration": "Standard RRF (k=20, w_lex=1.0, w_sem=1.0)",
+    "k": 20,
+    "w_lex": 1.0,
+    "w_sem": 1.0,
+    "recall@1": 0.8182,
+    "recall@3": 0.9545,
+    "mrr": 0.8977,
+    "ndcg@3": 0.9042
+  },
+  {
+    "configuration": "Standard RRF (k=100, w_lex=1.0, w_sem=1.0)",
+    "k": 100,
+    "w_lex": 1.0,
+    "w_sem": 1.0,
+    "recall@1": 0.8182,
+    "recall@3": 0.9545,
+    "mrr": 0.8977,
+    "ndcg@3": 0.9042
+  },
+  {
+    "configuration": "Weighted RRF (k=60, w_lex=0.5, w_sem=1.0)",
+    "k": 60,
+    "w_lex": 0.5,
+    "w_sem": 1.0,
+    "recall@1": 0.9091,
+    "recall@3": 1.0,
+    "mrr": 0.9545,
+    "ndcg@3": 0.9664
+  },
+  {
+    "configuration": "Weighted RRF (k=60, w_lex=0.3, w_sem=1.0)",
+    "k": 60,
+    "w_lex": 0.3,
+    "w_sem": 1.0,
+    "recall@1": 0.9091,
+    "recall@3": 1.0,
+    "mrr": 0.9545,
+    "ndcg@3": 0.9664
+  },
+  {
+    "configuration": "Weighted RRF (k=60, w_lex=0.2, w_sem=1.0)",
+    "k": 60,
+    "w_lex": 0.2,
+    "w_sem": 1.0,
+    "recall@1": 0.9545,
+    "recall@3": 1.0,
+    "mrr": 0.9773,
+    "ndcg@3": 0.9832
+  },
+  {
+    "configuration": "Semantic Priority RRF (k=60, w_lex=0.2, w_sem=2.0)",
+    "k": 60,
+    "w_lex": 0.2,
+    "w_sem": 2.0,
+    "recall@1": 0.9545,
+    "recall@3": 1.0,
+    "mrr": 0.9773,
+    "ndcg@3": 0.9832
+  },
+  {
+    "configuration": "Semantic Only (baseline)",
+    "k": 60,
+    "w_lex": 0.0,
+    "w_sem": 1.0,
+    "recall@1": 0.9545,
+    "recall@3": 1.0,
+    "mrr": 0.9697,
+    "ndcg@3": 0.9773
+  }
+]

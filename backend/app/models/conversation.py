@@ -1,5 +1,5 @@
 import uuid
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -13,9 +13,9 @@ if TYPE_CHECKING:
 class Conversation(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin):
     __tablename__ = "conversations"
 
-    user_id: Mapped[uuid.UUID] = mapped_column(
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
     assistant_id: Mapped[uuid.UUID] = mapped_column(
@@ -33,7 +33,7 @@ class Conversation(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin)
     )
 
 
-class Message(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+class Message(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin):
     __tablename__ = "messages"
 
     conversation_id: Mapped[uuid.UUID] = mapped_column(
@@ -55,7 +55,7 @@ class Message(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     )
 
 
-class MessageAttachment(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+class MessageAttachment(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin):
     __tablename__ = "message_attachments"
 
     message_id: Mapped[uuid.UUID] = mapped_column(
@@ -69,7 +69,7 @@ class MessageAttachment(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     message: Mapped["Message"] = relationship("Message", back_populates="attachments")
 
 
-class MessageCitation(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+class MessageCitation(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin):
     __tablename__ = "message_citations"
 
     message_id: Mapped[uuid.UUID] = mapped_column(
@@ -79,6 +79,8 @@ class MessageCitation(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     )
     chunk_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
     document_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    citation_num: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     citation_text: Mapped[str] = mapped_column(Text, nullable=False)
 
     message: Mapped["Message"] = relationship("Message", back_populates="citations")
+

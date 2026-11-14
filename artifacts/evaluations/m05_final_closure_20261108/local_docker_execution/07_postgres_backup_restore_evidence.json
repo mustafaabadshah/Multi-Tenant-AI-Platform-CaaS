@@ -1,0 +1,9 @@
+{
+  "execution_timestamp": "2026-11-08T15:28:00+05:00",
+  "status": "NOT_RUN",
+  "drill_name": "drill-live-postgres-backup-restore.sh",
+  "rationale": "Live PostgreSQL container not started due to host RAM decision gate (< 4 GB).",
+  "synthetic_byok_encryption_verified": false,
+  "backup_archive_created": false,
+  "restore_database_verified": false
+}

@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MessageCitationItemVisualGeometry",
+  "type": "object",
+  "required": [
+    "id",
+    "citation_num",
+    "document_name",
+    "citation_text",
+    "page_number",
+    "bounding_box"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier of the citation chunk"
+    },
+    "citation_num": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Sequential citation reference marker matching [1], [2] in LLM output"
+    },
+    "chunk_id": {
+      "type": ["string", "null"],
+      "description": "Associated document chunk primary key"
+    },
+    "document_name": {
+      "type": "string",
+      "description": "Clean, sanitized document filename"
+    },
+    "citation_text": {
+      "type": "string",
+      "description": "Verified text snippet extracted from document chunk"
+    },
+    "snippet": {
+      "type": ["string", "null"],
+      "description": "Context preview snippet"
+    },
+    "page_number": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1,
+      "description": "1-based document page provenance"
+    },
+    "heading_path": {
+      "type": ["string", "null"],
+      "description": "Hierarchical document section breadcrumb"
+    },
+    "score": {
+      "type": ["number", "null"],
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "Hybrid/vector retrieval similarity score"
+    },
+    "bounding_box": {
+      "type": "object",
+      "required": ["page", "x", "y", "width", "height"],
+      "properties": {
+        "page": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Target page number"
+        },
+        "x": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 612,
+          "description": "Left coordinate in points (0 to 612 standard US Letter)"
+        },
+        "y": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 792,
+          "description": "Top coordinate in points (0 to 792 standard US Letter)"
+        },
+        "width": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 612,
+          "description": "Bounding box width in points"
+        },
+        "height": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 792,
+          "description": "Bounding box height in points"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "execution_timestamp": "2026-11-08T15:28:00+05:00",
+  "status": "NOT_RUN",
+  "rationale": "Execution halted at mandatory 4 GB available physical RAM decision gate. Current available physical RAM is 2,298.66 MB (~2.24 GB). Per Section 5 and Stage 5 directives, live container suite was not started.",
+  "target_service": "PostgreSQL 16 + pgvector",
+  "target_port": 55432,
+  "cataloged_test_node_ids": [
+    "tests/integration/test_database_postgres.py::test_pgvector_extension_loaded",
+    "tests/integration/test_database_postgres.py::test_alembic_migrations_head_postgres",
+    "tests/integration/test_database_postgres.py::test_hybrid_search_postgres_execution",
+    "tests/integration/test_database_postgres.py::test_vector_similarity_search_postgres",
+    "tests/integration/test_database_postgres.py::test_full_text_search_tsquery_ranking",
+    "tests/integration/test_database_postgres.py::test_composite_tenant_fk_integrity",
+    "tests/integration/test_database_postgres.py::test_rls_or_tenant_isolation_boundary",
+    "tests/integration/test_database_postgres.py::test_cross_tenant_document_leakage_prevented",
+    "tests/integration/test_database_postgres.py::test_assistant_tenant_foreign_key_constraint",
+    "tests/integration/test_database_postgres.py::test_migration_0005_forward_and_downgrade",
+    "tests/integration/test_database_postgres.py::test_sql_injection_resilience_in_fts",
+    "tests/integration/test_database_postgres.py::test_concurrent_tenant_inserts_and_isolation"
+  ],
+  "tests_executed": 0,
+  "tests_passed": 0,
+  "tests_failed": 0,
+  "tests_skipped": 12
+}

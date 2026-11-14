@@ -1,0 +1,31 @@
+{
+  "milestone": "M05",
+  "phase": 11,
+  "component": "Performance & Resource Constraints Review",
+  "timestamp": "2026-11-08T00:50:00Z",
+  "small_host_profile": {
+    "target_hardware": "8 GB RAM, dual-core CPU, no GPU (e.g. Intel i3-7100U / shared cloud instance)",
+    "recommendations": [
+      {
+        "area": "Uvicorn Worker Concurrency",
+        "setting": "WEB_CONCURRENCY=2 (configured in render.yaml)",
+        "rationale": "Prevents memory bloat; 2 asynchronous workers handle up to 500 concurrent I/O connections while consuming < 300 MB RAM."
+      },
+      {
+        "area": "Database Connection Pool",
+        "setting": "POOL_SIZE=10, MAX_OVERFLOW=5",
+        "rationale": "Keeps PostgreSQL connection memory footprint minimal (< 50 MB) while accommodating burst requests."
+      },
+      {
+        "area": "Embedding Model Loading",
+        "setting": "Mock or remote OmniRoute embedding endpoints for constrained local dev; SentenceTransformers on CPU only with mini models (all-MiniLM-L6-v2, ~90 MB RAM)",
+        "rationale": "Avoids multi-gigabyte PyTorch GPU/CUDA dependencies."
+      },
+      {
+        "area": "Ingestion Memory Bounding",
+        "setting": "Chunk streaming and max upload limit 50 MB",
+        "rationale": "Prevents out-of-memory crashes on massive scanned PDF uploads."
+      }
+    ]
+  }
+}

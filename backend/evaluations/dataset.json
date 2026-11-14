@@ -1,0 +1,290 @@
+{
+  "description": "Reproducible benchmark evaluation dataset for Multi-Tenant AI Platform retrieval",
+  "documents": [
+    {
+      "id": "doc-hr-leave",
+      "title": "Employee Annual Leave and Time-Off Policy",
+      "chunks": [
+        {
+          "id": "chunk-hr-1",
+          "content": "All full-time employees accrue 20 days of paid annual vacation leave per calendar year. Vacation requests exceeding three consecutive days must be submitted at least two weeks in advance through the HR portal for departmental manager sign-off."
+        },
+        {
+          "id": "chunk-hr-2",
+          "content": "Employees are granted up to 10 days of paid sick leave annually. If sick leave extends beyond three consecutive working days, an official medical practitioner certificate must be uploaded to the portal upon return."
+        },
+        {
+          "id": "chunk-hr-3",
+          "content": "Unused vacation leave can be rolled over into the subsequent calendar year up to a maximum limit of 5 business days. Any unused days exceeding this limit will automatically lapse on December 31st without cash compensation."
+        }
+      ]
+    },
+    {
+      "id": "doc-it-security",
+      "title": "Remote Access, VPN, and Credential Management Guidelines",
+      "chunks": [
+        {
+          "id": "chunk-it-1",
+          "content": "Remote connections to internal corporate networks require the WireGuard enterprise VPN client with hardware-backed FIDO2 multi-factor authentication tokens. Password-only authentication is strictly prohibited."
+        },
+        {
+          "id": "chunk-it-2",
+          "content": "Production server access is restricted to bastion jump-hosts using Ed25519 SSH keypairs. All SSH private keys must be protected by a passphrase of at least 16 characters and never stored unencrypted on local disks."
+        },
+        {
+          "id": "chunk-it-3",
+          "content": "All corporate laptops must enable full-disk encryption via BitLocker or FileVault. Lost or stolen computing devices must be reported to the IT Security Hotline within two hours of discovery."
+        }
+      ]
+    },
+    {
+      "id": "doc-engineering-standards",
+      "title": "Software Engineering Architecture & Python Coding Guidelines",
+      "chunks": [
+        {
+          "id": "chunk-eng-1",
+          "content": "All backend microservices and monolith modules must use Python 3.12 with async SQLAlchemy 2.0 and strict Pydantic v2 schemas. Type annotations are mandatory across all public functions and service boundaries."
+        },
+        {
+          "id": "chunk-eng-2",
+          "content": "Every relational database entity owned by a tenant must include a foreign key to tenant_id and composite indexes where query filtering is performed. Direct queries without tenant scoping are prohibited by architectural linter rules."
+        },
+        {
+          "id": "chunk-eng-3",
+          "content": "Pull requests require at least two approving reviews from senior engineers and 100% passing automated test suites before merging into the main branch. Direct commits to production branches are blocked."
+        }
+      ]
+    },
+    {
+      "id": "doc-finance-expenses",
+      "title": "Corporate Travel & Expense Reimbursement Regulations",
+      "chunks": [
+        {
+          "id": "chunk-fin-1",
+          "content": "Business travel expenses must be submitted within 30 days of trip conclusion. Original itemized receipts are required for all individual expenses exceeding 25 USD or equivalent foreign currency."
+        },
+        {
+          "id": "chunk-fin-2",
+          "content": "The daily per diem meal allowance is capped at 75 USD for domestic trips and 110 USD for international business travel. Alcohol purchases are non-reimbursable unless part of an authorized client entertainment dinner."
+        },
+        {
+          "id": "chunk-fin-3",
+          "content": "Personal vehicle mileage used for business travel will be reimbursed at the standard statutory rate of 0.67 USD per mile upon submission of odometer logs and route details."
+        }
+      ]
+    },
+    {
+      "id": "doc-incident-response",
+      "title": "Production Incident Management & SLA Standards",
+      "chunks": [
+        {
+          "id": "chunk-inc-1",
+          "content": "Sev-1 incidents represent complete service outages affecting more than 10 percent of active users. The On-Call Incident Commander must acknowledge within 15 minutes and provide customer status page updates every 30 minutes."
+        },
+        {
+          "id": "chunk-inc-2",
+          "content": "Sev-2 incidents denote major feature degradation with viable workarounds. The acknowledgment SLA is 1 hour, with status updates published every 2 hours until mitigation."
+        },
+        {
+          "id": "chunk-inc-3",
+          "content": "Blameless post-mortem reviews are mandatory for all Sev-1 and Sev-2 outages. Post-mortem drafts must be published in the internal wiki within 72 hours of incident resolution."
+        }
+      ]
+    },
+    {
+      "id": "doc-ai-platform",
+      "title": "Multi-Tenant AI Platform Architecture and Ingestion Specs",
+      "chunks": [
+        {
+          "id": "chunk-ai-1",
+          "content": "The retrieval engine implements hybrid search combining PostgreSQL full-text search (BM25 lexical ranking) with dense vector cosine similarity using Reciprocal Rank Fusion with a k constant of 60."
+        },
+        {
+          "id": "chunk-ai-2",
+          "content": "Document ingestion parses PDF, DOCX, XLSX, and text formats into semantic chunks using sliding windows with 10 percent overlap. Tesseract OCR is invoked for scanned pages lacking embedded text layers."
+        },
+        {
+          "id": "chunk-ai-3",
+          "content": "BYOK API keys for OpenAI and OmniRoute are encrypted at rest using AES-128 Fernet keys. Key rotation is supported without downtime, and decrypted secrets are never logged or returned over public REST APIs."
+        }
+      ]
+    }
+  ],
+  "queries": [
+    {
+      "id": "q01",
+      "query": "How many days of paid vacation do employees receive each year?",
+      "category": "direct_keyword",
+      "answerable": true,
+      "relevant_chunk_ids": ["chunk-hr-1"]
+    },
+    {
+      "id": "q02",
+      "query": "What is the doctor note requirement when someone is out sick?",
+      "category": "paraphrase",
+      "answerable": true,
+      "relevant_chunk_ids": ["chunk-hr-2"]
+    },
+    {
+      "id": "q03",
+      "query": "Can unused holiday time be carried over to the following year?",
+      "category": "semantic_synonym",
+      "answerable": true,
+      "relevant_chunk_ids": ["chunk-hr-3"]
+    },
+    {
+      "id": "q04",
+      "query": "What hardware authentication is required for remote network connection?",
+      "category": "direct_keyword",
+      "answerable": true,
+      "relevant_chunk_ids": ["chunk-it-1"]
+    },
+    {
+      "id": "q05",
+      "query": "What kind of cryptographic keys are required to connect to production jump servers?",
+      "category": "paraphrase",
+      "answerable": true,
+      "relevant_chunk_ids": ["chunk-it-2"]
+    },
+    {
+      "id": "q06",
+      "query": "How quickly must an employee report a misplaced or stolen company laptop?",
+      "category": "fact_lookup",
+      "answerable": true,
+      "relevant_chunk_ids": ["chunk-it-3"]
+    },
+    {
+      "id": "q07",
+      "query": "Which version of Python and SQLAlchemy is standard for backend services?",
+      "category": "direct_keyword",
+      "answerable": true,
+      "relevant_chunk_ids": ["chunk-eng-1"]
+    },
+    {
+      "id": "q08",
+      "query": "How is multi-tenant database isolation enforced in SQL queries and schemas?",
+      "category": "semantic_synonym",
+      "answerable": true,
+      "relevant_chunk_ids": ["chunk-eng-2"]
+    },
+    {
+      "id": "q09",
+      "query": "How many code reviews are needed before merging a feature into main?",
+      "category": "fact_lookup",
+      "answerable": true,
+      "relevant_chunk_ids": ["chunk-eng-3"]
+    },
+    {
+      "id": "q10",
+      "query": "What is the deadline for submitting travel expense claims?",
+      "category": "direct_keyword",
+      "answerable": true,
+      "relevant_chunk_ids": ["chunk-fin-1"]
+    },
+    {
+      "id": "q11",
+      "query": "What is the daily meal budget when traveling internationally for business?",
+      "category": "fact_lookup",
+      "answerable": true,
+      "relevant_chunk_ids": ["chunk-fin-2"]
+    },
+    {
+      "id": "q12",
+      "query": "How much money per mile is paid when driving your personal car for company work?",
+      "category": "semantic_synonym",
+      "answerable": true,
+      "relevant_chunk_ids": ["chunk-fin-3"]
+    },
+    {
+      "id": "q13",
+      "query": "What is the response time requirement for a Sev-1 service outage?",
+      "category": "direct_keyword",
+      "answerable": true,
+      "relevant_chunk_ids": ["chunk-inc-1"]
+    },
+    {
+      "id": "q14",
+      "query": "What is the update frequency and SLA for major feature degradation?",
+      "category": "paraphrase",
+      "answerable": true,
+      "relevant_chunk_ids": ["chunk-inc-2"]
+    },
+    {
+      "id": "q15",
+      "query": "When must a blameless post-mortem draft be published following an incident?",
+      "category": "fact_lookup",
+      "answerable": true,
+      "relevant_chunk_ids": ["chunk-inc-3"]
+    },
+    {
+      "id": "q16",
+      "query": "How does the platform combine lexical search and vector similarity scores?",
+      "category": "semantic_synonym",
+      "answerable": true,
+      "relevant_chunk_ids": ["chunk-ai-1"]
+    },
+    {
+      "id": "q17",
+      "query": "What optical character recognition tool is used when PDFs have no selectable text?",
+      "category": "semantic_synonym",
+      "answerable": true,
+      "relevant_chunk_ids": ["chunk-ai-2"]
+    },
+    {
+      "id": "q18",
+      "query": "How are customer third-party LLM credentials protected at rest?",
+      "category": "direct_keyword",
+      "answerable": true,
+      "relevant_chunk_ids": ["chunk-ai-3"]
+    },
+    {
+      "id": "q19",
+      "query": "taking time off for holiday rest and vacation guidelines",
+      "category": "semantic_synonym",
+      "answerable": true,
+      "relevant_chunk_ids": ["chunk-hr-1"]
+    },
+    {
+      "id": "q20",
+      "query": "What happens if my vacation days exceed the rollover limit on New Year's Eve?",
+      "category": "paraphrase",
+      "answerable": true,
+      "relevant_chunk_ids": ["chunk-hr-3"]
+    },
+    {
+      "id": "q21",
+      "query": "Can employees buy beer or wine during business travel?",
+      "category": "fact_lookup",
+      "answerable": true,
+      "relevant_chunk_ids": ["chunk-fin-2"]
+    },
+    {
+      "id": "q22",
+      "query": "What are the rules for hard drive encryption on employee computers?",
+      "category": "paraphrase",
+      "answerable": true,
+      "relevant_chunk_ids": ["chunk-it-3"]
+    },
+    {
+      "id": "q23",
+      "query": "What is the best recipe for baking homemade sourdough bread?",
+      "category": "unanswerable",
+      "answerable": false,
+      "relevant_chunk_ids": []
+    },
+    {
+      "id": "q24",
+      "query": "Does the company allow cryptocurrency mining in the office data center?",
+      "category": "unanswerable",
+      "answerable": false,
+      "relevant_chunk_ids": []
+    },
+    {
+      "id": "q25",
+      "query": "What is the tuition reimbursement policy for master degree programs?",
+      "category": "unanswerable",
+      "answerable": false,
+      "relevant_chunk_ids": []
+    }
+  ]
+}

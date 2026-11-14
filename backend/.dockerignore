@@ -1,0 +1,18 @@
+# Backend Docker build context exclusions
+# Prevents local dev state and secrets from being baked into images
+
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+.env
+.env.*
+*.db
+data/
+tests/
+evaluations/
+local_storage/

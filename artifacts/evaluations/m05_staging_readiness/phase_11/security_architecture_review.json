@@ -1,0 +1,44 @@
+{
+  "milestone": "M05",
+  "phase": 11,
+  "component": "Security Architecture Review",
+  "timestamp": "2026-11-08T00:50:00Z",
+  "architecture_security_posture": "STRONG",
+  "evaluated_controls": [
+    {
+      "control": "Tenant Context Propagation",
+      "architecture_layer": "FastAPI Dependency (app/api/deps.py)",
+      "mechanism": "Extracts JWT -> looks up user -> validates active membership in header X-Tenant-ID -> constructs immutable TenantContext",
+      "status": "PASS",
+      "bypass_resistance": "Header tampering without valid membership immediately returns 403 Forbidden; path/header mismatch returns 403 Forbidden."
+    },
+    {
+      "control": "Repository Scoping Integrity",
+      "architecture_layer": "Data Access Layer (app/repositories/)",
+      "mechanism": "Every query explicitly enforces WHERE tenant_id = :active_tenant_id and composite primary/foreign keys",
+      "status": "PASS",
+      "bypass_resistance": "Cross-tenant resource lookups yield 404 Not Found, preventing tenant enumeration."
+    },
+    {
+      "control": "RAG Prompt Boundary Defense",
+      "architecture_layer": "Assistant Runtime (app/assistant_runtime/context.py)",
+      "mechanism": "Sanitizes delimiter tags (<KNOWLEDGE_BASE_CONTEXT>), rewrites instruction headers ([UNTRUSTED_HEADER]), strips Unicode zero-width characters",
+      "status": "PASS",
+      "bypass_resistance": "Retrieved documents and user inputs are strictly framed as passive data beneath immutable developer security instructions."
+    },
+    {
+      "control": "BYOK Credential Protection",
+      "architecture_layer": "Cryptographic Services (app/core/crypto.py)",
+      "mechanism": "Fernet symmetric authenticated encryption with MultiFernet rotation and automatic secret masking (***1234)",
+      "status": "PASS",
+      "bypass_resistance": "Tampered ciphertext triggers safe DecryptionError; plaintext keys are never logged or stored."
+    },
+    {
+      "control": "Custom Provider Endpoint SSRF Mitigations",
+      "architecture_layer": "LLM Provider Validation (app/llm/providers/)",
+      "mechanism": "validate_provider_endpoint blocks cloud metadata (169.254.169.254), link-local IP ranges, and non-HTTP schemes",
+      "status": "PASS",
+      "bypass_resistance": "Attempts to point BYOK providers at AWS/GCP/Azure internal metadata or local services (file://) are rejected at configuration time."
+    }
+  ]
+}

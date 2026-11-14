@@ -1,0 +1,8 @@
+{
+  "timestamp": "2026-11-07T21:03:51.104439+00:00",
+  "status": "NOT RUN \u2014 ENVIRONMENT CONSTRAINT",
+  "service_target": "PostgreSQL 16 (image: pgvector/pgvector:pg16, port 55432)",
+  "reason": "Host available physical RAM (1237.6 MB) is below the mandatory 2048 MB memory safety threshold. Windows service com.docker.service is stopped and requires elevated UAC.",
+  "execution_command": "docker compose -f docker-compose.m05-postgres.yml up -d && pytest tests/integration/test_postgres_connection.py tests/integration/test_postgres_migrations.py tests/integration/test_pgvector_operations.py tests/integration/test_postgres_fts.py tests/integration/test_postgres_tenant_isolation.py -v",
+  "offline_verification": "PASS (All 147 offline functional, model, and security tests passed)"
+}

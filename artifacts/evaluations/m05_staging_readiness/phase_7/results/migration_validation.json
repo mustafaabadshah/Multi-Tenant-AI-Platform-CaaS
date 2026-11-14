@@ -1,0 +1,90 @@
+{
+  "timestamp": "2026-11-07T17:35:00+05:00",
+  "milestone": "M05",
+  "phase": "Phase 7",
+  "migration_graph": {
+    "total_revisions": 4,
+    "continuity": "VERIFIED_LINEAR_DAG",
+    "reversibility": "ALL_REVERSIBLE",
+    "revisions": [
+      {
+        "revision_id": "0001_initial_core_schema",
+        "down_revision": null,
+        "is_root": true,
+        "tables_created": [
+          "users",
+          "tenants",
+          "organizations",
+          "roles",
+          "permissions",
+          "role_permissions",
+          "departments",
+          "tenant_memberships",
+          "employee_groups",
+          "group_memberships",
+          "assistants",
+          "knowledge_bases",
+          "audit_logs",
+          "tenant_quotas"
+        ],
+        "downgrade_drops": 14,
+        "status": "AUDITED_AND_VERIFIED"
+      },
+      {
+        "revision_id": "0002_document_ingestion_engine",
+        "down_revision": "0001_initial_core_schema",
+        "tables_created": [
+          "ingestion_configs",
+          "documents",
+          "document_versions",
+          "document_chunks",
+          "ingestion_jobs",
+          "ingestion_events"
+        ],
+        "downgrade_drops": 6,
+        "status": "AUDITED_AND_VERIFIED"
+      },
+      {
+        "revision_id": "0003_embeddings_and_vector_stores",
+        "down_revision": "0002_document_ingestion_engine",
+        "extensions_required": ["vector"],
+        "columns_added": [
+          {"table": "knowledge_bases", "column": "department_id"},
+          {"table": "knowledge_bases", "column": "access_level"},
+          {"table": "documents", "column": "department_id"},
+          {"table": "documents", "column": "access_level"}
+        ],
+        "tables_created": [
+          "retrieval_configs",
+          "chunk_embeddings",
+          "embedding_jobs"
+        ],
+        "downgrade_reversals": ["drop_tables", "drop_columns", "drop_foreign_keys"],
+        "status": "AUDITED_AND_VERIFIED"
+      },
+      {
+        "revision_id": "0004_assistants_and_conversations",
+        "down_revision": "0003_embeddings_and_vector_stores",
+        "is_head": true,
+        "columns_added": [
+          {"table": "assistants", "column": "llm_provider"},
+          {"table": "assistants", "column": "temperature"},
+          {"table": "assistants", "column": "max_tokens"},
+          {"table": "assistants", "column": "visibility"},
+          {"table": "assistants", "column": "retrieval_mode"},
+          {"table": "assistants", "column": "top_k"}
+        ],
+        "tables_created": [
+          "assistant_knowledge_bases",
+          "conversations",
+          "messages",
+          "message_citations"
+        ],
+        "downgrade_reversals": ["drop_tables", "drop_columns"],
+        "status": "AUDITED_AND_VERIFIED"
+      }
+    ]
+  },
+  "live_postgres_upgrade_status": "SKIPPED_HOST_RAM_PRESSURE",
+  "ram_constraint_reason": "Host available RAM (736 MB) is below the 2048 MB safe threshold for launching Docker/Postgres daemon"
+}

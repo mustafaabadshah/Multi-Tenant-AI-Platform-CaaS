@@ -18,6 +18,7 @@ from app.repositories.member_repository import MemberRepository
 from app.repositories.role_repository import RoleRepository
 from app.repositories.user_repository import UserRepository
 from app.schemas.member import MemberInviteRequest, MemberResponse, MemberUpdateRequest
+from app.services.invitation_service import InvitationService
 
 router = APIRouter(prefix="/members", tags=["Members & Employees"])
 
@@ -69,6 +70,13 @@ async def invite_member(
             detail=f"Role '{payload.role}' does not exist",
         )
 
+    # Restrict owner and superadmin assignment
+    if payload.role in (SystemRole.TENANT_OWNER.value, SystemRole.PLATFORM_SUPERADMIN.value) and not ctx.is_owner:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only workspace owners can assign owner privileges",
+        )
+
     # Validate department if provided
     if payload.department_id:
         dept = await dept_repo.get_by_id(payload.department_id)
@@ -80,6 +88,7 @@ async def invite_member(
 
     # Check if target user exists or create account
     user = await user_repo.get_by_email(payload.email)
+    newly_created_user = False
     if not user:
         # Create a new user with placeholder temporary password
         temp_pwd = hash_password(str(uuid.uuid4()))
@@ -89,6 +98,7 @@ async def invite_member(
             hashed_password=temp_pwd,
             full_name=name_from_email,
         )
+        newly_created_user = True
 
     # Check if already a member in this tenant
     existing_membership = await member_repo.get_by_user_id(user.id)
@@ -106,6 +116,17 @@ async def invite_member(
         title=payload.title,
         status=MembershipStatus.ACTIVE.value,
     )
+
+    invitation = None
+    invitation_raw_token = None
+    if newly_created_user:
+        invitation_service = InvitationService(db)
+        invitation, invitation_raw_token = await invitation_service.create_invitation(
+            tenant_id=ctx.tenant.id,
+            email=user.email,
+            role_id=role.id,
+            department_id=payload.department_id,
+        )
 
     audit_repo = AuditLogRepository(db, ctx.tenant.id)
     await audit_repo.log_event(
@@ -133,6 +154,8 @@ async def invite_member(
         status=fresh_member.status,
         created_at=fresh_member.created_at,
         updated_at=fresh_member.updated_at,
+        invitation_token=invitation_raw_token,
+        invitation_expires_at=invitation.expires_at if invitation else None,
     )
 
 
@@ -155,8 +178,20 @@ async def update_member(
             detail="Member not found in active workspace",
         )
 
+    # Prevent self-role modification
+    if target_member.user_id == current_user.id and payload.role and payload.role != target_member.role.name:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Users cannot modify their own role",
+        )
+
     new_role_id = None
     if payload.role:
+        if payload.role in (SystemRole.TENANT_OWNER.value, SystemRole.PLATFORM_SUPERADMIN.value) and not ctx.is_owner:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only workspace owners can assign owner privileges",
+            )
         role_obj = await role_repo.get_by_name(payload.role)
         if not role_obj:
             raise HTTPException(

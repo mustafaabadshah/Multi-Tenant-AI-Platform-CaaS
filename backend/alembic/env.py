@@ -26,21 +26,54 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        render_as_batch=True,
     )
 
     with context.begin_transaction():
         context.run_migrations()
 
 
+def _ensure_version_table_capacity(connection: Connection) -> None:
+    """Widen alembic_version.version_num on PostgreSQL.
+
+    Alembic creates the version table with VARCHAR(32), but several revision IDs in
+    this repository are longer than 32 characters. Pre-create the table when absent
+    and widen an existing one; both statements are idempotent. SQLite is untouched.
+    """
+    if connection.dialect.name != "postgresql":
+        return
+    # Commit this DDL immediately so Alembic's own migration transaction still owns
+    # (and commits) the migration work instead of inheriting an implicit transaction.
+    with connection.begin():
+        connection.exec_driver_sql(
+            "CREATE TABLE IF NOT EXISTS alembic_version ("
+            "version_num VARCHAR(255) NOT NULL, "
+            "CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num))"
+        )
+        connection.exec_driver_sql(
+            "ALTER TABLE alembic_version ALTER COLUMN version_num TYPE VARCHAR(255)"
+        )
+
+
 def do_run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata)
+    # Must run before context.configure so Alembic finds a sufficiently wide version table.
+    _ensure_version_table_capacity(connection)
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        render_as_batch=True,
+    )
     with context.begin_transaction():
         context.run_migrations()
 
 
 async def run_async_migrations() -> None:
     configuration = config.get_section(config.config_ini_section, {})
-    configuration["sqlalchemy.url"] = settings.DATABASE_URL
+    override_url = config.get_main_option("sqlalchemy.url")
+    target_url = override_url or settings.DATABASE_URL
+    if target_url.startswith("sqlite:///") and not target_url.startswith("sqlite+aiosqlite:///"):
+        target_url = target_url.replace("sqlite:///", "sqlite+aiosqlite:///")
+    configuration["sqlalchemy.url"] = target_url
 
     connectable = async_engine_from_config(
         configuration,

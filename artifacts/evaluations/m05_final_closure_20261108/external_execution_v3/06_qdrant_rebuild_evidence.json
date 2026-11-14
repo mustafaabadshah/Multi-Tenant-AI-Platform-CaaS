@@ -1,0 +1,23 @@
+{
+  "drill_name": "Qdrant Live Application-Driven Rebuild Drill",
+  "script": "infrastructure/scripts/drill-live-qdrant-rebuild.sh",
+  "helper": "backend/app/commands/drill_qdrant_rebuild.py",
+  "status": "NOT_RUN",
+  "blocker_reason": "Requires live containerized PostgreSQL and Qdrant services; host RAM is 1.70 GB (< 4 GB)",
+  "contract_specifications": {
+    "disposable_collection_prefix": "m05_drill_disposable",
+    "config_injection_setting": "Settings.QDRANT_COLLECTION_NAME",
+    "protected_production_namespace": "mmaip_knowledge_chunks",
+    "application_entrypoint": "IngestionService.reindex_knowledge_base",
+    "telemetry_states": [
+      "APPLICATION_REINDEX_ENTRYPOINT_INVOKED",
+      "APPLICATION_REINDEX_CALL_STARTED",
+      "APPLICATION_REINDEX_CALL_RETURNED",
+      "APPLICATION_REINDEX_COMPLETED",
+      "POSTGRES_SOURCE_RELOAD_VERIFIED",
+      "QDRANT_REBUILD_VERIFIED",
+      "IDEMPOTENT_REINDEX_PASS"
+    ],
+    "offline_unit_tests_passed": 11
+  }
+}

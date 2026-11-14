@@ -1,0 +1,93 @@
+[
+  {
+    "id": "SEC-01",
+    "title": "Assistant Runtime SSE Streaming AttributeError & Missing Department Parameter",
+    "severity": "High",
+    "affected_component": "app.api.v1.conversations / app.assistant_runtime.runtime",
+    "reproduction_steps": "Call POST /api/v1/conversations/{id}/messages/stream with valid user and conversation ID.",
+    "expected_behavior": "Streaming assistant response executes cleanly and scopes RAG retrieval to user's department context.",
+    "actual_behavior": "Encountered AttributeError ('TenantContext' object has no attribute 'is_owner') causing 500 error; user_department_id was not propagated to runtime, allowing non-admin to bypass department retrieval filters.",
+    "evidence": "conversations.py line 187: AssistantRuntime(is_admin=ctx.is_owner), TenantContext definition in deps.py lacked is_owner attribute and conversations.py omitted user_department_id.",
+    "fix_status": "FIXED",
+    "regression_test": "tests/test_m05_security_audit.py::test_sse_streaming_endpoint_executes_successfully",
+    "residual_risk": "Low. Streaming endpoint verified end-to-end with mock provider, correctly emitting SSE events with department context."
+  },
+  {
+    "id": "SEC-02",
+    "title": "Cross-Tenant Knowledge Base Linking in Assistant Creation and Update",
+    "severity": "Critical",
+    "affected_component": "app.repositories.assistant_repository",
+    "reproduction_steps": "Call POST /api/v1/assistants with a knowledge_base_ids list containing a UUID belonging to another tenant.",
+    "expected_behavior": "Backend rejects foreign tenant knowledge base attachment with 400 Bad Request.",
+    "actual_behavior": "AssistantKnowledgeBase records were created linking Tenant A assistant to Tenant B knowledge base without validating tenant ownership.",
+    "evidence": "AssistantRepository.create_assistant and update_assistant created junction rows without verifying KnowledgeBase.tenant_id == self.tenant_id.",
+    "fix_status": "FIXED",
+    "regression_test": "tests/test_m05_security_audit.py::test_cross_tenant_knowledge_base_linking_blocked",
+    "residual_risk": "Low. Assistant repository explicitly validates knowledge_base_ids against active tenant_id before inserting association records."
+  },
+  {
+    "id": "SEC-03",
+    "title": "Department Access Control Bypass in RetrievalAuthorizer When User Has No Department",
+    "severity": "High",
+    "affected_component": "app.retrieval.authorization.RetrievalAuthorizer",
+    "reproduction_steps": "A user without an assigned department searches or previews candidates matching department-restricted documents.",
+    "expected_behavior": "Department-restricted documents and knowledge bases are denied to users who do not belong to that department.",
+    "actual_behavior": "Condition 'if not is_admin and user_department_id:' evaluated to False when user_department_id was None, allowing unassigned users to bypass department restrictions.",
+    "evidence": "retrieval/authorization.py lines 57 and 100 checked 'user_department_id' truthiness before enforcing 'doc.department_id != user_department_id'.",
+    "fix_status": "FIXED",
+    "regression_test": "tests/test_m05_security_audit.py::test_retrieval_authorizer_filters_deleted_and_department_mismatches",
+    "residual_risk": "Low. Secondary authorization check now rejects department-restricted documents for all callers whose department ID does not match the resource."
+  },
+  {
+    "id": "SEC-04",
+    "title": "In-Tenant Cross-User Conversation Metadata, Message, and Citation Tampering",
+    "severity": "High",
+    "affected_component": "app.api.v1.conversations",
+    "reproduction_steps": "Employee B sends GET, DELETE, or POST /messages/stream specifying Employee A's conversation UUID in the same workspace.",
+    "expected_behavior": "Non-administrator employees can only view, manage, and chat within their own conversations (404 Not Found).",
+    "actual_behavior": "Endpoints only verified Conversation.tenant_id == ctx.tenant.id, allowing any member of the workspace to view other employees' conversations, messages, and citations.",
+    "evidence": "conversations.py get_conversation, delete_conversation, list_messages, and stream_message lacked conv.user_id == current_user.id check.",
+    "fix_status": "FIXED",
+    "regression_test": "tests/test_m05_security_audit.py::test_in_tenant_conversation_privacy_between_employees",
+    "residual_risk": "Low. Non-administrators are strictly constrained to their own conversation records; workspace administrators retain legitimate access for audit compliance."
+  },
+  {
+    "id": "SEC-05",
+    "title": "Self-Role Escalation & Unauthorized Owner Privilege Granting",
+    "severity": "High",
+    "affected_component": "app.api.v1.members",
+    "reproduction_steps": "An Org Admin attempts to promote herself to tenant_owner or invite an external user directly as tenant_owner or platform_superadmin.",
+    "expected_behavior": "Users cannot modify their own role; only workspace owners can assign owner privileges (403 Forbidden).",
+    "actual_behavior": "update_member allowed self-role modifications for callers with member.update; invite_member allowed non-owners with member.invite to invite tenant_owners.",
+    "evidence": "members.py update_member lacked target_member.user_id == current_user.id restriction; invite_member lacked check on payload.role == tenant_owner.",
+    "fix_status": "FIXED",
+    "regression_test": "tests/test_m05_security_audit.py::test_unauthorized_role_escalation_blocked",
+    "residual_risk": "Low. Explicit checks prevent self-role changes and restrict owner/superadmin grants to active workspace owners."
+  },
+  {
+    "id": "SEC-06",
+    "title": "Missing Resource-Level ACL on Direct Document Extraction and Chunk Endpoints",
+    "severity": "Medium",
+    "affected_component": "app.api.v1.documents",
+    "reproduction_steps": "An employee outside the document's assigned department calls GET /documents/{id}, /content, or /chunks.",
+    "expected_behavior": "Access denied (404 Not Found) if the document is restricted to a different department.",
+    "actual_behavior": "Endpoints verified tenant_id scoping via DocumentRepository but did not inspect doc.department_id against ctx.membership.department_id.",
+    "evidence": "documents.py get_document, get_document_content, and list_document_chunks only queried repo.get_by_id(document_id).",
+    "fix_status": "FIXED",
+    "regression_test": "tests/test_m05_security_audit.py::test_department_restricted_document_access",
+    "residual_risk": "Low. _check_document_acl helper enforces department boundary and access_level restrictions across all document inspection routes."
+  },
+  {
+    "id": "SEC-07",
+    "title": "Mismatched Workspace Path ID vs Header X-Tenant-ID",
+    "severity": "Low",
+    "affected_component": "app.api.v1.tenants",
+    "reproduction_steps": "Send GET or PATCH /api/v1/tenants/{tenant_id} with a path tenant_id different from the X-Tenant-ID header.",
+    "expected_behavior": "Request rejected with 403 Forbidden due to context inconsistency.",
+    "actual_behavior": "Endpoint ignored path tenant_id and silently operated on the tenant context derived from X-Tenant-ID.",
+    "evidence": "tenants.py get_workspace and update_workspace took tenant_id as path argument but operated solely on ctx.tenant.",
+    "fix_status": "FIXED",
+    "regression_test": "tests/test_m05_security_audit.py::test_path_tenant_id_mismatch_rejected",
+    "residual_risk": "Low. Path tenant_id is explicitly asserted to match ctx.tenant.id."
+  }
+]

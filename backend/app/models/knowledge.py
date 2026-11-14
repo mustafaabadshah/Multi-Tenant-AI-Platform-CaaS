@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     JSON,
     BigInteger,
@@ -28,6 +29,12 @@ class KnowledgeBase(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     status: Mapped[str] = mapped_column(String(50), default="ACTIVE", nullable=False)
+    department_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("departments.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    access_level: Mapped[str] = mapped_column(String(50), default="tenant", nullable=False)
 
     # Relationships
     tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="knowledge_bases")
@@ -39,6 +46,18 @@ class KnowledgeBase(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin
         back_populates="knowledge_base",
         uselist=False,
         cascade="all, delete-orphan",
+    )
+    retrieval_config: Mapped["RetrievalConfig | None"] = relationship(
+        "RetrievalConfig",
+        back_populates="knowledge_base",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+    embeddings: Mapped[list["ChunkEmbedding"]] = relationship(
+        "ChunkEmbedding", back_populates="knowledge_base", cascade="all, delete-orphan"
+    )
+    embedding_jobs: Mapped[list["EmbeddingJob"]] = relationship(
+        "EmbeddingJob", back_populates="knowledge_base", cascade="all, delete-orphan"
     )
 
 
@@ -87,6 +106,12 @@ class Document(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin):
     total_pages: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     total_chunks: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     metadata_json: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    department_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("departments.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    access_level: Mapped[str] = mapped_column(String(50), default="tenant", nullable=False)
 
     # Relationships
     knowledge_base: Mapped["KnowledgeBase"] = relationship(
@@ -109,6 +134,11 @@ class Document(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin):
         back_populates="document",
         cascade="all, delete-orphan",
         order_by="IngestionJob.created_at.desc()",
+    )
+    embeddings: Mapped[list["ChunkEmbedding"]] = relationship(
+        "ChunkEmbedding",
+        back_populates="document",
+        cascade="all, delete-orphan",
     )
 
 
@@ -174,6 +204,11 @@ class DocumentChunk(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin
     # Relationships
     document: Mapped["Document"] = relationship("Document", back_populates="chunks")
     version: Mapped["DocumentVersion | None"] = relationship("DocumentVersion", back_populates="chunks")
+    embeddings: Mapped[list["ChunkEmbedding"]] = relationship(
+        "ChunkEmbedding",
+        back_populates="chunk",
+        cascade="all, delete-orphan",
+    )
 
 
 class IngestionJob(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin):
@@ -236,3 +271,102 @@ class IngestionEvent(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixi
 
     # Relationships
     job: Mapped["IngestionJob"] = relationship("IngestionJob", back_populates="events")
+
+
+class RetrievalConfig(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin):
+    __tablename__ = "retrieval_configs"
+    __table_args__ = (
+        UniqueConstraint("knowledge_base_id", name="uq_retrieval_config_kb"),
+    )
+
+    knowledge_base_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("knowledge_bases.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    retrieval_mode: Mapped[str] = mapped_column(String(50), default="hybrid", nullable=False)
+    vector_store: Mapped[str] = mapped_column(String(50), default="pgvector", nullable=False)
+    embedding_provider: Mapped[str] = mapped_column(String(50), default="omniroute", nullable=False)
+    embedding_model: Mapped[str] = mapped_column(String(100), default="text-embedding-3-small", nullable=False)
+    embedding_dimensions: Mapped[int] = mapped_column(Integer, default=1536, nullable=False)
+    similarity_metric: Mapped[str] = mapped_column(String(20), default="cosine", nullable=False)
+    top_k: Mapped[int] = mapped_column(Integer, default=8, nullable=False)
+    rrf_k: Mapped[int] = mapped_column(Integer, default=60, nullable=False)
+    rerank_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    rerank_provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    embedding_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    encrypted_api_key: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    settings_json: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+
+    # Relationships
+    knowledge_base: Mapped["KnowledgeBase"] = relationship(
+        "KnowledgeBase", back_populates="retrieval_config"
+    )
+
+
+class ChunkEmbedding(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin):
+    __tablename__ = "chunk_embeddings"
+    __table_args__ = (
+        UniqueConstraint("chunk_id", "embedding_version", name="uq_chunk_embedding_version"),
+    )
+
+    knowledge_base_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("knowledge_bases.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    document_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("document_versions.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    chunk_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("document_chunks.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    embedding_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False, index=True)
+    provider: Mapped[str] = mapped_column(String(50), nullable=False)
+    model: Mapped[str] = mapped_column(String(100), nullable=False)
+    dimensions: Mapped[int] = mapped_column(Integer, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    vector: Mapped[list[float] | None] = mapped_column(Vector(), nullable=True)
+
+    # Relationships
+    knowledge_base: Mapped["KnowledgeBase"] = relationship("KnowledgeBase", back_populates="embeddings")
+    document: Mapped["Document"] = relationship("Document", back_populates="embeddings")
+    chunk: Mapped["DocumentChunk"] = relationship("DocumentChunk", back_populates="embeddings")
+
+
+class EmbeddingJob(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin):
+    __tablename__ = "embedding_jobs"
+
+    knowledge_base_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("knowledge_bases.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    document_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    embedding_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    status: Mapped[str] = mapped_column(String(50), default="PENDING", nullable=False, index=True)
+    stage: Mapped[str] = mapped_column(String(50), default="PENDING", nullable=False)
+    total_chunks: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    processed_chunks: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    failed_chunks: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    job_metadata: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Relationships
+    knowledge_base: Mapped["KnowledgeBase"] = relationship("KnowledgeBase", back_populates="embedding_jobs")
+

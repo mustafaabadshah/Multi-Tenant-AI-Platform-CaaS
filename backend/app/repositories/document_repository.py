@@ -2,10 +2,9 @@
 
 import uuid
 from collections.abc import Sequence
-from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import delete, desc, func, select
+from sqlalchemy import delete, desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 

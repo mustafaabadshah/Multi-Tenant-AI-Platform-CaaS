@@ -1,0 +1,57 @@
+{
+  "audit_timestamp": "2026-11-08T15:28:00+05:00",
+  "evaluation_stage": "STAGE_1_RECOVERY_AND_STAGE_3_RELOCATION_COMPLETE",
+  "hardware_and_os": {
+    "os_caption": "Microsoft Windows 10 Pro",
+    "os_version": "10.0.19045",
+    "os_build": 19045,
+    "system_type": "x64-based PC",
+    "processor": "Intel Core i3-7100U @ 2.40GHz",
+    "hypervisor_status": "Hypervisor detected (Virtual Machine Platform / Hyper-V active)"
+  },
+  "memory_metrics": {
+    "total_physical_ram_mb": 7820.98,
+    "available_physical_ram_mb": 2298.66,
+    "available_physical_ram_gb": 2.24,
+    "used_percent": 70.6,
+    "storage_relocation_gate_mb": 2048.0,
+    "live_runner_gate_mb": 4096.0,
+    "resource_decision": "ELIGIBLE_FOR_RELOCATION_BLOCKED_FOR_FULL_LIVE_SUITE"
+  },
+  "disk_metrics": {
+    "drive_c": {
+      "initial_free_gb": 2.23,
+      "post_relocation_free_gb": 9.34,
+      "post_relocation_free_bytes": 10029395968,
+      "net_space_reclaimed_gb": 7.11,
+      "status": "HEALTHY_SPACE_RECOVERED"
+    },
+    "drive_e": {
+      "initial_free_gb": 95.9,
+      "post_relocation_free_gb": 93.5,
+      "post_relocation_free_bytes": 102669398016,
+      "status": "PLENTIFUL_PRIMARY_TARGET"
+    }
+  },
+  "process_lifecycle_summary": {
+    "chrome": {
+      "initial_instances": 21,
+      "final_instances": 0,
+      "status": "TERMINATED_USER_AUTHORIZED",
+      "memory_reclaimed_mb": 1565.45
+    },
+    "mssqlserver": {
+      "status": "RUNNING",
+      "service_stop_attempt": "REJECTED_ERROR_5_ACCESS_DENIED_REQUIRES_ADMIN_ELEVATION",
+      "active_clients_port_1433": 0
+    },
+    "antigravity_ide": {
+      "status": "RUNNING_PRESERVED_NOT_TERMINATED",
+      "working_set_mb": 1475.87
+    },
+    "pyrefly_lsp": {
+      "status": "RUNNING_PRESERVED_NOT_TERMINATED",
+      "working_set_mb": 54.96
+    }
+  }
+}

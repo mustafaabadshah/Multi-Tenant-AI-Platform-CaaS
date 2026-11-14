@@ -1,0 +1,21 @@
+{
+  "test_command": ".venv/Scripts/python.exe -m pytest tests/ -m 'not postgres_integration and not qdrant_integration'",
+  "total_collected": 188,
+  "total_passed": 170,
+  "total_skipped": 1,
+  "total_deselected": 17,
+  "total_failed": 0,
+  "total_errors": 0,
+  "duration_seconds": 142.86,
+  "skipped_details": [
+    {
+      "node_id": "tests/test_m05_database_recovery.py::test_live_postgres_container_safety_check",
+      "reason": "Host available RAM (< 2048 MB threshold) - graceful safety check skip"
+    }
+  ],
+  "deselected_details": {
+    "postgres_integration_tests": 12,
+    "qdrant_integration_tests": 5,
+    "note": "Awaiting external Linux container execution"
+  }
+}

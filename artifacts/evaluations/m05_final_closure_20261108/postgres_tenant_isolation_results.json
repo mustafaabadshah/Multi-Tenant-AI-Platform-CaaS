@@ -1,0 +1,11 @@
+{
+  "tenant_isolation_mechanism": "Composite Foreign Keys + Application-layer Repository Scoping + RetrievalAuthorizer",
+  "row_level_security_rls": "NOT_ENABLED_IN_DB",
+  "rls_architecture_note": "Tenant isolation strictly relies on WHERE tenant_id = :active_tenant_id scoping in repositories and composite foreign keys at the DB layer.",
+  "offline_regression_tests": {
+    "test_retrieval_security": "PASSED (5/5 tests)",
+    "test_tenant_isolation_security": "PASSED (5/5 tests)",
+    "test_cross_tenant_resource_id_tampering": "PASSED"
+  },
+  "live_postgres_isolation_test": "PENDING_PORTABLE_RUNNER"
+}

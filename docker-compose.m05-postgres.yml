@@ -1,0 +1,27 @@
+# Dedicated isolated PostgreSQL 16 + pgvector compose specification for M05 Integration Testing
+# Binds exclusively to 127.0.0.1:55432 to avoid any conflict with port 5432 or default development services.
+
+services:
+  m05-postgres:
+    image: pgvector/pgvector:pg16
+    container_name: m05_postgres_test
+    restart: "no"
+    environment:
+      POSTGRES_DB: ${M05_POSTGRES_DB:-m05_integration}
+      POSTGRES_USER: ${M05_POSTGRES_USER:-m05_test}
+      POSTGRES_PASSWORD: ${M05_POSTGRES_PASSWORD:-m05_test_password_secure_local}
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - m05_postgres_data:/var/lib/postgresql/data
+      - ./infrastructure/scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${M05_POSTGRES_USER:-m05_test} -d ${M05_POSTGRES_DB:-m05_integration}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    mem_limit: 512m
+    shm_size: 128m
+
+volumes:
+  m05_postgres_data:

@@ -1,0 +1,12 @@
+{
+  "audit_timestamp": "2026-11-08T15:28:00+05:00",
+  "cleanup_actions": {
+    "containers_removed": 0,
+    "volumes_removed": 0,
+    "user_backup_preserved": true,
+    "user_backup_path": "E:\\MM Office\\DockerData\\docker-desktop-data-backup.tar",
+    "shared_databases_altered": false,
+    "shared_collections_altered": false
+  },
+  "resource_safety_verdict": "SAFE_ZERO_USER_DATA_LOST"
+}

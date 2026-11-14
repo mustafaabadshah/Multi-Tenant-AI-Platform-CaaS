@@ -1,0 +1,55 @@
+{
+  "test_summary_version": "1.0.0",
+  "milestone": "M05",
+  "phase": "Phase 5 — Prompt Injection, Untrusted Documents & RAG Security Assessment",
+  "execution_timestamp": "2026-11-07T14:19:28+05:00",
+  "environment": {
+    "os": "Windows 11",
+    "python_version": "3.12.3",
+    "pytest_version": "9.2.0",
+    "database": "SQLite (aiosqlite in-memory test database)",
+    "vector_store": "In-memory test store & RetrievalAuthorizer validation",
+    "llm_provider": "MockLLMProvider (deterministic offline testing)"
+  },
+  "test_suites": {
+    "phase_5_prompt_injection_suite": {
+      "file": "backend/tests/test_m05_prompt_injection.py",
+      "command": ".venv\\Scripts\\python -m pytest tests/test_m05_prompt_injection.py -v",
+      "exit_code": 0,
+      "duration_seconds": 4.31,
+      "total_tests": 19,
+      "passed": 19,
+      "failed": 0,
+      "skipped": 0,
+      "not_applicable": 1
+    },
+    "phase_4_security_audit_suite": {
+      "file": "backend/tests/test_m05_security_audit.py",
+      "command": ".venv\\Scripts\\python -m pytest tests/test_m05_security_audit.py -v",
+      "exit_code": 0,
+      "duration_seconds": 19.34,
+      "total_tests": 14,
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0
+    },
+    "full_backend_regression_suite": {
+      "command": ".venv\\Scripts\\python -m pytest -m \"not postgres_integration and not qdrant_integration\" -v",
+      "exit_code": 0,
+      "duration_seconds": 126.46,
+      "total_collected": 120,
+      "deselected": 17,
+      "total_executed": 103,
+      "passed": 103,
+      "failed": 0,
+      "skipped": 0
+    },
+    "static_analysis_ruff": {
+      "command": ".venv\\Scripts\\ruff check .",
+      "exit_code": 0,
+      "status": "All checks passed!",
+      "errors": 0
+    }
+  },
+  "overall_status": "PASS"
+}

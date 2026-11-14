@@ -1,0 +1,10 @@
+Default Distribution: docker-desktop-data
+Default Version: 2
+
+  NAME                   STATE           VERSION
+* docker-desktop-data    Stopped         2
+  docker-desktop         Stopped         2
+
+Distribution Registry:
+  docker-desktop:      BasePath C:\Users\Mustafa Badshah\AppData\Local\Docker\wsl\distro, Version 2, VHDX: 119,537,664 bytes (114 MB)
+  docker-desktop-data: BasePath C:\Users\Mustafa Badshah\AppData\Local\Docker\wsl\data,   Version 2, VHDX: 2,735,734,784 bytes (2.55 GB)

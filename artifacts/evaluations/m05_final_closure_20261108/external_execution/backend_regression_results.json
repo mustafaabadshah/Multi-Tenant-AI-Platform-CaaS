@@ -1,0 +1,8 @@
+{
+  "pytest_offline_count": 148,
+  "passed": 147,
+  "skipped": 1,
+  "failed": 0,
+  "duration_seconds": 434.21,
+  "linter": "ruff check . (0 errors)"
+}

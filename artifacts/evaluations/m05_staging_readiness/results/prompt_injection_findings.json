@@ -1,0 +1,76 @@
+{
+  "findings_version": "1.0.0",
+  "milestone": "M05",
+  "phase": "Phase 5 — Prompt Injection, Untrusted Documents & RAG Security Assessment",
+  "summary": {
+    "total_findings": 5,
+    "critical": 1,
+    "high": 3,
+    "medium": 1,
+    "low": 0,
+    "fixed": 5,
+    "unresolved": 0
+  },
+  "findings": [
+    {
+      "finding_id": "SEC-PI-001",
+      "title": "Prompt Boundary Breakout via Unsanitized Closing Delimiters in Retrieved Chunks",
+      "severity": "Critical",
+      "affected_component": "backend/app/assistant_runtime/context.py (build_rag_context)",
+      "reproduction_steps": "Insert '</KNOWLEDGE_BASE_CONTEXT>' into an uploaded document chunk or document title. The assembled system prompt prematurely terminates the context block, placing subsequent text into the system prompt instruction area.",
+      "evidence": "Injected closing tag resulted in 2 closing tags and premature block termination prior to fix.",
+      "fix_status": "FIXED",
+      "regression_test": "tests/test_m05_prompt_injection.py::test_indirect_delimiter_breakout_attack_neutralized",
+      "remediation": "Implemented sanitize_untrusted_content() which strips zero-width control characters and neutralizes case-insensitive <KNOWLEDGE_BASE_CONTEXT> and </KNOWLEDGE_BASE_CONTEXT> tags into [UNTRUSTED_CONTEXT_TAG].",
+      "residual_risk": "Low. Tags are sanitized before template insertion. LLM receives explicit framing treating block contents as passive unverified data."
+    },
+    {
+      "finding_id": "SEC-PI-002",
+      "title": "Credential and Secret Exposure in SSE Streaming Error Messages",
+      "severity": "High",
+      "affected_component": "backend/app/assistant_runtime/runtime.py (AssistantRuntime.stream_chat)",
+      "reproduction_steps": "If the LLM provider raises an HTTP client error or authentication exception containing API keys (e.g. sk-proj-...) or connection strings, str(e) was emitted directly to the client via SSE 'message_error' event.",
+      "evidence": "Raw exception strings containing API keys and bearer tokens could be streamed to clients.",
+      "fix_status": "FIXED",
+      "regression_test": "tests/test_m05_prompt_injection.py::test_sanitize_error_message_redacts_keys_and_secrets",
+      "remediation": "Added sanitize_error_message() function in runtime.py masking API keys (sk-...), bearer tokens, passwords, and synthetic secret markers before SSE serialization.",
+      "residual_risk": "Low. Masking regex covers known credential patterns and fallback generic token redaction."
+    },
+    {
+      "finding_id": "SEC-PI-003",
+      "title": "Role Escalation and Instruction Header Injection in Conversation History",
+      "severity": "High",
+      "affected_component": "backend/app/assistant_runtime/context.py (build_rag_context)",
+      "reproduction_steps": "If conversation history messages contained role='system' or role='developer' or text starting with 'SYSTEM:', past messages could inject simulated system instructions into the LLM conversation history.",
+      "evidence": "Unchecked history roles permitted non-user/assistant message roles in LLMMessage array.",
+      "fix_status": "FIXED",
+      "regression_test": "tests/test_m05_prompt_injection.py::test_conversation_history_role_escalation_sanitized",
+      "remediation": "Enforced role whitelisting in context.py to restrict history roles strictly to 'user' or 'assistant', and sanitized simulated headers (SYSTEM:, DEVELOPER:, CRITICAL:, ADMINISTRATOR:) into [UNTRUSTED_HEADER: ...].",
+      "residual_risk": "Low. History messages cannot impersonate developer or system roles."
+    },
+    {
+      "finding_id": "SEC-PI-004",
+      "title": "Absence of Direct Conversation Ownership Check in AssistantRuntime",
+      "severity": "High",
+      "affected_component": "backend/app/assistant_runtime/runtime.py (AssistantRuntime.stream_chat)",
+      "reproduction_steps": "While the FastAPI conversations router checked conv.user_id != current_user.id, the AssistantRuntime class itself only queried by tenant_id without asserting user ownership for non-admin users.",
+      "evidence": "Calling AssistantRuntime directly with an in-tenant conversation ID belonging to another user would permit unauthorized streaming.",
+      "fix_status": "FIXED",
+      "regression_test": "tests/test_m05_prompt_injection.py::test_assistant_runtime_conversation_isolation",
+      "remediation": "Added defense-in-depth check in AssistantRuntime: if not conv or (not self.is_admin and conv.user_id != self.user_id), immediately abort with unauthorized error frame.",
+      "residual_risk": "None. Enforced at both router and runtime orchestrator layers."
+    },
+    {
+      "finding_id": "SEC-PI-005",
+      "title": "Zero-Width Obfuscation of Prompt Injection Delimiters",
+      "severity": "Medium",
+      "affected_component": "backend/app/assistant_runtime/context.py (sanitize_untrusted_content)",
+      "reproduction_steps": "An attacker embedding zero-width spaces (e.g. \\u200B) inside delimiter tags (e.g. <\\u200B/\\u200BKNOWLEDGE_BASE_CONTEXT\\u200B>) could evade naive regex matching if zero-width stripping is not executed first.",
+      "evidence": "Initial implementation stripped zero-width characters after delimiter matching, permitting delimiter breakout.",
+      "fix_status": "FIXED",
+      "regression_test": "tests/test_m05_prompt_injection.py::test_indirect_unicode_obfuscation_sanitization",
+      "remediation": "Re-ordered sanitization steps in sanitize_untrusted_content() so all zero-width characters (\\u200B, \\u200C, \\u200D, \\uFEFF) are stripped prior to delimiter matching.",
+      "residual_risk": "Low. Common Unicode zero-width evasion vectors are eliminated prior to lexical analysis."
+    }
+  ]
+}

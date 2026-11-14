@@ -1,0 +1,8 @@
+{
+  "timestamp": "2026-11-07T20:45:49.179007+00:00",
+  "status": "NOT RUN \u2014 ENVIRONMENT CONSTRAINT",
+  "reason": "Container execution safely withheld per Section 3.3 memory policy.",
+  "target_version": "qdrant/qdrant:v1.9.0",
+  "offline_qdrant_suite": "PASS (test_vector_stores.py::test_qdrant_store_isolates_collections_by_dimension passed)",
+  "execution_command": "docker compose -f docker-compose.m05-qdrant.yml up -d && pytest tests/integration/test_qdrant_live_integration.py -v"
+}

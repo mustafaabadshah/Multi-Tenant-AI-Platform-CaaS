@@ -1,0 +1,22 @@
+[
+  {
+    "id": "BLK-01",
+    "category": "INFRASTRUCTURE",
+    "severity": "MEDIUM",
+    "title": "Live Container Integration Suite Withheld on Small Host",
+    "description": "17 container-dependent integration tests in backend/tests/integration/ require a live PostgreSQL 16 server with pgvector and Qdrant. Execution was withheld because host available physical RAM (1237.6 MB) is below the mandatory 2048 MB memory safety threshold.",
+    "exact_validation_command": ".\\infrastructure\\scripts\\run-live-integration-tests.ps1",
+    "blocks_staging": true,
+    "closure_requirement": "Execute on CI runner or host with >= 2048 MB free physical RAM."
+  },
+  {
+    "id": "BLK-02",
+    "category": "FEATURE_SCOPE",
+    "severity": "LOW",
+    "title": "Source-Derived PDF Word/Span Bounding Box Extraction Deferred",
+    "description": "PDF citation highlighting renders preserved ingestion chunk bounding boxes with synthetic US Letter geometry fallback. Exact word/span extraction via PyMuPDF get_text('words') is deferred to post-M05.",
+    "exact_validation_command": "pytest tests/test_m05_citation_highlighting.py -v",
+    "blocks_staging": false,
+    "closure_requirement": "Enhance PyMuPDF parser in Milestone 06."
+  }
+]

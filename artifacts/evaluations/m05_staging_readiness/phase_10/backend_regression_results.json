@@ -1,0 +1,139 @@
+{
+  "milestone": "M05",
+  "phase": 10,
+  "component": "Backend Regression",
+  "timestamp": "2026-11-07T18:55:45Z",
+  "summary": {
+    "total_collected": 162,
+    "total_executed": 145,
+    "passed": 144,
+    "failed": 0,
+    "skipped": 1,
+    "deselected": 17,
+    "pass_rate_executed_pct": 99.31,
+    "pass_rate_non_skipped_pct": 100.0,
+    "duration_seconds": 140.57
+  },
+  "subsystem_results": {
+    "authentication_and_tenant_security": {
+      "modules": [
+        "tests/test_auth.py",
+        "tests/test_password_hashing.py",
+        "tests/test_rbac_permissions.py",
+        "tests/test_tenants.py",
+        "tests/test_organizations_and_departments.py",
+        "tests/test_tenant_isolation_security.py"
+      ],
+      "tests_run": 24,
+      "passed": 24,
+      "failed": 0,
+      "coverage": [
+        "User registration with personal and organizational workspace creation",
+        "Duplicate email prevention and Argon2id password verification",
+        "JWT access and refresh token lifecycle, expiration and invalidation",
+        "Workspace switching and active tenant scoping",
+        "Department CRUD and employee group assignment",
+        "Cross-tenant department read/update/delete rejection (404/403)",
+        "Employee roster isolation and member role escalation prevention",
+        "Permission enforcement across OWNER, ADMIN, MEMBER, and VIEWER roles"
+      ]
+    },
+    "knowledge_ingestion_and_parsers": {
+      "modules": [
+        "tests/test_parsers.py",
+        "tests/test_ocr.py",
+        "tests/test_chunking.py",
+        "tests/test_ingestion_pipeline.py",
+        "tests/test_document_tenant_isolation.py"
+      ],
+      "tests_run": 26,
+      "passed": 26,
+      "failed": 0,
+      "coverage": [
+        "Magic-byte signature validation across PDF, DOCX, XLSX, PPTX, CSV, JSON, Markdown, and SQL",
+        "SQL static parsing with sqlglot without destructive DML/DDL execution",
+        "OCR fallback with graceful handling of missing tesseract binaries",
+        "Scanned PDF detection heuristic based on image presence and low text density",
+        "Recursive character, markdown header, token-bounded, and table chunking",
+        "Strict storage path traversal prevention (rejecting relative path breakout)",
+        "Tenant isolation on document storage directories and uploads",
+        "Deduplication detection on duplicate document content hashes"
+      ]
+    },
+    "embeddings_and_retrieval": {
+      "modules": [
+        "tests/test_embedding_providers.py",
+        "tests/test_vector_stores.py",
+        "tests/test_hybrid_retrieval.py",
+        "tests/test_retrieval_security.py",
+        "tests/test_ingestion_to_embedding.py"
+      ],
+      "tests_run": 22,
+      "passed": 22,
+      "failed": 0,
+      "coverage": [
+        "Deterministic dimension enforcement across mock, local CPU, and remote embedding providers",
+        "Dimension isolation preventing cross-model vector comparison",
+        "FTS full-text search lexical ranking",
+        "Reciprocal Rank Fusion (RRF) combining semantic and lexical scores",
+        "Department isolation filtering unauthorized chunks from retrieval results",
+        "Soft-deleted and superseded document exclusion from candidate sets",
+        "Cross-tenant vector search candidate rejection at authorizer boundary"
+      ]
+    },
+    "assistant_runtime_and_rag": {
+      "modules": [
+        "tests/test_assistants_and_rag.py",
+        "tests/test_m05_citation_highlighting.py"
+      ],
+      "tests_run": 10,
+      "passed": 10,
+      "failed": 0,
+      "coverage": [
+        "Assistant CRUD lifecycle, provider configuration, and system prompt setup",
+        "Knowledge base linking authorization",
+        "Context window token budgeting and older history pruning",
+        "End-to-end streaming conversational RAG via SSE with retrieval_complete event",
+        "Persistence of atomic user and assistant messages with citations",
+        "Standard PDF viewport (612x792 pt) bounding box coordinate generation",
+        "Custom metadata bounding box preservation",
+        "Multi-chunk non-overlapping vertical slot distribution (85 pt step)"
+      ]
+    },
+    "security_and_hardening": {
+      "modules": [
+        "tests/test_m05_security_audit.py",
+        "tests/test_m05_prompt_injection.py",
+        "tests/test_m05_provider_reliability.py",
+        "tests/test_m05_database_recovery.py",
+        "tests/test_m05_staging_readiness.py",
+        "tests/test_health.py"
+      ],
+      "tests_run": 63,
+      "passed": 62,
+      "failed": 0,
+      "skipped": 1,
+      "coverage": [
+        "Strict header validation: forged X-Tenant-ID headers rejected (403)",
+        "Path-to-header tenant mismatch rejection (403)",
+        "Prompt boundary defense neutralizing <KNOWLEDGE_BASE_CONTEXT> delimiter breakouts",
+        "Fake role header rewriting ([UNTRUSTED_HEADER: SYSTEM])",
+        "Unicode zero-width control character stripping",
+        "BYOK credential Fernet encryption and secret masking (***)",
+        "SSRF protection blocking cloud metadata (169.254.169.254) and forbidden schemes (file://, gopher://)",
+        "SSE stream failure error redaction preventing stack trace leaks",
+        "Alembic migration graph linear DAG continuity and downgrade reversals",
+        "Role and permission seeding idempotency across multiple runs",
+        "Multi-key Fernet rotation support with PREVIOUS_SECRET_KEYS fallback",
+        "Render blueprint and Vercel production headers validation",
+        "Liveness (/health) and readiness (/ready) checks"
+      ],
+      "skipped_tests": [
+        {
+          "name": "tests/test_m05_database_recovery.py::test_live_postgres_container_safety_check",
+          "reason": "Host available physical memory (520 MB) is below the 2048 MB machine safety threshold."
+        }
+      ]
+    }
+  }
+}

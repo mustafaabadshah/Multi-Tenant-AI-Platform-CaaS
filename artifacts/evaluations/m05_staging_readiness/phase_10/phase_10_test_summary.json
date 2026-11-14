@@ -1,0 +1,50 @@
+{
+  "test_execution_summary": {
+    "suite": "M05 Phase 10 Expanded Regression Suite",
+    "timestamp": "2026-11-07T18:55:45Z",
+    "git_branch": "main",
+    "git_head": "448431c4b004dc4b134dc94705b7dd96d0f2a9f5",
+    "python_version": "3.12.3",
+    "pytest_version": "9.2.0",
+    "node_version": "24",
+    "next_version": "16.4.5",
+    "backend_results": {
+      "total_tests": 162,
+      "passed": 144,
+      "skipped": 1,
+      "failed": 0,
+      "deselected": 17,
+      "duration_seconds": 140.57,
+      "warning_count": 1,
+      "command": "pytest tests -m 'not postgres_integration and not qdrant_integration' -v"
+    },
+    "static_analysis": {
+      "ruff_status": "PASS",
+      "ruff_errors": 0,
+      "eslint_status": "PASS",
+      "eslint_errors": 0,
+      "eslint_warnings": 19
+    },
+    "frontend_build": {
+      "status": "PASS",
+      "build_tool": "Next.js Turbopack 16.4.5",
+      "static_pages": [
+        "/",
+        "/_not-found",
+        "/dashboard",
+        "/dashboard/assistants",
+        "/dashboard/audit",
+        "/dashboard/departments",
+        "/dashboard/employees",
+        "/dashboard/groups",
+        "/dashboard/knowledge",
+        "/dashboard/settings",
+        "/dashboard/workspace",
+        "/login",
+        "/register"
+      ],
+      "pages_count": 15,
+      "typescript_errors": 0
+    }
+  }
+}

@@ -3,7 +3,7 @@ services:
   # CORE SERVICES: Database, Backend, Frontend
   # ---------------------------------------------------------------------------
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     container_name: mmaip_postgres
     restart: unless-stopped
     environment:
@@ -45,6 +45,10 @@ services:
       - STORAGE_PATH=/app/data/storage
       - LLM_BASE_URL=${LLM_BASE_URL:-http://host.docker.internal:20128/v1}
       - OMNIROUTE_API_KEY=${OMNIROUTE_API_KEY:-}
+      - DEFAULT_RETRIEVAL_MODE=${DEFAULT_RETRIEVAL_MODE:-hybrid}
+      - DEFAULT_VECTOR_STORE=${DEFAULT_VECTOR_STORE:-pgvector}
+      - DEFAULT_EMBEDDING_PROVIDER=${DEFAULT_EMBEDDING_PROVIDER:-omniroute}
+      - QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}
     volumes:
       - ./backend:/app
       - backend_storage:/app/data/storage
@@ -81,7 +85,7 @@ services:
       dockerfile: ../infrastructure/docker/backend.Dockerfile
     container_name: mmaip_worker
     restart: unless-stopped
-    profiles: ["worker"]
+    profiles: ["workers", "worker", "full"]
     command: python -m app.services.ingestion.worker
     depends_on:
       postgres:
@@ -100,7 +104,7 @@ services:
     image: qdrant/qdrant:v1.9.0
     container_name: mmaip_qdrant
     restart: unless-stopped
-    profiles: ["qdrant"]
+    profiles: ["vector", "qdrant", "full"]
     ports:
       - "6333:6333"
       - "6334:6334"
@@ -111,7 +115,7 @@ services:
     image: redis:7-alpine
     container_name: mmaip_redis
     restart: unless-stopped
-    profiles: ["redis"]
+    profiles: ["redis", "full"]
     ports:
       - "6379:6379"
     volumes:
@@ -121,7 +125,7 @@ services:
     image: arizephoenix/phoenix:latest
     container_name: mmaip_phoenix
     restart: unless-stopped
-    profiles: ["phoenix"]
+    profiles: ["observability", "phoenix", "full"]
     ports:
       - "6006:6006"
     environment:
