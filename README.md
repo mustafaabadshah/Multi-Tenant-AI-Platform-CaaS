@@ -1,14 +1,5 @@
 # Multi-Tenant AI Platform (CaaS) — Enterprise Multi-Tenant AI Knowledge & Assistant Platform
 
-## Status
-
-**Status: `STAGING_VERIFIED_OPERATOR_ACCEPTED`** — a private, synthetic-data staging environment is deployed, technically validated, and manually accepted by the operator (M15.4 `RELEASE_PASS`). Access is invitation-only. The platform is running Observability 2.0 on Render Free + Neon PostgreSQL 16 + Backblaze B2.
-
-- Staging frontend: <https://mmaip-frontend.onrender.com>
-- Staging backend: <https://mmaip-backend.onrender.com>
-- Observability console: <https://mmaip-frontend.onrender.com/dashboard/observability>
-
-Public registration is closed, onboarding is invitation-only, and no test credentials are provided.
 
 ## Overview
 
@@ -34,6 +25,17 @@ The screenshots below show the private staging workspace using synthetic data on
 | **Conversations.** Grounded chat with streamed answers and citations. | **Mobile.** Responsive dashboard layout. |
 
 All screenshots contain synthetic data only.
+
+## Status
+
+**Status: `STAGING_VERIFIED_OPERATOR_ACCEPTED`** — a private, synthetic-data staging environment is deployed, technically validated, and manually accepted by the operator (M15.4 `RELEASE_PASS`). Access is invitation-only. The platform is running Observability 2.0 on Render Free + Neon PostgreSQL 16 + Backblaze B2.
+
+- Staging frontend: <https://mmaip-frontend.onrender.com>
+- Staging backend: <https://mmaip-backend.onrender.com>
+- Observability console: <https://mmaip-frontend.onrender.com/dashboard/observability>
+
+Public registration is closed, onboarding is invitation-only, and no test credentials are provided.
+
 
 ## Features
 
