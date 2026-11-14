@@ -35,6 +35,7 @@ from app.models.provider import ProviderCredential, ProviderUsageLog
 from app.models.publishing import APIKey, AssistantPublication, PublicChatSession
 from app.models.role import Permission, ResourcePermission, Role, RolePermission
 from app.models.tenant import Tenant
+from app.models.trace import ObservabilityPolicy, RequestTrace
 from app.models.user import User
 
 __all__ = [
@@ -69,12 +70,14 @@ __all__ = [
     "Message",
     "MessageAttachment",
     "MessageCitation",
+    "ObservabilityPolicy",
     "Organization",
     "Permission",
     "ProviderConnection",
     "ProviderCredential",
     "ProviderUsageLog",
     "PublicChatSession",
+    "RequestTrace",
     "ResourcePermission",
     "RetrievalConfig",
     "Role",

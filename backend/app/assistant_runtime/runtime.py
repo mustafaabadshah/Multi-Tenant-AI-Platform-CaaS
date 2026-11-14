@@ -16,6 +16,7 @@ from app.llm import LLMConfig, get_llm_registry
 from app.models.assistant import Assistant, AssistantKnowledgeBase
 from app.models.conversation import Conversation, Message, MessageCitation
 from app.models.knowledge import KnowledgeBase
+from app.observability.policy import ObservabilityPolicyService
 from app.observability.tracer import get_tracer
 from app.retrieval.service import RetrievalService
 from app.services.byok_vault import BYOKVaultService
@@ -93,6 +94,9 @@ class AssistantRuntime:
             yield format_sse("message_error", {"error": "Assistant not found or unauthorized"})
             return
 
+        policy_svc = ObservabilityPolicyService(self.session, self.tenant_id)
+        policy = await policy_svc.get_policy()
+
         tracer = get_tracer()
         trace = tracer.start_trace(
             tenant_id=self.tenant_id,
@@ -104,6 +108,8 @@ class AssistantRuntime:
         trace.provider = asst.llm_provider
         trace.model = asst.default_model or "auto"
         trace.retrieval_mode = asst.retrieval_mode or "hybrid"
+        if policy.capture_mode == "REDACTED_PREVIEW":
+            trace.set_previews(user_input=user_message, max_length=policy.max_preview_length)
 
         yield format_sse(
             "message_start",
@@ -208,6 +214,11 @@ class AssistantRuntime:
                     document_ids=target_doc_ids,
                 )
                 retrieved_results = search_resp.results
+                trace.retrieval_metadata = search_resp.diagnostics
+                retrieval_span.set_attribute("timing_ms", search_resp.diagnostics.get("timing_ms", {}))
+                retrieval_span.set_attribute("vector_store", search_resp.diagnostics.get("vector_store"))
+                retrieval_span.set_attribute("candidates_found", search_resp.diagnostics.get("candidates_found", 0))
+                retrieval_span.set_attribute("authorized_count", search_resp.diagnostics.get("authorized_count", 0))
             
             retrieval_span.set_attribute("candidate_kbs", len(authorized_kb_ids) if authorized_kb_ids else 0)
             retrieval_span.set_attribute("results_count", len(retrieved_results))
@@ -251,6 +262,7 @@ class AssistantRuntime:
             detail_msg = getattr(q_err, "detail", str(q_err))
             err_msg = f"Quota exceeded: {detail_msg}"
             trace.finish(status="FAILED", error=err_msg)
+            await tracer.persist_to_database(trace, session=self.session)
             err_msg_obj = Message(
                 id=uuid.uuid4(),
                 tenant_id=self.tenant_id,
@@ -273,6 +285,7 @@ class AssistantRuntime:
                 f"Please add your API key under Providers & Keys."
             )
             trace.finish(status="FAILED", error=err_msg)
+            await tracer.persist_to_database(trace, session=self.session)
             err_msg_obj = Message(
                 id=uuid.uuid4(),
                 tenant_id=self.tenant_id,
@@ -310,12 +323,23 @@ class AssistantRuntime:
                     full_content_chunks.append(chunk.content_delta)
                     yield format_sse("token", {"delta": chunk.content_delta})
             gen_span.finish(status="COMPLETED")
+        except GeneratorExit:
+            quota_svc.release_reservation(reservation_id)
+            logger.info(f"Stream connection closed by client for trace {trace.trace_id}")
+            gen_span.finish(status="CANCELLED", error="Client connection aborted")
+            trace.finish(status="CANCELLED", error="Client connection aborted")
+            try:
+                await tracer.persist_to_database(trace)
+            except Exception:
+                pass
+            raise
         except Exception as e:
             quota_svc.release_reservation(reservation_id)
             logger.exception("LLM generation stream failed")
             safe_err = sanitize_error_message(str(e))
             gen_span.finish(status="FAILED", error=safe_err)
             trace.finish(status="FAILED", error=safe_err)
+            await tracer.persist_to_database(trace, session=self.session)
             err_msg_obj = Message(
                 id=uuid.uuid4(),
                 tenant_id=self.tenant_id,
@@ -334,6 +358,7 @@ class AssistantRuntime:
             quota_svc.release_reservation(reservation_id)
             logger.warning("LLM provider returned empty response stream")
             trace.finish(status="FAILED", error="Empty response stream received")
+            await tracer.persist_to_database(trace, session=self.session)
             err_msg_obj = Message(
                 id=uuid.uuid4(),
                 tenant_id=self.tenant_id,
@@ -391,10 +416,18 @@ class AssistantRuntime:
         duration = round((time.perf_counter() - start_time) * 1000, 2)
 
         # Complete Observability Trace
+        if policy.capture_mode == "REDACTED_PREVIEW":
+            trace.set_previews(
+                user_input=user_message,
+                output_text=final_content,
+                max_length=policy.max_preview_length,
+            )
         trace.input_tokens = input_token_estimate
         trace.output_tokens = output_token_estimate
         trace.total_tokens = input_token_estimate + output_token_estimate
+        trace.is_token_estimated = True
         trace.finish(status="COMPLETED")
+        await tracer.persist_to_database(trace, session=self.session)
 
         yield format_sse(
             "usage",
@@ -435,7 +468,24 @@ class AssistantRuntime:
         """Stream a live test preview using real retrieval and LLM inference without persisting conversations."""
         start_time = time.perf_counter()
 
-        yield format_sse("message_start", {"preview": True, "model": default_model})
+        policy_svc = ObservabilityPolicyService(self.session, self.tenant_id)
+        policy = await policy_svc.get_policy()
+
+        tracer = get_tracer()
+        trace = tracer.start_trace(
+            tenant_id=self.tenant_id,
+            assistant_id=None,
+            assistant_name="Preview Simulator",
+            conversation_id=None,
+            traffic_type="preview",
+        )
+        trace.provider = llm_provider
+        trace.model = default_model or "auto"
+        trace.retrieval_mode = retrieval_mode or "hybrid"
+        if policy.capture_mode == "REDACTED_PREVIEW":
+            trace.set_previews(user_input=user_message, max_length=policy.max_preview_length)
+
+        yield format_sse("message_start", {"preview": True, "model": default_model, "trace_id": trace.trace_id})
 
         retrieved_results: list[VectorSearchResult] = []
         citations_data: list[dict[str, Any]] = []
@@ -443,6 +493,9 @@ class AssistantRuntime:
         candidate_kb_ids = knowledge_base_ids or []
         if candidate_kb_ids:
             yield format_sse("retrieval_start", {"connected_kb_count": len(candidate_kb_ids)})
+            ret_span = trace.start_span("retrieval")
+            ret_span.set_attribute("candidate_kbs", len(candidate_kb_ids))
+            ret_span.set_attribute("mode", retrieval_mode or "hybrid")
 
             valid_kb_stmt = select(KnowledgeBase.id).where(
                 KnowledgeBase.id.in_(candidate_kb_ids),
@@ -450,6 +503,7 @@ class AssistantRuntime:
                 KnowledgeBase.status == "ACTIVE",
             )
             authorized_kb_ids = (await self.session.execute(valid_kb_stmt)).scalars().all()
+            ret_span.set_attribute("authorized_kbs", len(authorized_kb_ids))
 
             if authorized_kb_ids:
                 retrieval_svc = RetrievalService(
@@ -466,7 +520,36 @@ class AssistantRuntime:
                     top_k=top_k or 5,
                 )
                 retrieved_results = search_resp.results
+                ret_span.set_attribute("results_count", len(retrieved_results))
+                ret_span.set_attribute("retrieval_timing_ms", search_resp.timing_ms)
+                trace.retrieval_metadata = {
+                    "mode": retrieval_mode or "hybrid",
+                    "top_k": top_k or 5,
+                    "connected_kb_count": len(candidate_kb_ids),
+                    "authorized_kb_count": len(authorized_kb_ids),
+                    "candidate_chunks_found": len(retrieved_results),
+                    "timing_ms": search_resp.timing_ms,
+                    "vector_store": "pgvector",
+                }
+            else:
+                trace.retrieval_metadata = {
+                    "mode": retrieval_mode or "hybrid",
+                    "connected_kb_count": len(candidate_kb_ids),
+                    "authorized_kb_count": 0,
+                    "candidate_chunks_found": 0,
+                    "status": "NO_AUTHORIZED_KBS",
+                }
+            ret_span.finish(status="COMPLETED")
+        else:
+            trace.retrieval_metadata = {
+                "mode": "none",
+                "connected_kb_count": 0,
+                "candidate_chunks_found": 0,
+                "status": "NO_KNOWLEDGE_BASES",
+            }
 
+        ctx_span = trace.start_span("context_assembly")
+        ctx_span.set_attribute("max_tokens", max_tokens)
         messages, citations_data = build_rag_context(
             system_prompt=system_prompt,
             conversation_history=[],
@@ -478,6 +561,9 @@ class AssistantRuntime:
             uncertainty_behavior=uncertainty_behavior,
             citation_style=citation_style,
         )
+        ctx_span.set_attribute("message_count", len(messages))
+        ctx_span.set_attribute("citation_count", len(citations_data))
+        ctx_span.finish(status="COMPLETED")
 
         yield format_sse(
             "retrieval_complete",
@@ -496,6 +582,8 @@ class AssistantRuntime:
             await quota_svc.check_quota(estimated_tokens=input_token_estimate)
         except Exception as q_err:
             detail_msg = getattr(q_err, "detail", str(q_err))
+            trace.finish(status="FAILED", error=f"Quota exceeded: {detail_msg}")
+            await tracer.persist_to_database(trace, session=self.session)
             yield format_sse("message_error", {"error": f"Quota exceeded: {detail_msg}"})
             return
 
@@ -505,6 +593,8 @@ class AssistantRuntime:
                 f"Provider '{llm_provider}' is not configured with an active BYOK credential for this workspace. "
                 f"Please add your API key under Providers & Keys."
             )
+            trace.finish(status="FAILED", error=err_msg)
+            await tracer.persist_to_database(trace, session=self.session)
             yield format_sse("message_error", {"error": err_msg})
             return
 
@@ -524,19 +614,39 @@ class AssistantRuntime:
         )
 
         full_content_chunks: list[str] = []
+        gen_span = trace.start_span("provider_generation")
+        gen_span.set_attribute("provider", llm_provider)
+        gen_span.set_attribute("model", default_model or "auto")
+
         try:
             async for chunk in provider.generate_stream(messages, llm_config):
                 if chunk.content_delta:
+                    trace.mark_first_token()
                     full_content_chunks.append(chunk.content_delta)
                     yield format_sse("token", {"delta": chunk.content_delta})
+            gen_span.finish(status="COMPLETED")
+        except GeneratorExit:
+            logger.info(f"Preview stream connection closed by client for trace {trace.trace_id}")
+            gen_span.finish(status="CANCELLED", error="Client connection aborted")
+            trace.finish(status="CANCELLED", error="Client connection aborted")
+            try:
+                await tracer.persist_to_database(trace)
+            except Exception:
+                pass
+            raise
         except Exception as e:
             logger.exception("Preview LLM generation stream failed")
             safe_err = sanitize_error_message(str(e))
+            gen_span.finish(status="FAILED", error=safe_err)
+            trace.finish(status="FAILED", error=safe_err)
+            await tracer.persist_to_database(trace, session=self.session)
             yield format_sse("message_error", {"error": f"LLM generation failed: {safe_err}"})
             return
 
         final_content = "".join(full_content_chunks)
         if not final_content.strip():
+            trace.finish(status="FAILED", error="Empty response stream received")
+            await tracer.persist_to_database(trace, session=self.session)
             yield format_sse("message_error", {"error": "LLM generation failed: Empty response stream received"})
             return
 
@@ -551,6 +661,21 @@ class AssistantRuntime:
         )
 
         duration = round((time.perf_counter() - start_time) * 1000, 2)
+
+        # Complete Observability Trace
+        if policy.capture_mode == "REDACTED_PREVIEW":
+            trace.set_previews(
+                user_input=user_message,
+                output_text=final_content,
+                max_length=policy.max_preview_length,
+            )
+        trace.input_tokens = input_token_estimate
+        trace.output_tokens = output_token_estimate
+        trace.total_tokens = input_token_estimate + output_token_estimate
+        trace.is_token_estimated = True
+        trace.finish(status="COMPLETED")
+        await tracer.persist_to_database(trace, session=self.session)
+
         yield format_sse(
             "usage",
             {
@@ -558,6 +683,7 @@ class AssistantRuntime:
                 "output_tokens": len(final_content.split()),
                 "duration_ms": duration,
                 "model": default_model,
+                "trace_id": trace.trace_id,
             },
         )
         yield format_sse(
@@ -565,5 +691,6 @@ class AssistantRuntime:
             {
                 "status": "COMPLETED",
                 "preview": True,
+                "trace_id": trace.trace_id,
             },
         )

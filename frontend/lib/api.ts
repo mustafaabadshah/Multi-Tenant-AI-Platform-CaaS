@@ -743,12 +743,15 @@ export interface TraceSpanItem {
 export interface AssistantTraceItem {
   trace_id: string;
   tenant_id: string;
-  assistant_id: string;
+  assistant_id?: string | null;
   assistant_name: string;
-  conversation_id: string;
+  conversation_id?: string | null;
   traffic_type: string;
   status: string;
+  error_category?: string | null;
+  error?: string | null;
   created_at: string;
+  completed_at?: string | null;
   total_duration_ms?: number | null;
   ttft_ms?: number | null;
   provider?: string | null;
@@ -760,7 +763,13 @@ export interface AssistantTraceItem {
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;
-  error?: string | null;
+  is_token_estimated?: boolean;
+  estimated_cost_usd?: number | null;
+  pricing_status?: string;
+  retrieval_metadata?: Record<string, any> | null;
+  input_preview?: string | null;
+  output_preview?: string | null;
+  has_preview?: boolean;
   span_count: number;
   spans?: TraceSpanItem[];
 }
@@ -769,12 +778,25 @@ export interface ObservabilityMetrics {
   total_requests: number;
   error_rate: number;
   avg_latency_ms: number;
+  p50_latency_ms: number;
   p95_latency_ms: number;
+  p99_latency_ms: number;
   avg_ttft_ms: number;
   total_tokens: number;
+  estimated_cost_usd: number;
   by_status: Record<string, number>;
   by_traffic_type: Record<string, number>;
   by_provider: Record<string, number>;
+  by_error_category?: Record<string, number>;
+}
+
+export interface ObservabilityPolicy {
+  tenant_id: string;
+  capture_mode: "METADATA_ONLY" | "REDACTED_PREVIEW";
+  max_preview_length: number;
+  retention_days: number;
+  created_at?: string;
+  updated_at?: string;
 }
 
 class ApiClient {
@@ -1616,17 +1638,21 @@ class ApiClient {
     return this.request<EvalRunComparison>(`/evaluations/runs/${runIdA}/compare/${runIdB}`);
   }
 
-  // Platform Observability & Tracing (M09)
+  // Platform Observability & Tracing (M09 / M15)
   async listTraces(params?: {
     assistant_id?: string;
     status?: string;
     traffic_type?: string;
+    provider?: string;
+    search?: string;
     limit?: number;
   }): Promise<AssistantTraceItem[]> {
     const q = new URLSearchParams();
     if (params?.assistant_id) q.set("assistant_id", params.assistant_id);
     if (params?.status) q.set("status", params.status);
     if (params?.traffic_type) q.set("traffic_type", params.traffic_type);
+    if (params?.provider) q.set("provider", params.provider);
+    if (params?.search) q.set("search", params.search);
     if (params?.limit) q.set("limit", String(params.limit));
     const qs = q.toString() ? `?${q.toString()}` : "";
     return this.request<AssistantTraceItem[]>(`/observability/traces${qs}`);
@@ -1636,8 +1662,26 @@ class ApiClient {
     return this.request<AssistantTraceItem>(`/observability/traces/${traceId}`);
   }
 
-  async getObservabilityMetrics(): Promise<ObservabilityMetrics> {
-    return this.request<ObservabilityMetrics>("/observability/metrics");
+  async getObservabilityMetrics(period?: string): Promise<ObservabilityMetrics> {
+    const qs = period ? `?period=${period}` : "";
+    return this.request<ObservabilityMetrics>(`/observability/metrics${qs}`);
+  }
+
+  async getObservabilityPolicy(): Promise<ObservabilityPolicy> {
+    return this.request<ObservabilityPolicy>("/observability/policy");
+  }
+
+  async updateObservabilityPolicy(policy: Partial<ObservabilityPolicy>): Promise<ObservabilityPolicy> {
+    return this.request<ObservabilityPolicy>("/observability/policy", {
+      method: "PUT",
+      body: JSON.stringify(policy),
+    });
+  }
+
+  async purgeExpiredTraces(): Promise<{ purged_count: number; retention_days: number; message: string }> {
+    return this.request<{ purged_count: number; retention_days: number; message: string }>("/observability/purge", {
+      method: "POST",
+    });
   }
 
   // Public Chat Endpoints (Zero Auth / Anonymous Visitor)
