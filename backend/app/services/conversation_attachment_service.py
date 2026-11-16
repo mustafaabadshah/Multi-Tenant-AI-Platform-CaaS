@@ -180,10 +180,24 @@ class ConversationAttachmentService:
         if not att:
             return False
 
-        try:
-            await self.storage.delete(str(self.tenant_id), att.file_path)
-        except Exception as s_err:
-            logger.warning(f"Could not delete physical storage file {att.file_path}: {s_err}")
+        promoted_doc_exists = False
+        if att.promoted_document_id:
+            chk_stmt = select(Document.id).where(
+                Document.id == att.promoted_document_id,
+                Document.tenant_id == self.tenant_id,
+            )
+            promoted_doc_exists = (await self.session.execute(chk_stmt)).scalar_one_or_none() is not None
+
+        if not promoted_doc_exists:
+            try:
+                await self.storage.delete(str(self.tenant_id), att.file_path)
+            except Exception as s_err:
+                logger.warning(f"Could not delete physical storage file {att.file_path}: {s_err}")
+        else:
+            logger.info(
+                f"Preserving physical storage file {att.file_path} because attachment {att.id} "
+                f"was promoted to Knowledge Base document {att.promoted_document_id}"
+            )
 
         await self.session.delete(att)
         await self.session.commit()
@@ -200,6 +214,8 @@ class ConversationAttachmentService:
         att = await self.get_attachment(conversation_id, attachment_id)
         if not att:
             raise ValueError("Attachment not found or access denied")
+        if att.promoted_document_id:
+            raise ValueError(f"Attachment is already promoted to Knowledge Base document {att.promoted_document_id}")
 
         # 1. Authorize target Knowledge Base
         kb_stmt = select(KnowledgeBase).where(
@@ -301,6 +317,7 @@ class ConversationAttachmentService:
             .where(
                 ConversationAttachmentChunk.conversation_id == conversation_id,
                 ConversationAttachmentChunk.tenant_id == self.tenant_id,
+                ConversationAttachment.status == "READY",
             )
         )
         rows = (await self.session.execute(stmt)).all()

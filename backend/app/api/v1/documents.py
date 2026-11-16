@@ -5,12 +5,14 @@ import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import TenantContext, get_current_user, require_permission
 from app.core.config import settings
 from app.core.constants import PermissionName
 from app.database.session import get_db
+from app.models.conversation import ConversationAttachment
 from app.models.knowledge import Document
 from app.models.user import User
 from app.repositories.audit_repository import AuditLogRepository
@@ -84,23 +86,37 @@ async def delete_document(
         )
     _check_document_acl(doc, ctx)
 
-    # Delete the object first. A storage failure must not be reported as a
-    # successful deletion: keep the DB record so the document remains visible
-    # and retryable. ``delete`` returning False means the object was already
-    # absent, which is the desired end state.
-    storage = get_storage_provider()
-    try:
-        await storage.delete(str(ctx.tenant.id), doc.file_path)
-    except Exception as exc:
-        logger.error(
-            "Document storage deletion failed for tenant %s document %s (%s)",
-            ctx.tenant.id,
-            document_id,
-            type(exc).__name__,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Document storage deletion failed; the document was not deleted.",
+    # Check if a chat attachment still references this document or its file path
+    ref_stmt = select(ConversationAttachment).where(
+        ConversationAttachment.promoted_document_id == document_id,
+        ConversationAttachment.tenant_id == ctx.tenant.id,
+    )
+    referencing_att = (await db.execute(ref_stmt)).scalar_one_or_none()
+
+    if not referencing_att:
+        # Delete the object first. A storage failure must not be reported as a
+        # successful deletion: keep the DB record so the document remains visible
+        # and retryable. ``delete`` returning False means the object was already
+        # absent, which is the desired end state.
+        storage = get_storage_provider()
+        try:
+            await storage.delete(str(ctx.tenant.id), doc.file_path)
+        except Exception as exc:
+            logger.error(
+                "Document storage deletion failed for tenant %s document %s (%s)",
+                ctx.tenant.id,
+                document_id,
+                type(exc).__name__,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Document storage deletion failed; the document was not deleted.",
+            )
+    else:
+        logger.info(
+            "Preserving physical storage file %s because conversation attachment %s still references it",
+            doc.file_path,
+            referencing_att.id,
         )
 
     # Object is gone (or already absent); now remove DB records atomically.

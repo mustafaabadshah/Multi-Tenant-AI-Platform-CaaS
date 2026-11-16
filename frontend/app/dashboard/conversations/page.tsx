@@ -112,6 +112,7 @@ export default function ConversationsWorkspacePage() {
   const speechSynthesizerRef = useRef<BrowserSpeechSynthesizer | null>(null);
   const voiceModeRef = useRef<VoiceMode>(voiceMode);
   voiceModeRef.current = voiceMode;
+  const isSubmittingVoiceRef = useRef<boolean>(false);
 
   // 1. Initialize Speech Engines
   useEffect(() => {
@@ -152,6 +153,7 @@ export default function ConversationsWorkspacePage() {
     return () => {
       recognizer.abort();
       synthesizer.cancel();
+      isSubmittingVoiceRef.current = false;
     };
   }, []);
 
@@ -191,6 +193,7 @@ export default function ConversationsWorkspacePage() {
     setIsSpeaking(false);
     setIsListening(false);
     setSpeakingMsgId(null);
+    isSubmittingVoiceRef.current = false;
 
     async function loadConvData() {
       if (!activeConversation) {
@@ -253,13 +256,16 @@ export default function ConversationsWorkspacePage() {
         setInputMessage(transcript);
       } else if (voiceModeRef.current === "VOICE_CONVERSATION") {
         setInputMessage(transcript);
-        if (isFinal && transcript.trim()) {
+        if (isFinal && transcript.trim() && !isSubmittingVoiceRef.current && !streaming) {
+          isSubmittingVoiceRef.current = true;
           speechRecognizerRef.current?.stop();
-          handleSendMessageWithText(transcript.trim());
+          handleSendMessageWithText(transcript.trim()).finally(() => {
+            isSubmittingVoiceRef.current = false;
+          });
         }
       }
     });
-  }, []);
+  }, [streaming]);
 
   // Create new conversation
   const handleCreateNewChat = async (targetAssistantId?: string) => {
@@ -585,12 +591,21 @@ export default function ConversationsWorkspacePage() {
         // M24: Automated TTS in LISTEN or VOICE_CONVERSATION modes
         const currentMode = voiceModeRef.current;
         if (currentMode === "LISTEN" || currentMode === "VOICE_CONVERSATION") {
+          // Explicitly stop microphone to prevent acoustic feedback loop
+          speechRecognizerRef.current?.stop();
+          setIsListening(false);
           speechSynthesizerRef.current?.speak(accumulatedText, {
             onEnd: () => {
+              setIsSpeaking(false);
+              setSpeakingMsgId(null);
               // In Voice Conversation mode: if no pending approvals are blocking, resume listening
               if (voiceModeRef.current === "VOICE_CONVERSATION" && pendingApprovals.length === 0) {
                 speechRecognizerRef.current?.start();
               }
+            },
+            onError: () => {
+              setIsSpeaking(false);
+              setSpeakingMsgId(null);
             },
           });
         }
@@ -672,11 +687,13 @@ export default function ConversationsWorkspacePage() {
     }
     speechSynthesizerRef.current?.cancel();
     setStreaming(false);
+    isSubmittingVoiceRef.current = false;
   };
 
   // Change Voice Mode
   const handleSelectVoiceMode = (mode: VoiceMode) => {
     setVoiceMode(mode);
+    isSubmittingVoiceRef.current = false;
     if (mode === "TEXT") {
       speechRecognizerRef.current?.stop();
       speechSynthesizerRef.current?.cancel();

@@ -265,7 +265,7 @@ async def upload_attachment(
         Conversation.tenant_id == ctx.tenant.id,
     )
     conv = (await db.execute(conv_stmt)).scalar_one_or_none()
-    if not conv or (not ctx.is_admin and conv.user_id != current_user.id):
+    if not conv or conv.status == "DELETED" or (not ctx.is_admin and conv.user_id != current_user.id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
 
     content = await file.read()
@@ -302,7 +302,7 @@ async def list_attachments(
         Conversation.tenant_id == ctx.tenant.id,
     )
     conv = (await db.execute(conv_stmt)).scalar_one_or_none()
-    if not conv or (not ctx.is_admin and conv.user_id != current_user.id):
+    if not conv or conv.status == "DELETED" or (not ctx.is_admin and conv.user_id != current_user.id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
 
     svc = ConversationAttachmentService(db, ctx.tenant.id)
@@ -322,6 +322,14 @@ async def get_attachment(
     db: AsyncSession = Depends(get_db),
 ) -> ConversationAttachmentResponse:
     """Retrieve details of a specific conversation attachment."""
+    conv_stmt = select(Conversation).where(
+        Conversation.id == conversation_id,
+        Conversation.tenant_id == ctx.tenant.id,
+    )
+    conv = (await db.execute(conv_stmt)).scalar_one_or_none()
+    if not conv or conv.status == "DELETED" or (not ctx.is_admin and conv.user_id != current_user.id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+
     svc = ConversationAttachmentService(db, ctx.tenant.id)
     att = await svc.get_attachment(conversation_id, attachment_id)
     if not att:
@@ -340,6 +348,14 @@ async def download_attachment(
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     """Download the raw binary file for an authorized conversation attachment."""
+    conv_stmt = select(Conversation).where(
+        Conversation.id == conversation_id,
+        Conversation.tenant_id == ctx.tenant.id,
+    )
+    conv = (await db.execute(conv_stmt)).scalar_one_or_none()
+    if not conv or conv.status == "DELETED" or (not ctx.is_admin and conv.user_id != current_user.id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+
     svc = ConversationAttachmentService(db, ctx.tenant.id)
     try:
         att, data = await svc.get_attachment_bytes(conversation_id, attachment_id)
@@ -364,6 +380,14 @@ async def delete_attachment(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Delete an attachment and its chunks from the conversation."""
+    conv_stmt = select(Conversation).where(
+        Conversation.id == conversation_id,
+        Conversation.tenant_id == ctx.tenant.id,
+    )
+    conv = (await db.execute(conv_stmt)).scalar_one_or_none()
+    if not conv or conv.status == "DELETED" or (not ctx.is_admin and conv.user_id != current_user.id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+
     svc = ConversationAttachmentService(db, ctx.tenant.id)
     deleted = await svc.delete_attachment(conversation_id, attachment_id)
     if not deleted:
@@ -388,7 +412,7 @@ async def promote_attachment(
         Conversation.tenant_id == ctx.tenant.id,
     )
     conv = (await db.execute(conv_stmt)).scalar_one_or_none()
-    if not conv or (not ctx.is_admin and conv.user_id != current_user.id):
+    if not conv or conv.status == "DELETED" or (not ctx.is_admin and conv.user_id != current_user.id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
 
     svc = ConversationAttachmentService(db, ctx.tenant.id)
