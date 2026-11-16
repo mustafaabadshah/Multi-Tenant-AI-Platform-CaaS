@@ -257,8 +257,6 @@ class ConversationAttachmentService:
             extraction_stats={"promoted_from_attachment_id": str(att.id)},
         )
         self.session.add(doc_version)
-
-        # 5. Copy chunks into DocumentChunk
         for chk in att_chunks:
             doc_chunk = DocumentChunk(
                 id=uuid.uuid4(),
@@ -275,6 +273,9 @@ class ConversationAttachmentService:
                 metadata_json=chk.metadata_json,
             )
             self.session.add(doc_chunk)
+
+        # Flush Document, Version, and Chunks so Foreign Key constraints are satisfied in Postgres
+        await self.session.flush()
 
         # 6. Update attachment promotion status
         att.is_promoted = True
