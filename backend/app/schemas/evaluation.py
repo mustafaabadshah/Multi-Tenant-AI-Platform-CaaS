@@ -117,3 +117,6 @@ class EvalRunComparisonResponse(BaseModel):
     metrics_delta: dict[str, float]
     summary_a: dict[str, Any]
     summary_b: dict[str, Any]
+    assistant_a_config: dict[str, Any] = Field(default_factory=dict)
+    assistant_b_config: dict[str, Any] = Field(default_factory=dict)
+

@@ -1,7 +1,9 @@
 import uuid
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import TenantContext, get_current_user, require_permission
@@ -17,11 +19,100 @@ from app.schemas.assistant import (
     AssistantResponse,
     AssistantRollbackRequest,
     AssistantTestPreviewRequest,
+    AssistantToolsConfig,
     AssistantUpdateRequest,
     AssistantVersionResponse,
 )
 
 router = APIRouter(prefix="/assistants", tags=["Assistants"])
+
+
+async def _validate_tools_config_security(
+    db: AsyncSession,
+    tenant_id: uuid.UUID,
+    user_id: uuid.UUID,
+    tools_config: Optional[AssistantToolsConfig],
+) -> Optional[dict[str, Any]]:
+    if not tools_config:
+        return None
+
+    cfg = tools_config.model_dump(mode="json")
+
+    # 1. Validate MCP connections: tenant isolation & personal credential boundary
+    if tools_config.mcp_connection_ids:
+        from app.models.mcp import MCPConnection
+
+        conn_stmt = select(MCPConnection).where(
+            MCPConnection.id.in_(tools_config.mcp_connection_ids),
+            MCPConnection.tenant_id == tenant_id,
+        )
+        conns = (await db.execute(conn_stmt)).scalars().all()
+        found_ids = {c.id for c in conns}
+        for cid in tools_config.mcp_connection_ids:
+            if cid not in found_ids:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"MCP connection '{cid}' does not exist in this workspace.",
+                )
+        # Check personal connection ownership
+        for c in conns:
+            if c.user_id is not None and c.user_id != user_id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Cannot attach personal MCP connection '{c.display_name}' belonging to another user.",
+                )
+
+    # 2. Validate custom tools & MCP tools in enabled_tool_ids
+    if tools_config.enabled_tool_ids:
+        from app.models.tool import Tool
+        from app.models.mcp import MCPConnection
+
+        custom_uuids = []
+        for tid in tools_config.enabled_tool_ids:
+            if tid.startswith("builtin_") or tid in ("calculator", "weather_lookup"):
+                continue
+            if tid.startswith("mcp_"):
+                parts = tid.split("_")
+                if len(parts) >= 2:
+                    try:
+                        mcp_conn_id = uuid.UUID(parts[1])
+                        conn_stmt = select(MCPConnection).where(
+                            MCPConnection.id == mcp_conn_id,
+                            MCPConnection.tenant_id == tenant_id,
+                        )
+                        c = (await db.execute(conn_stmt)).scalar_one_or_none()
+                        if not c:
+                            raise HTTPException(
+                                status_code=status.HTTP_400_BAD_REQUEST,
+                                detail=f"MCP connection '{mcp_conn_id}' does not exist in this workspace.",
+                            )
+                        if c.user_id is not None and c.user_id != user_id:
+                            raise HTTPException(
+                                status_code=status.HTTP_403_FORBIDDEN,
+                                detail=f"Cannot attach personal MCP connection '{c.display_name}' belonging to another user.",
+                            )
+                    except ValueError:
+                        pass
+                continue
+            try:
+                custom_uuids.append(uuid.UUID(tid))
+            except ValueError:
+                pass
+
+        if custom_uuids:
+            tool_stmt = select(Tool.id).where(
+                Tool.id.in_(custom_uuids),
+                Tool.tenant_id == tenant_id,
+            )
+            found_tool_ids = set((await db.execute(tool_stmt)).scalars().all())
+            for cuid in custom_uuids:
+                if cuid not in found_tool_ids:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Custom tool '{cuid}' does not exist in this workspace.",
+                    )
+
+    return cfg
 
 
 def _to_response(assistant: Assistant, kb_ids: list[uuid.UUID]) -> AssistantResponse:
@@ -48,6 +139,7 @@ def _to_response(assistant: Assistant, kb_ids: list[uuid.UUID]) -> AssistantResp
         status=assistant.status,
         current_version_num=assistant.current_version_num or 1,
         connected_kb_ids=kb_ids,
+        tools_config=assistant.tools_config or {},
         created_at=assistant.created_at,
         updated_at=assistant.updated_at,
     )
@@ -76,6 +168,9 @@ async def create_assistant(
     db: AsyncSession = Depends(get_db),
 ) -> AssistantResponse:
     repo = AssistantRepository(db, ctx.tenant.id)
+    validated_tools_config = await _validate_tools_config_security(
+        db, ctx.tenant.id, current_user.id, payload.tools_config
+    )
     try:
         assistant = await repo.create_assistant(
             name=payload.name.strip(),
@@ -94,6 +189,7 @@ async def create_assistant(
             retrieval_mode=payload.retrieval_mode,
             top_k=payload.top_k,
             system_prompt=payload.system_prompt,
+            tools_config=validated_tools_config,
             knowledge_base_ids=payload.knowledge_base_ids,
             actor_id=current_user.id,
             change_summary=(
@@ -188,6 +284,11 @@ async def update_assistant(
     db: AsyncSession = Depends(get_db),
 ) -> AssistantResponse:
     repo = AssistantRepository(db, ctx.tenant.id)
+    validated_tools_config = (
+        await _validate_tools_config_security(db, ctx.tenant.id, current_user.id, payload.tools_config)
+        if payload.tools_config is not None
+        else None
+    )
     try:
         updated = await repo.update_assistant(
             assistant_id=assistant_id,
@@ -207,6 +308,7 @@ async def update_assistant(
             top_k=payload.top_k,
             system_prompt=payload.system_prompt,
             status=payload.status,
+            tools_config=validated_tools_config,
             knowledge_base_ids=payload.knowledge_base_ids,
             actor_id=current_user.id,
             change_summary=payload.change_summary,

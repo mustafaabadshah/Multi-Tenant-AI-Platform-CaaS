@@ -98,6 +98,18 @@ class OpenAICompatibleLLMProvider(LLMProvider):
             "max_tokens": config.max_tokens,
             "stream": False,
         }
+        if config.tools:
+            payload["tools"] = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": t.get("name"),
+                        "description": t.get("description") or "",
+                        "parameters": t.get("input_schema") or {"type": "object", "properties": {}},
+                    },
+                }
+                for t in config.tools
+            ]
 
         timeout = httpx.Timeout(connect=10.0, read=config.timeout_seconds, write=10.0, pool=10.0)
         try:
@@ -108,8 +120,24 @@ class OpenAICompatibleLLMProvider(LLMProvider):
 
                 data = resp.json()
                 choice = data["choices"][0]
-                content = choice["message"]["content"] or ""
+                content = choice["message"].get("content") or ""
                 usage = data.get("usage", {})
+
+                tool_calls = None
+                raw_tc = choice["message"].get("tool_calls")
+                if raw_tc:
+                    tool_calls = []
+                    for t in raw_tc:
+                        fn = t.get("function", {})
+                        try:
+                            args = json.loads(fn.get("arguments", "{}"))
+                        except Exception:
+                            args = {"raw": fn.get("arguments", "")}
+                        tool_calls.append({
+                            "id": t.get("id"),
+                            "name": fn.get("name"),
+                            "arguments": args,
+                        })
 
                 return LLMResponse(
                     content=content,
@@ -121,6 +149,7 @@ class OpenAICompatibleLLMProvider(LLMProvider):
                     },
                     finish_reason=choice.get("finish_reason", "stop"),
                     raw_response=data,
+                    tool_calls=tool_calls,
                 )
         except httpx.ConnectTimeout as e:
             raise LLMTimeoutError(f"Connection to provider '{self._name}' timed out") from e
@@ -151,8 +180,22 @@ class OpenAICompatibleLLMProvider(LLMProvider):
             "max_tokens": config.max_tokens,
             "stream": True,
         }
+        if config.tools:
+            payload["tools"] = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": t.get("name"),
+                        "description": t.get("description") or "",
+                        "parameters": t.get("input_schema") or {"type": "object", "properties": {}},
+                    },
+                }
+                for t in config.tools
+            ]
 
         timeout = httpx.Timeout(connect=10.0, read=config.timeout_seconds, write=10.0, pool=10.0)
+        accumulated_tool_calls: dict[int, dict[str, Any]] = {}
+
         try:
             async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
                 async with client.stream("POST", url, headers=headers, json=payload) as resp:
@@ -173,11 +216,43 @@ class OpenAICompatibleLLMProvider(LLMProvider):
                                 choice = chunk_data["choices"][0]
                                 delta = choice.get("delta", {})
                                 content_delta = delta.get("content", "")
+
+                                raw_tool_calls = delta.get("tool_calls")
+                                if raw_tool_calls:
+                                    for tc_chunk in raw_tool_calls:
+                                        idx = tc_chunk.get("index", 0)
+                                        if idx not in accumulated_tool_calls:
+                                            accumulated_tool_calls[idx] = {
+                                                "id": tc_chunk.get("id", f"call_{idx}"),
+                                                "name": tc_chunk.get("function", {}).get("name", ""),
+                                                "arguments_str": "",
+                                            }
+                                        fn = tc_chunk.get("function", {})
+                                        if fn.get("name"):
+                                            accumulated_tool_calls[idx]["name"] = fn["name"]
+                                        if fn.get("arguments"):
+                                            accumulated_tool_calls[idx]["arguments_str"] += fn["arguments"]
+
                                 finish_reason = choice.get("finish_reason")
-                                if content_delta or finish_reason:
+                                parsed_tool_calls = None
+                                if finish_reason == "tool_calls" or (finish_reason and accumulated_tool_calls):
+                                    parsed_tool_calls = []
+                                    for idx, tc in sorted(accumulated_tool_calls.items()):
+                                        try:
+                                            parsed_args = json.loads(tc["arguments_str"]) if tc["arguments_str"] else {}
+                                        except json.JSONDecodeError:
+                                            parsed_args = {"raw": tc["arguments_str"]}
+                                        parsed_tool_calls.append({
+                                            "id": tc["id"],
+                                            "name": tc["name"],
+                                            "arguments": parsed_args,
+                                        })
+
+                                if content_delta or finish_reason or parsed_tool_calls:
                                     yield LLMStreamChunk(
                                         content_delta=content_delta,
                                         finish_reason=finish_reason,
+                                        tool_calls=parsed_tool_calls,
                                     )
                             except json.JSONDecodeError:
                                 continue

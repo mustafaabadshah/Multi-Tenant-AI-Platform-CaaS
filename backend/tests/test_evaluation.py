@@ -72,7 +72,7 @@ def test_retrieval_and_answer_metrics_deterministic():
     c_res_bad = calculate_citation_metrics(phantom_citations, retrieved_chunk_ids=["c1", "c2"])
     assert c_res_bad["citation_presence"] == 1.0
     assert c_res_bad["citation_validity"] == 0.0
-    assert c_res_bad["citation_score"] == 0.4
+    assert c_res_bad["citation_score"] == 0.3
 
 
 @pytest.mark.asyncio

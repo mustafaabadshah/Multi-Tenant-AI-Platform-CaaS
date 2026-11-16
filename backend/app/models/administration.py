@@ -75,3 +75,30 @@ class TenantQuota(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
     # Relationship
     tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="quota")
+
+
+class QuotaReservation(Base, UUIDPrimaryKeyMixin, TenantScopedMixin):
+    """PostgreSQL-backed atomic reservation for in-flight LLM requests."""
+
+    __tablename__ = "quota_reservations"
+
+    tokens_reserved: Mapped[int] = mapped_column(Integer, default=500, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(20), default="ACTIVE", nullable=False, index=True
+    )  # ACTIVE, CONSUMED, RELEASED, EXPIRED
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False,
+        index=True,
+    )
+    consumed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    released_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+

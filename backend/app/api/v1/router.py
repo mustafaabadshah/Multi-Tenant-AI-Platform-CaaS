@@ -21,8 +21,13 @@ from app.api.v1.publishing import router as publishing_router
 from app.api.v1.retrieval import router as retrieval_router
 from app.api.v1.roles import router as roles_router
 from app.api.v1.templates import router as templates_router
+from app.api.v1.approvals import router as approvals_router
+from app.api.v1.mcp import router as mcp_router
 from app.api.v1.tenants import router as tenants_router
+from app.api.v1.tools import router as tools_router
 from app.api.v1.vector_stores import router as vector_stores_router
+
+
 
 api_v1_router = APIRouter(prefix="/api/v1")
 
@@ -49,5 +54,10 @@ api_v1_router.include_router(providers_router)
 api_v1_router.include_router(audit_router)
 api_v1_router.include_router(evaluation_router)
 api_v1_router.include_router(observability_router)
+api_v1_router.include_router(tools_router)
+api_v1_router.include_router(approvals_router)
+api_v1_router.include_router(mcp_router)
+
+
 
 

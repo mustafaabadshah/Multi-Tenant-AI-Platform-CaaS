@@ -11,9 +11,16 @@ from sqlalchemy.orm import selectinload
 
 from app.evaluation.judge import JudgeEvaluator
 from app.evaluation.metrics import (
+    calculate_abstention_accuracy,
+    calculate_answer_completeness,
     calculate_citation_metrics,
+    calculate_context_relevance,
     calculate_faithfulness,
+    detect_unsupported_claims,
+    hit_rate_at_k,
     mean_reciprocal_rank,
+    ndcg_at_k,
+    precision_at_k,
     recall_at_k,
 )
 from app.evaluation.starter_benchmarks import STARTER_BENCHMARKS
@@ -209,9 +216,18 @@ class EvaluationService:
 
         results: list[EvalRunResult] = []
         recalls: list[float] = []
+        precisions: list[float] = []
         mrrs: list[float] = []
+        ndcgs: list[float] = []
+        hit_rates: list[float] = []
         faithfulnesses: list[float] = []
         citation_scores: list[float] = []
+        citation_validities: list[float] = []
+        citation_correctnesses: list[float] = []
+        abstentions: list[float] = []
+        relevances: list[float] = []
+        completenesses: list[float] = []
+        all_unsupported: list[list[str]] = []
         latencies: list[int] = []
 
         try:
@@ -244,9 +260,10 @@ class EvaluationService:
                             citations.append({
                                 "chunk_id": chunk_id_str,
                                 "document_name": r.document_name,
+                                "snippet": r.content[:150],
                             })
                     except Exception:
-                        # Log error and continue with empty retrieval
+                        # Continue gracefully on retrieval error
                         pass
 
                 # Synthesize / generate response
@@ -255,7 +272,6 @@ class EvaluationService:
                 elif item.is_adversarial:
                     generated_answer = "I cannot fulfill requests that violate security instructions or attempt to access restricted internal parameters."
                 elif contexts:
-                    # Deterministic synthesis of answer from top retrieved context
                     top_context_snippet = contexts[0][:200].strip()
                     generated_answer = f"Based on the documentation: {top_context_snippet}..."
                 else:
@@ -263,17 +279,34 @@ class EvaluationService:
 
                 duration_ms = int((time.perf_counter() - start_t) * 1000)
 
-                # Compute Metrics
-                r_score = recall_at_k(retrieved_chunk_ids, item.expected_chunk_ids, k=asst.top_k or 5)
+                # Compute Detailed Metrics
+                k_val = asst.top_k or 5
+                r_score = recall_at_k(retrieved_chunk_ids, item.expected_chunk_ids, k=k_val)
+                p_score = precision_at_k(retrieved_chunk_ids, item.expected_chunk_ids, k=k_val)
                 m_score = mean_reciprocal_rank(retrieved_chunk_ids, item.expected_chunk_ids)
+                n_score = ndcg_at_k(retrieved_chunk_ids, item.expected_chunk_ids, k=k_val)
+                hit_score = hit_rate_at_k(retrieved_chunk_ids, item.expected_chunk_ids, k=k_val)
                 f_score = calculate_faithfulness(generated_answer, contexts)
-                c_metrics = calculate_citation_metrics(citations, retrieved_chunk_ids)
+                c_metrics = calculate_citation_metrics(citations, retrieved_chunk_ids, retrieved_chunks=retrieved_chunks)
                 cit_score = c_metrics["citation_score"]
+                abst_score = calculate_abstention_accuracy(generated_answer, item.is_unanswerable)
+                rel_score = calculate_context_relevance(item.question, contexts)
+                comp_score = calculate_answer_completeness(generated_answer, item.expected_answer)
+                unsupported = detect_unsupported_claims(generated_answer, contexts)
 
                 recalls.append(r_score)
+                precisions.append(p_score)
                 mrrs.append(m_score)
+                ndcgs.append(n_score)
+                hit_rates.append(hit_score)
                 faithfulnesses.append(f_score)
                 citation_scores.append(cit_score)
+                citation_validities.append(c_metrics["citation_validity"])
+                citation_correctnesses.append(c_metrics["citation_correctness"])
+                abstentions.append(abst_score)
+                relevances.append(rel_score)
+                completenesses.append(comp_score)
+                all_unsupported.append(unsupported)
                 latencies.append(duration_ms)
 
                 res_obj = EvalRunResult(
@@ -296,12 +329,27 @@ class EvaluationService:
             eval_run.metrics_summary = {
                 "total_items": item_count,
                 "mean_recall_at_5": round(sum(recalls) / item_count, 4) if item_count else 0.0,
+                "mean_precision_at_5": round(sum(precisions) / item_count, 4) if item_count else 0.0,
                 "mean_mrr": round(sum(mrrs) / item_count, 4) if item_count else 0.0,
+                "mean_ndcg": round(sum(ndcgs) / item_count, 4) if item_count else 0.0,
+                "mean_hit_rate": round(sum(hit_rates) / item_count, 4) if item_count else 0.0,
                 "mean_faithfulness": round(sum(faithfulnesses) / item_count, 4) if item_count else 0.0,
                 "mean_citation_score": round(sum(citation_scores) / item_count, 4) if item_count else 0.0,
+                "mean_citation_validity": round(sum(citation_validities) / item_count, 4) if item_count else 0.0,
+                "mean_citation_correctness": round(sum(citation_correctnesses) / item_count, 4) if item_count else 0.0,
+                "mean_abstention_accuracy": round(sum(abstentions) / item_count, 4) if item_count else 0.0,
+                "mean_context_relevance": round(sum(relevances) / item_count, 4) if item_count else 0.0,
+                "mean_answer_completeness": round(sum(completenesses) / item_count, 4) if item_count else 0.0,
+                "total_unsupported_claims": sum(len(u) for u in all_unsupported),
                 "mean_latency_ms": int(sum(latencies) / item_count) if item_count else 0,
                 "unanswerable_tested": sum(1 for itm in dataset.items if itm.is_unanswerable),
                 "adversarial_tested": sum(1 for itm in dataset.items if itm.is_adversarial),
+                "assistant_config": {
+                    "model": asst.default_model or "auto",
+                    "retrieval_mode": asst.retrieval_mode or "hybrid",
+                    "top_k": asst.top_k or 5,
+                    "provider": asst.llm_provider,
+                },
             }
             eval_run.status = "COMPLETED"
             eval_run.completed_at = datetime.now(UTC)
@@ -319,7 +367,7 @@ class EvaluationService:
         return (await self.session.execute(stmt)).scalar_one()
 
     async def compare_runs(self, run_a_id: uuid.UUID, run_b_id: uuid.UUID) -> dict[str, Any]:
-        """Compare two evaluation runs for regression analysis."""
+        """Compare two evaluation runs for regression analysis with configuration delta."""
         run_a = await self.get_run(run_a_id)
         run_b = await self.get_run(run_b_id)
 
@@ -331,9 +379,12 @@ class EvaluationService:
 
         metrics_delta = {
             "recall_delta": round(sum_b.get("mean_recall_at_5", 0.0) - sum_a.get("mean_recall_at_5", 0.0), 4),
+            "precision_delta": round(sum_b.get("mean_precision_at_5", 0.0) - sum_a.get("mean_precision_at_5", 0.0), 4),
             "mrr_delta": round(sum_b.get("mean_mrr", 0.0) - sum_a.get("mean_mrr", 0.0), 4),
+            "ndcg_delta": round(sum_b.get("mean_ndcg", 0.0) - sum_a.get("mean_ndcg", 0.0), 4),
             "faithfulness_delta": round(sum_b.get("mean_faithfulness", 0.0) - sum_a.get("mean_faithfulness", 0.0), 4),
             "citation_delta": round(sum_b.get("mean_citation_score", 0.0) - sum_a.get("mean_citation_score", 0.0), 4),
+            "abstention_delta": round(sum_b.get("mean_abstention_accuracy", 0.0) - sum_a.get("mean_abstention_accuracy", 0.0), 4),
             "latency_delta_ms": sum_b.get("mean_latency_ms", 0) - sum_a.get("mean_latency_ms", 0),
         }
 
@@ -344,4 +395,7 @@ class EvaluationService:
             "metrics_delta": metrics_delta,
             "summary_a": sum_a,
             "summary_b": sum_b,
+            "assistant_a_config": sum_a.get("assistant_config", {}),
+            "assistant_b_config": sum_b.get("assistant_config", {}),
         }
+

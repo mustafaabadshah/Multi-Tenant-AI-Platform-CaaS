@@ -35,6 +35,7 @@ class Assistant(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin):
     status: Mapped[str] = mapped_column(String(50), default="ACTIVE", nullable=False)
     current_version_num: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     byok_encrypted_key: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    tools_config: Mapped[dict | None] = mapped_column(JSON, default=dict, nullable=True)
 
     # Relationships
     tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="assistants")

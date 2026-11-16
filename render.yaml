@@ -21,10 +21,10 @@ services:
     # reference shows the same Dockerfile-outside-context arrangement.
     dockerfilePath: infrastructure/docker/backend.Dockerfile
     dockerContext: backend
-    # Free services cannot use preDeployCommand (paid-only). Run the idempotent
-    # migration before Uvicorn inside the container start command. Render injects PORT,
-    # so this also avoids relying on the Dockerfile's hardcoded --port 8000.
-    dockerCommand: '/bin/sh -c "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1"'
+    # Free services cannot use preDeployCommand (paid-only). Migrations (alembic upgrade head)
+    # are executed out-of-band via explicit migration release jobs, preventing race conditions
+    # or container health check timeouts on startup.
+    dockerCommand: "exec uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1"
     healthCheckPath: /health
     autoDeploy: false
     envVars:

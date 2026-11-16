@@ -2,7 +2,7 @@
 
 import math
 import re
-from typing import Any, Sequence
+from typing import Any, Optional, Sequence
 
 # Common stop words for token-level overlap
 STOP_WORDS = {
@@ -153,32 +153,107 @@ def calculate_abstention_accuracy(generated_answer: str, is_unanswerable: bool) 
 def calculate_citation_metrics(
     citations: Sequence[dict[str, Any]],
     retrieved_chunk_ids: Sequence[str],
+    retrieved_chunks: Optional[Sequence[dict[str, Any]]] = None,
 ) -> dict[str, float]:
-    """Calculate citation presence, provenance validity (referencing real retrieved chunks), and composite score."""
+    """Calculate citation presence, provenance validity, and content correctness."""
     if not citations:
         return {
             "citation_presence": 0.0,
             "citation_validity": 0.0,
+            "citation_correctness": 0.0,
             "citation_score": 0.0,
         }
 
     presence = 1.0
     valid_count = 0
+    correct_count = 0
     retrieved_set = set(retrieved_chunk_ids)
+
+    # Build chunk id to content map if retrieved_chunks provided
+    chunk_content_map: dict[str, str] = {}
+    if retrieved_chunks:
+        for chk in retrieved_chunks:
+            cid = str(chk.get("chunk_id", chk.get("id", "")))
+            if cid:
+                chunk_content_map[cid] = (chk.get("content") or "").lower()
 
     for cit in citations:
         chunk_id = cit.get("chunk_id") or cit.get("id")
-        if chunk_id and (str(chunk_id) in retrieved_set or not retrieved_chunk_ids):
+        cid_str = str(chunk_id) if chunk_id else ""
+        snippet = (cit.get("snippet") or cit.get("citation_text") or "").strip().lower()
+
+        is_valid = False
+        if cid_str and (cid_str in retrieved_set or not retrieved_chunk_ids):
             valid_count += 1
+            is_valid = True
         elif not chunk_id and cit.get("document_name"):
-            # Citations with document name provenance
             valid_count += 1
+            is_valid = True
+
+        # Check citation correctness: snippet must actually match retrieved content
+        if is_valid and snippet and cid_str in chunk_content_map:
+            if snippet in chunk_content_map[cid_str] or any(w in chunk_content_map[cid_str] for w in tokenize(snippet)[:5]):
+                correct_count += 1
+        elif is_valid:
+            correct_count += 1
 
     validity = float(valid_count) / float(len(citations)) if citations else 0.0
-    composite = round(0.4 * presence + 0.6 * validity, 4)
+    correctness = float(correct_count) / float(len(citations)) if citations else 0.0
+    composite = round(0.3 * presence + 0.4 * validity + 0.3 * correctness, 4)
 
     return {
         "citation_presence": presence,
         "citation_validity": validity,
+        "citation_correctness": correctness,
         "citation_score": composite,
     }
+
+
+def calculate_context_relevance(question: str, retrieved_contexts: Sequence[str]) -> float:
+    """Measure the token-level relevance of retrieved context to the user question."""
+    q_tokens = set(tokenize(question))
+    if not q_tokens or not retrieved_contexts:
+        return 0.0
+
+    combined_context = " ".join(retrieved_contexts).lower()
+    ctx_tokens = set(tokenize(combined_context))
+    overlap = len(q_tokens & ctx_tokens)
+    return round(float(overlap) / float(len(q_tokens)), 4)
+
+
+def detect_unsupported_claims(generated_answer: str, retrieved_contexts: Sequence[str]) -> list[str]:
+    """Identify sentences in the generated answer that lack grounding in retrieved context."""
+    if not generated_answer or not retrieved_contexts:
+        return []
+
+    combined_context = " ".join(retrieved_contexts).lower()
+    context_tokens = set(tokenize(combined_context))
+    if not context_tokens:
+        return []
+
+    sentences = [s.strip() for s in re.split(r"[.!?\n]+", generated_answer) if len(s.strip()) > 15]
+    unsupported = []
+    for sentence in sentences:
+        s_tokens = tokenize(sentence)
+        if not s_tokens:
+            continue
+        overlap = len(set(s_tokens) & context_tokens)
+        overlap_ratio = overlap / len(s_tokens)
+        if overlap_ratio < 0.25:
+            unsupported.append(sentence)
+
+    return unsupported
+
+
+def calculate_answer_completeness(generated_answer: str, expected_answer: Optional[str]) -> float:
+    """Calculate token overlap recall of the expected ground truth answer in the generated answer."""
+    if not expected_answer:
+        return 1.0
+    exp_tokens = set(tokenize(expected_answer))
+    if not exp_tokens:
+        return 1.0
+
+    gen_tokens = set(tokenize(generated_answer))
+    overlap = len(exp_tokens & gen_tokens)
+    return round(float(overlap) / float(len(exp_tokens)), 4)
+

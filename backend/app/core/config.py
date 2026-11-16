@@ -1,4 +1,4 @@
-﻿from functools import lru_cache
+from functools import lru_cache
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -137,6 +137,10 @@ class Settings(BaseSettings):
     ENCRYPTION_KEY: str | None = None
     MAX_EMBEDDING_TOKENS_PER_REQUEST: int = 8192
     MAX_TOP_K: int = 50
+
+    # MCP & Agentic Runtime Settings (Milestone 20)
+    MCP_ENABLED: bool = True
+    MCP_ALLOWED_HOSTS: str = "*"
 
 
 @lru_cache

@@ -21,8 +21,11 @@ class LocalStorageProvider(StorageProvider):
 
         # Normalize relative key by stripping leading slashes and tenant prefix if repeated
         clean_key = relative_key.replace("\\", "/").lstrip("/")
-        if clean_key.startswith(f"tenants/{tenant_id}/"):
-            clean_key = clean_key[len(f"tenants/{tenant_id}/"):]
+        t_str = str(tenant_id)
+        if clean_key.startswith(f"tenants/{t_str}/"):
+            clean_key = clean_key[len(f"tenants/{t_str}/") :]
+        elif clean_key.startswith(f"{t_str}/"):
+            clean_key = clean_key[len(f"{t_str}/") :]
 
         target_path = (tenant_root / clean_key).resolve()
 

@@ -23,6 +23,10 @@ class MockLLMProvider(LLMProvider):
         return self._name
 
     def _synthesize_response(self, messages: list[LLMMessage]) -> str:
+        tool_results = [m for m in messages if m.role == "tool"]
+        if tool_results:
+            return f"The tool execution result is: {tool_results[-1].content}. Based on this result, your request has been processed successfully."
+
         # Check if knowledge context was injected in messages
         system_content = next((m.content for m in messages if m.role == "system"), "")
         user_content = next((m.content for m in reversed(messages) if m.role == "user"), "")
@@ -58,6 +62,52 @@ class MockLLMProvider(LLMProvider):
     async def generate_stream(
         self, messages: list[LLMMessage], config: LLMConfig
     ) -> AsyncIterator[LLMStreamChunk]:
+        user_content = next((m.content for m in reversed(messages) if m.role == "user"), "")
+        tool_results = [m for m in messages if m.role == "tool"]
+
+        # Deterministic Tool Calling simulation when tools are configured and haven't run yet
+        if config.tools and not tool_results:
+            tool_names = [t.get("name") for t in config.tools]
+            if "calculator" in tool_names and any(op in user_content for op in ("+", "-", "*", "/", "calculate", "calc")):
+                yield LLMStreamChunk(
+                    content_delta="",
+                    finish_reason="tool_calls",
+                    tool_calls=[{
+                        "id": "call_mock_calc",
+                        "name": "calculator",
+                        "arguments": {"expression": "25 * 4"},
+                    }],
+                )
+                return
+            elif "weather_lookup" in tool_names and ("weather" in user_content.lower() or "temperature" in user_content.lower()):
+                city = "Tokyo" if "tokyo" in user_content.lower() else "San Francisco"
+                yield LLMStreamChunk(
+                    content_delta="",
+                    finish_reason="tool_calls",
+                    tool_calls=[{
+                        "id": "call_mock_weather",
+                        "name": "weather_lookup",
+                        "arguments": {"city": city},
+                    }],
+                )
+                return
+            elif any(kw in user_content.lower() for kw in ("action", "transfer", "ticket", "send", "mutate", "delete", "tool")):
+                matching_tool = next(
+                    (name for name in tool_names if name in user_content.lower() or any(p in user_content.lower() for p in name.split("_") if len(p) > 2)),
+                    tool_names[-1] if tool_names else "generic_tool",
+                )
+                yield LLMStreamChunk(
+                    content_delta="",
+                    finish_reason="tool_calls",
+                    tool_calls=[{
+                        "id": "call_mock_action",
+                        "name": matching_tool,
+                        "arguments": {"action": "execute", "details": user_content},
+                    }],
+                )
+                return
+
+
         content = self._synthesize_response(messages)
         words = content.split(" ")
         for i, word in enumerate(words):
@@ -66,6 +116,7 @@ class MockLLMProvider(LLMProvider):
             await asyncio.sleep(0.01)  # Simulate small stream delay
 
         yield LLMStreamChunk(content_delta="", finish_reason="stop")
+
 
     async def validate_key(self, config: LLMConfig) -> bool:
         return True

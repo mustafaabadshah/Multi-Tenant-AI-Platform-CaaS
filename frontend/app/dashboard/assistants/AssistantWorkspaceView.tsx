@@ -6,6 +6,7 @@ import {
   AssistantItem,
   AssistantVersionItem,
   KnowledgeBaseItem,
+  ToolItem,
 } from "@/lib/api";
 import {
   Bot,
@@ -27,6 +28,10 @@ import {
   MessageSquare,
   Globe,
   Scale,
+  Wrench,
+  Terminal,
+  Cpu,
+  ShieldAlert,
 } from "lucide-react";
 import PublishTab from "./PublishTab";
 import EvaluationTab from "./EvaluationTab";
@@ -47,7 +52,7 @@ export default function AssistantWorkspaceView({
   onStartChat,
 }: AssistantWorkspaceViewProps) {
   const [activeTab, setActiveTab] = useState<
-    "overview" | "instructions" | "config" | "knowledge" | "versions" | "evaluation" | "publish"
+    "overview" | "instructions" | "config" | "knowledge" | "tools" | "versions" | "evaluation" | "publish"
   >("overview");
 
   // Form State
@@ -68,6 +73,19 @@ export default function AssistantWorkspaceView({
   const [retrievalMode, setRetrievalMode] = useState(assistant.retrieval_mode || "hybrid");
   const [topK, setTopK] = useState(assistant.top_k ?? 5);
   const [selectedKBIds, setSelectedKBIds] = useState<string[]>(assistant.connected_kb_ids || []);
+
+  // Tools & Integrations Configuration
+  const [selectedToolIds, setSelectedToolIds] = useState<string[]>(
+    assistant.tools_config?.enabled_tool_ids || []
+  );
+  const [maxExecutionSteps, setMaxExecutionSteps] = useState<number>(
+    assistant.tools_config?.max_execution_steps ?? 5
+  );
+  const [requireApprovalAll, setRequireApprovalAll] = useState<boolean>(
+    assistant.tools_config?.require_approval_all ?? false
+  );
+  const [availableTools, setAvailableTools] = useState<ToolItem[]>([]);
+  const [loadingTools, setLoadingTools] = useState(false);
 
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -95,6 +113,9 @@ export default function AssistantWorkspaceView({
     setRetrievalMode(assistant.retrieval_mode || "hybrid");
     setTopK(assistant.top_k ?? 5);
     setSelectedKBIds(assistant.connected_kb_ids || []);
+    setSelectedToolIds(assistant.tools_config?.enabled_tool_ids || []);
+    setMaxExecutionSteps(assistant.tools_config?.max_execution_steps ?? 5);
+    setRequireApprovalAll(assistant.tools_config?.require_approval_all ?? false);
   }, [assistant]);
 
   // Load versions when versions tab is selected
@@ -107,6 +128,18 @@ export default function AssistantWorkspaceView({
       .catch((err) => console.error("Failed to load versions", err))
       .finally(() => setLoadingVersions(false));
   }, [activeTab, assistant.id]);
+
+  // Load tools when tools tab is selected
+  useEffect(() => {
+    if (activeTab === "tools" && availableTools.length === 0) {
+      setLoadingTools(true);
+      api
+        .listTools()
+        .then((res) => setAvailableTools(res))
+        .catch((err) => console.error("Failed to load tools", err))
+        .finally(() => setLoadingTools(false));
+    }
+  }, [activeTab, availableTools.length]);
 
   const handleSave = async (changeSummaryText?: string) => {
     setSaving(true);
@@ -129,6 +162,11 @@ export default function AssistantWorkspaceView({
         top_k: topK,
         system_prompt: systemPrompt.trim() || undefined,
         knowledge_base_ids: selectedKBIds,
+        tools_config: {
+          enabled_tool_ids: selectedToolIds,
+          max_execution_steps: maxExecutionSteps,
+          require_approval_all: requireApprovalAll,
+        },
         change_summary: changeSummaryText || "Updated configuration from Assistant Workspace",
       });
 
@@ -282,6 +320,18 @@ export default function AssistantWorkspaceView({
         >
           <Database className="w-3.5 h-3.5" />
           <span>Knowledge Bases ({selectedKBIds.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("tools")}
+          className={`py-3 px-3 font-semibold border-b-2 transition cursor-pointer flex items-center gap-2 ${
+            activeTab === "tools"
+              ? "border-blue-600 text-blue-600"
+              : "border-transparent text-gray-500 hover:text-gray-900"
+          }`}
+        >
+          <Wrench className="w-3.5 h-3.5" />
+          <span>Tools & Integrations ({selectedToolIds.length})</span>
         </button>
 
         <button
@@ -659,6 +709,167 @@ export default function AssistantWorkspaceView({
                     </label>
                   );
                 })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ================================================================= */}
+        {/* AGENTIC TOOLS & INTEGRATIONS TAB                                  */}
+        {/* ================================================================= */}
+        {activeTab === "tools" && (
+          <div className="max-w-4xl space-y-6 animate-fadeIn text-xs">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-gray-900 tracking-tight">Agentic Tools & Capabilities</h3>
+                <p className="text-gray-500 mt-0.5">
+                  Select built-in functions, custom HTTP endpoints, or MCP tools this assistant can invoke during conversation turns.
+                </p>
+              </div>
+
+              <span className="px-2.5 py-1 rounded-full text-[11px] font-mono bg-blue-50 text-blue-700 border border-blue-200">
+                {selectedToolIds.length} tools enabled
+              </span>
+            </div>
+
+            {/* Execution Controls Card */}
+            <div className="p-4 rounded-2xl border border-gray-200 bg-gray-50/50 space-y-4">
+              <div className="font-semibold text-gray-900 text-xs flex items-center gap-2">
+                <Sliders className="w-3.5 h-3.5 text-blue-600" />
+                <span>Runtime Execution Controls</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-gray-600 mb-1">
+                    Max Agent Execution Steps ({maxExecutionSteps})
+                  </label>
+                  <input
+                    type="range"
+                    min="1"
+                    max="10"
+                    step="1"
+                    value={maxExecutionSteps}
+                    onChange={(e) => setMaxExecutionSteps(parseInt(e.target.value) || 5)}
+                    className="w-full accent-blue-600"
+                  />
+                  <span className="text-[10px] text-gray-400">
+                    Limits consecutive model tool calling loops per message turn (1-10).
+                  </span>
+                </div>
+
+                <div>
+                  <label className="flex items-start gap-2 cursor-pointer mt-1 select-none">
+                    <input
+                      type="checkbox"
+                      checked={requireApprovalAll}
+                      onChange={(e) => setRequireApprovalAll(e.target.checked)}
+                      className="accent-blue-600 rounded w-4 h-4 mt-0.5"
+                    />
+                    <div>
+                      <span className="font-semibold text-gray-900 block text-xs">
+                        Require Human Approval for All Actions
+                      </span>
+                      <span className="text-[10px] text-gray-500 block">
+                        Forces inline human confirmation for read-only actions as well as mutating actions.
+                      </span>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {/* Tool Selection List */}
+            {loadingTools ? (
+              <div className="p-8 text-center text-gray-400">Loading workspace tool registry...</div>
+            ) : availableTools.length === 0 ? (
+              <div className="p-8 text-center text-gray-400 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+                No tools registered in this workspace yet. Visit <strong>Integrations & Tools</strong> in the sidebar to configure Custom Tools or MCP Servers.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="text-gray-500 font-semibold text-[11px] uppercase tracking-wider">
+                  Available Workspace Tools
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {availableTools.map((tool) => {
+                    const isChecked = selectedToolIds.includes(tool.id) || selectedToolIds.includes(tool.name);
+                    const isBuiltin = tool.tool_type === "BUILTIN";
+                    const isMcp = tool.tool_type === "MCP";
+                    const risk = tool.risk_level || "READ_ONLY";
+
+                    return (
+                      <label
+                        key={tool.id}
+                        className={`p-3.5 rounded-2xl border transition cursor-pointer flex items-start justify-between select-none shadow-xs ${
+                          isChecked
+                            ? "bg-blue-50/60 border-blue-600 text-gray-900"
+                            : "bg-white border-gray-200 text-gray-700 hover:border-gray-300"
+                        }`}
+                      >
+                        <div className="flex items-start gap-3 min-w-0 pr-2">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              const toolIdentifier = tool.id;
+                              if (e.target.checked) {
+                                setSelectedToolIds((prev) => [...prev, toolIdentifier]);
+                              } else {
+                                setSelectedToolIds((prev) => prev.filter((id) => id !== tool.id && id !== tool.name));
+                              }
+                            }}
+                            className="accent-blue-600 rounded w-4 h-4 mt-0.5"
+                          />
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-semibold block truncate text-gray-900">
+                                {tool.display_name || tool.name}
+                              </span>
+                              <span className="font-mono text-[9px] text-gray-400">
+                                ({tool.name})
+                              </span>
+                            </div>
+                            <span className="text-[10px] text-gray-500 block line-clamp-2 mt-0.5">
+                              {tool.description || "No description"}
+                            </span>
+                            <div className="flex items-center gap-1.5 mt-2">
+                              {risk === "READ_ONLY" ? (
+                                <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 font-medium">
+                                  Read-Only
+                                </span>
+                              ) : risk === "WRITE" ? (
+                                <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 font-medium">
+                                  Write
+                                </span>
+                              ) : (
+                                <span className="text-[9px] px-1.5 py-0.2 rounded bg-rose-100 text-rose-800 font-medium">
+                                  High Risk
+                                </span>
+                              )}
+                              {tool.requires_approval && (
+                                <span className="text-[9px] px-1.5 py-0.2 rounded bg-purple-100 text-purple-800 font-medium">
+                                  Approval Required
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-mono shrink-0 ${
+                          isBuiltin
+                            ? "bg-purple-50 text-purple-700 border border-purple-200"
+                            : isMcp
+                            ? "bg-blue-50 text-blue-700 border border-blue-200"
+                            : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                        }`}>
+                          {isBuiltin ? "Built-in" : isMcp ? "MCP" : "HTTP"}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </div>

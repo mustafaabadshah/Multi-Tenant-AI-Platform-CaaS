@@ -13,15 +13,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.assistant_runtime.context import build_rag_context, normalize_markdown
 from app.llm import LLMConfig, get_llm_registry
+from app.llm.base import LLMMessage
 from app.models.assistant import Assistant, AssistantKnowledgeBase
 from app.models.conversation import Conversation, Message, MessageCitation
 from app.models.knowledge import KnowledgeBase
+from app.models.mcp import ToolInvocationLog
 from app.observability.policy import ObservabilityPolicyService
 from app.observability.tracer import get_tracer
 from app.retrieval.service import RetrievalService
 from app.services.byok_vault import BYOKVaultService
 from app.services.quota_service import QuotaService
+from app.services.tools.approval_service import ToolApprovalService
+from app.services.tools.registry import ToolRegistryService
 from app.vectorstores.base import VectorSearchResult
+
 
 logger = logging.getLogger("mmaip.assistant_runtime")
 
@@ -280,6 +285,7 @@ class AssistantRuntime:
         resolved_key, resolved_base_url = await byok_svc.resolve_plaintext_key(asst.llm_provider)
         if asst.llm_provider in ("openai", "anthropic", "gemini", "groq") and not resolved_key:
             quota_svc.release_reservation(reservation_id)
+            await quota_svc.release_reservation_async(reservation_id)
             err_msg = (
                 f"Provider '{asst.llm_provider}' is not configured with an active BYOK credential for this workspace. "
                 f"Please add your API key under Providers & Keys."
@@ -312,19 +318,131 @@ class AssistantRuntime:
             base_url=resolved_base_url,
         )
 
+        # Resolve enabled tools for active assistant configuration
+        tools_cfg = asst.tools_config or {}
+        enabled_ids = tools_cfg.get("enabled_tool_ids")
+        max_agent_steps = int(tools_cfg.get("max_execution_steps", 5))
+        require_approval_all = bool(tools_cfg.get("require_approval_all", False))
+
+        tool_svc = ToolRegistryService(self.session, self.tenant_id, user_id=self.user_id)
+        raw_tools = await tool_svc.list_tools()
+        if enabled_ids is not None:
+            raw_tools = [
+                t for t in raw_tools
+                if t["id"] in enabled_ids or t["name"] in enabled_ids or f"builtin_{t['name']}" in enabled_ids
+            ]
+
+        from app.llm.capabilities import get_model_capability_registry
+
+        cap_reg = get_model_capability_registry()
+        model_cap = cap_reg.get_model(asst.llm_provider, asst.default_model or "auto")
+        if model_cap and not model_cap.supports_tools:
+            raw_tools = []
+
+        llm_config.tools = raw_tools
+
         full_content_chunks: list[str] = []
         gen_span = trace.start_span("provider_generation")
         gen_span.set_attribute("provider", asst.llm_provider)
         gen_span.set_attribute("model", asst.default_model or "auto")
+
+        agent_steps = 0
+
         try:
-            async for chunk in provider.generate_stream(messages, llm_config):
-                if chunk.content_delta:
-                    trace.mark_first_token()
-                    full_content_chunks.append(chunk.content_delta)
-                    yield format_sse("token", {"delta": chunk.content_delta})
+            while agent_steps < max_agent_steps:
+                agent_steps += 1
+                has_tool_call = False
+                pending_tool_calls = []
+
+                async for chunk in provider.generate_stream(messages, llm_config):
+                    if chunk.tool_calls:
+                        has_tool_call = True
+                        pending_tool_calls.extend(chunk.tool_calls)
+                    elif chunk.content_delta:
+                        trace.mark_first_token()
+                        full_content_chunks.append(chunk.content_delta)
+                        yield format_sse("token", {"delta": chunk.content_delta})
+
+                if not has_tool_call:
+                    break
+
+                pause_for_approval = False
+                for tc in pending_tool_calls:
+                    tc_name = tc.get("name")
+                    tc_args = tc.get("arguments", {})
+                    yield format_sse("tool_call_proposed", {"tool_name": tc_name, "arguments": tc_args})
+
+                    tool_def = next((t for t in raw_tools if t["name"] == tc_name), None)
+                    requires_approval = False
+                    risk_level = "READ_ONLY"
+                    if tool_def:
+                        requires_approval = tool_def.get("requires_approval", False)
+                        risk_level = tool_def.get("risk_level", "READ_ONLY")
+
+                    if requires_approval or risk_level in ("WRITE", "HIGH_RISK") or require_approval_all:
+                        approval_svc = ToolApprovalService(self.session, self.tenant_id)
+                        appr = await approval_svc.request_approval(
+                            conversation_id=conversation_id,
+                            assistant_id=asst.id,
+                            user_id=self.user_id,
+                            tool_id=tool_def["id"] if tool_def else tc_name,
+                            tool_name=tc_name,
+                            arguments=tc_args,
+                        )
+                        yield format_sse("tool_approval_required", {
+                            "approval_id": str(appr.id),
+                            "tool_name": tc_name,
+                            "arguments": tc_args,
+                            "token": appr.approval_token,
+                            "expires_at": appr.expires_at.isoformat(),
+                        })
+                        approval_prompt = f"⚠️ Action '{tc_name}' requires human approval before proceeding. Approval request ID: {appr.id}"
+                        full_content_chunks.append(approval_prompt)
+                        pause_for_approval = True
+                        break
+
+                    yield format_sse("tool_call_started", {"tool_name": tc_name})
+                    t_start = time.perf_counter()
+                    try:
+                        tool_id_to_run = tool_def["id"] if tool_def else tc_name
+                        exec_result = await tool_svc.execute_tool(tool_id_to_run, tc_args)
+                        duration_ms = int((time.perf_counter() - t_start) * 1000)
+                        summary = json.dumps(exec_result.get("data", exec_result)) if isinstance(exec_result, dict) else str(exec_result)
+
+                        inv_log = ToolInvocationLog(
+                            tenant_id=self.tenant_id,
+                            conversation_id=conversation_id,
+                            assistant_id=asst.id,
+                            user_id=self.user_id,
+                            trace_id=trace.trace_id,
+                            tool_id=tool_id_to_run,
+                            tool_name=tc_name,
+                            tool_type=tool_def.get("tool_type", "CUSTOM") if tool_def else "BUILTIN",
+                            arguments=tc_args,
+                            result_summary=summary[:1000],
+                            status="SUCCESS",
+                            duration_ms=duration_ms,
+                        )
+                        self.session.add(inv_log)
+                        await self.session.commit()
+
+                        yield format_sse("tool_call_completed", {"tool_name": tc_name, "result_summary": summary[:500]})
+                        messages.append(LLMMessage(role="tool", content=summary))
+
+                    except Exception as t_err:
+                        duration_ms = int((time.perf_counter() - t_start) * 1000)
+                        err_msg = str(t_err)
+                        yield format_sse("tool_call_failed", {"tool_name": tc_name, "error": err_msg})
+                        messages.append(LLMMessage(role="tool", content=f"Error executing {tc_name}: {err_msg}"))
+
+                if pause_for_approval:
+                    break
+
             gen_span.finish(status="COMPLETED")
+
         except GeneratorExit:
             quota_svc.release_reservation(reservation_id)
+            await quota_svc.release_reservation_async(reservation_id)
             logger.info(f"Stream connection closed by client for trace {trace.trace_id}")
             gen_span.finish(status="CANCELLED", error="Client connection aborted")
             trace.finish(status="CANCELLED", error="Client connection aborted")
@@ -335,6 +453,7 @@ class AssistantRuntime:
             raise
         except Exception as e:
             quota_svc.release_reservation(reservation_id)
+            await quota_svc.release_reservation_async(reservation_id)
             logger.exception("LLM generation stream failed")
             safe_err = sanitize_error_message(str(e))
             gen_span.finish(status="FAILED", error=safe_err)
@@ -356,6 +475,7 @@ class AssistantRuntime:
         final_content = "".join(full_content_chunks)
         if not final_content.strip():
             quota_svc.release_reservation(reservation_id)
+            await quota_svc.release_reservation_async(reservation_id)
             logger.warning("LLM provider returned empty response stream")
             trace.finish(status="FAILED", error="Empty response stream received")
             await tracer.persist_to_database(trace, session=self.session)
@@ -521,14 +641,14 @@ class AssistantRuntime:
                 )
                 retrieved_results = search_resp.results
                 ret_span.set_attribute("results_count", len(retrieved_results))
-                ret_span.set_attribute("retrieval_timing_ms", search_resp.timing_ms)
+                ret_span.set_attribute("retrieval_timing_ms", search_resp.diagnostics.get("timing_ms", {}))
                 trace.retrieval_metadata = {
                     "mode": retrieval_mode or "hybrid",
                     "top_k": top_k or 5,
                     "connected_kb_count": len(candidate_kb_ids),
                     "authorized_kb_count": len(authorized_kb_ids),
                     "candidate_chunks_found": len(retrieved_results),
-                    "timing_ms": search_resp.timing_ms,
+                    "timing_ms": search_resp.diagnostics.get("timing_ms", {}),
                     "vector_store": "pgvector",
                 }
             else:

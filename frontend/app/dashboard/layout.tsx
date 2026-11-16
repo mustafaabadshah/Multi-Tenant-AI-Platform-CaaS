@@ -26,6 +26,8 @@ import {
   ChevronLeft,
   ChevronRight,
   ShieldCheck,
+  Network,
+  Wrench,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import Spinner from "@/components/ui/Spinner";
@@ -88,6 +90,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         { label: "Assistants", href: "/dashboard/assistants", icon: Bot },
         { label: "Knowledge", href: "/dashboard/knowledge", icon: Database },
         { label: "Conversations", href: "/dashboard/conversations", icon: MessageSquare },
+      ],
+    },
+    {
+      group: "Integrations & Tools",
+      items: [
+        { label: "MCP Connections", href: "/dashboard/integrations", icon: Network },
+        { label: "Custom Tools", href: "/dashboard/tools", icon: Wrench },
       ],
     },
     {

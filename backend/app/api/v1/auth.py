@@ -10,7 +10,6 @@ from app.core.constants import SystemRole, TenantType
 from app.core.rate_limit import client_identity, enforce_rate_limit
 from app.core.security import (
     create_access_token,
-    create_refresh_token,
     decode_token,
     hash_password,
     verify_password,
@@ -23,6 +22,7 @@ from app.repositories.tenant_repository import TenantRepository
 from app.repositories.user_repository import UserRepository
 from app.schemas.auth import (
     AcceptInviteRequest,
+    DeclineInviteRequest,
     RefreshTokenRequest,
     TokenResponse,
     UserLoginRequest,
@@ -31,8 +31,10 @@ from app.schemas.auth import (
     WorkspaceSummary,
 )
 from app.services.invitation_service import InvitationService
+from app.services.session_service import SessionService
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+
 
 
 def _invalid_invitation() -> HTTPException:
@@ -107,12 +109,20 @@ async def register(
             owner_role=owner_role,
         )
 
-    # Issue tokens
+    # Issue session-backed tokens
+    from app.services.session_service import SessionService
+
+    session_svc = SessionService(db)
+    auth_session, refresh_token = await session_svc.create_session(
+        user_id=user.id,
+        user_agent=request.headers.get("user-agent"),
+        ip_address=client_identity(request),
+    )
     access_token = create_access_token(
         subject=str(user.id),
         claims={"email": user.email, "tenant_id": str(tenant.id)},
+        session_id=str(auth_session.id),
     )
-    refresh_token = create_refresh_token(subject=str(user.id))
 
     return TokenResponse(
         access_token=access_token,
@@ -120,6 +130,7 @@ async def register(
         token_type="bearer",
         expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
     )
+
 
 
 @router.post("/accept-invite", response_model=TokenResponse)
@@ -154,11 +165,38 @@ async def accept_invite(
     if not user:
         raise _invalid_invitation()
 
-    user.hashed_password = hash_password(payload.password)
+    # Check whether user is already established in another workspace
+    from sqlalchemy import delete, select
+    from app.core.constants import MembershipStatus
+    from app.models.membership import TenantMembership
+
+    other_m_stmt = select(TenantMembership).where(
+        TenantMembership.user_id == user.id,
+        TenantMembership.tenant_id != invitation.tenant_id,
+        TenantMembership.status == MembershipStatus.ACTIVE.value,
+    )
+    other_memberships = (await db.execute(other_m_stmt)).scalars().all()
+    is_established_user = len(other_memberships) > 0
+
+    if not is_established_user:
+        # First workspace onboarding: set user's chosen password
+        user.hashed_password = hash_password(payload.password)
+    # If is_established_user is True, user password and existing sessions are strictly preserved!
+
     invitation.accepted_at = now
     user_id = user.id
     email = user.email
     tenant_id = invitation.tenant_id
+
+    # Activate workspace membership
+    m_stmt = select(TenantMembership).where(
+        TenantMembership.user_id == user_id,
+        TenantMembership.tenant_id == tenant_id,
+    )
+    membership = (await db.execute(m_stmt)).scalar_one_or_none()
+    if membership:
+        membership.status = MembershipStatus.ACTIVE.value
+
     audit_repo = AuditLogRepository(db, tenant_id)
     await audit_repo.log_event(
         action="member.invite_accepted",
@@ -169,11 +207,18 @@ async def accept_invite(
     )
     await db.commit()
 
+    session_svc = SessionService(db)
+    auth_session, refresh_token = await session_svc.create_session(
+        user_id=user_id,
+        user_agent=request.headers.get("user-agent"),
+        ip_address=client_identity(request),
+    )
+
     access_token = create_access_token(
         subject=str(user_id),
         claims={"email": email, "tenant_id": str(tenant_id)},
+        session_id=str(auth_session.id),
     )
-    refresh_token = create_refresh_token(subject=str(user_id))
 
     return TokenResponse(
         access_token=access_token,
@@ -181,6 +226,53 @@ async def accept_invite(
         token_type="bearer",
         expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
     )
+
+
+@router.post("/decline-invite")
+async def decline_invite(
+    payload: DeclineInviteRequest,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Decline a pending workspace invitation, revoking pending membership."""
+    invitation_service = InvitationService(db)
+    invitation = await invitation_service.get_by_raw_token(payload.token)
+    now = datetime.now(UTC)
+
+    if not invitation or invitation.accepted_at is not None or invitation.is_cancelled:
+        raise _invalid_invitation()
+
+    expires_at = invitation.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=UTC)
+    if expires_at < now:
+        raise _invalid_invitation()
+
+    invitation.is_cancelled = True
+
+    from sqlalchemy import delete, select
+    from app.core.constants import MembershipStatus
+    from app.models.membership import TenantMembership
+
+    user_stmt = select(User).where(User.email == invitation.email)
+    user = (await db.execute(user_stmt)).scalar_one_or_none()
+    if user:
+        del_stmt = delete(TenantMembership).where(
+            TenantMembership.user_id == user.id,
+            TenantMembership.tenant_id == invitation.tenant_id,
+            TenantMembership.status == MembershipStatus.INVITED.value,
+        )
+        await db.execute(del_stmt)
+
+    audit_repo = AuditLogRepository(db, invitation.tenant_id)
+    await audit_repo.log_event(
+        action="member.invite_declined",
+        resource_type="invitation",
+        resource_id=invitation.id,
+        actor_id=user.id if user else None,
+        details={"email": invitation.email},
+    )
+    await db.commit()
+    return {"message": "Invitation successfully declined."}
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -217,8 +309,18 @@ async def login(
     if active_tenant_id:
         claims["tenant_id"] = active_tenant_id
 
-    access_token = create_access_token(subject=str(user.id), claims=claims)
-    refresh_token = create_refresh_token(subject=str(user.id))
+    session_svc = SessionService(db)
+    auth_session, refresh_token = await session_svc.create_session(
+        user_id=user.id,
+        user_agent=request.headers.get("user-agent"),
+        ip_address=client_identity(request),
+    )
+
+    access_token = create_access_token(
+        subject=str(user.id),
+        claims=claims,
+        session_id=str(auth_session.id),
+    )
 
     return TokenResponse(
         access_token=access_token,
@@ -231,27 +333,19 @@ async def login(
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh_token(
     payload: RefreshTokenRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
-    decoded = decode_token(payload.refresh_token)
-    if not decoded or decoded.get("type") != "refresh":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired refresh token",
-        )
-
-    user_id_str = decoded.get("sub")
-    try:
-        user_id = uuid.UUID(user_id_str)
-    except (ValueError, TypeError):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Malformed token",
-        )
+    session_svc = SessionService(db)
+    auth_session, new_refresh = await session_svc.rotate_session(
+        raw_refresh_token=payload.refresh_token,
+        user_agent=request.headers.get("user-agent"),
+        ip_address=client_identity(request),
+    )
 
     user_repo = UserRepository(db)
     tenant_repo = TenantRepository(db)
-    user = await user_repo.get_by_id(user_id)
+    user = await user_repo.get_by_id(auth_session.user_id)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -265,8 +359,11 @@ async def refresh_token(
     if active_tenant_id:
         claims["tenant_id"] = active_tenant_id
 
-    access_token = create_access_token(subject=str(user.id), claims=claims)
-    new_refresh = create_refresh_token(subject=str(user.id))
+    access_token = create_access_token(
+        subject=str(user.id),
+        claims=claims,
+        session_id=str(auth_session.id),
+    )
 
     return TokenResponse(
         access_token=access_token,
@@ -274,6 +371,7 @@ async def refresh_token(
         token_type="bearer",
         expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
     )
+
 
 
 @router.get("/me", response_model=UserResponse)
@@ -311,8 +409,36 @@ async def get_current_user_profile(
 
 @router.post("/logout")
 async def logout(
+    request: Request,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
-    # In stateless JWT architecture, the client discards the token.
-    # Future enhancement can store revoked JTI in Redis.
+    """Revoke the current authentication session on the server."""
+    from app.services.session_service import SessionService
+
+    session_svc = SessionService(db)
+    auth_header = request.headers.get("authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header.split(" ", 1)[1].strip()
+        payload = decode_token(token)
+        if payload and payload.get("sid"):
+            try:
+                sid = uuid.UUID(payload["sid"])
+                await session_svc.revoke_session(sid, current_user.id, reason="LOGOUT")
+            except ValueError:
+                pass
     return {"message": "Successfully logged out"}
+
+
+@router.post("/logout-all")
+async def logout_all(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Revoke all active sessions for the current user across all devices."""
+    from app.services.session_service import SessionService
+
+    session_svc = SessionService(db)
+    revoked_count = await session_svc.revoke_all_user_sessions(current_user.id, reason="LOGOUT_ALL")
+    return {"message": f"Successfully logged out from {revoked_count} active sessions"}
+

@@ -19,6 +19,7 @@ import logging
 import math
 import time
 from collections import deque
+from typing import Any, Optional
 
 from fastapi import HTTPException, Request, status
 
@@ -122,11 +123,17 @@ async def enforce_rate_limit(
 
 
 def client_identity(request: Request) -> str:
-    """Resolve the client identity, honoring X-Forwarded-For only for trusted proxies."""
+    """Resolve the client identity, honoring X-Forwarded-For only for trusted proxies or loopback/private peers."""
     peer = request.client.host if request.client and request.client.host else "unknown"
 
     trusted = {part.strip() for part in (settings.TRUSTED_PROXY_IPS or "").split(",") if part.strip()}
-    if peer in trusted:
+    is_trusted = peer in trusted
+
+    # If TRUSTED_PROXY_IPS is not set, also treat standard loopback as trusted in local/test setups
+    if not trusted and peer in ("127.0.0.1", "::1", "localhost", "testclient"):
+        is_trusted = True
+
+    if is_trusted:
         forwarded = request.headers.get("x-forwarded-for")
         if forwarded:
             first_hop = forwarded.split(",", 1)[0].strip()
@@ -134,3 +141,32 @@ def client_identity(request: Request) -> str:
                 return first_hop
 
     return peer
+
+
+def scoped_identity(
+    request: Request,
+    tenant_id: Optional[Any] = None,
+    user_id: Optional[Any] = None,
+    session_id: Optional[Any] = None,
+    resource: Optional[str] = None,
+) -> str:
+    """Resolve an identity scoped by tenant, user, session, or client IP.
+
+    Prevents enterprise NAT/proxy collapse where distinct authenticated users behind
+    the same corporate IP address share a single rate-limit counter.
+    """
+    parts: list[str] = []
+    if tenant_id:
+        parts.append(f"tid:{tenant_id}")
+    if user_id:
+        parts.append(f"uid:{user_id}")
+    if session_id:
+        parts.append(f"sid:{session_id}")
+    if resource:
+        parts.append(f"res:{resource}")
+
+    if not parts:
+        parts.append(f"ip:{client_identity(request)}")
+
+    return ":".join(parts)
+

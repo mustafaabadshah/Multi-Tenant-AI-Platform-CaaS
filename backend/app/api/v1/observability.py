@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import delete, or_, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import TenantContext, require_permission
@@ -13,7 +13,6 @@ from app.core.constants import PermissionName
 from app.database.session import get_db
 from app.models.trace import RequestTrace
 from app.observability.policy import ObservabilityPolicyService
-from app.observability.tracer import get_tracer
 from app.schemas.observability import (
     ObservabilityMetricsSchema,
     ObservabilityPolicySchema,
@@ -70,13 +69,15 @@ async def list_recent_traces(
     provider: Optional[str] = Query(default=None),
     search: Optional[str] = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    cursor: Optional[str] = Query(default=None),
     tenant_ctx: TenantContext = Depends(require_permission(PermissionName.USAGE_READ)),
     db: AsyncSession = Depends(get_db),
 ):
-    """List recent assistant request traces for the authenticated tenant with server-side filters."""
+    """List recent assistant request traces for the authenticated tenant with server-side filters and pagination."""
     mask_previews = not tenant_ctx.is_admin
 
-    # 1. Query database traces
+    # 1. Query database traces (PostgreSQL authoritative source of truth)
     stmt = (
         select(RequestTrace)
         .where(RequestTrace.tenant_id == tenant_ctx.tenant.id)
@@ -91,6 +92,12 @@ async def list_recent_traces(
         stmt = stmt.where(RequestTrace.traffic_type == traffic_type)
     if provider:
         stmt = stmt.where(RequestTrace.provider == provider)
+    if cursor:
+        try:
+            cursor_dt = datetime.fromisoformat(cursor)
+            stmt = stmt.where(RequestTrace.created_at < cursor_dt)
+        except (ValueError, TypeError):
+            pass
     if search:
         s_pattern = f"%{search.strip()}%"
         stmt = stmt.where(
@@ -102,22 +109,11 @@ async def list_recent_traces(
             )
         )
 
-    stmt = stmt.limit(limit)
+    stmt = stmt.offset(offset).limit(limit)
     rows = (await db.execute(stmt)).scalars().all()
 
-    if rows:
-        return [_serialize_db_trace(r, mask_previews=mask_previews) for r in rows]
-
-    # 2. Fallback to in-memory tracer if DB has 0 records (e.g. fresh memory-only tests)
-    tracer = get_tracer()
-    traces = tracer.list_traces(
-        tenant_id=tenant_ctx.tenant.id,
-        assistant_id=assistant_id,
-        status=status_filter,
-        traffic_type=traffic_type,
-        limit=limit,
-    )
-    return [t.to_dict(mask_previews=mask_previews) for t in traces]
+    # PostgreSQL is authoritative; when empty, return empty list (no memory fallback)
+    return [_serialize_db_trace(r, mask_previews=mask_previews) for r in rows]
 
 
 @router.get("/traces/{trace_id}", response_model=TraceDetailSchema)
@@ -129,24 +125,18 @@ async def get_trace_detail(
     """Fetch complete lifecycle spans, diagnostics, and metrics for an individual trace."""
     mask_previews = not tenant_ctx.is_admin
 
-    # 1. Query database first
+    # PostgreSQL is authoritative
     stmt = select(RequestTrace).where(
         RequestTrace.trace_id == trace_id,
         RequestTrace.tenant_id == tenant_ctx.tenant.id,
     )
     record = (await db.execute(stmt)).scalar_one_or_none()
-    if record:
-        return _serialize_db_trace(record, mask_previews=mask_previews)
-
-    # 2. Fallback to in-memory tracer
-    tracer = get_tracer()
-    trace = tracer.get_trace(trace_id=trace_id, tenant_id=tenant_ctx.tenant.id)
-    if not trace:
+    if not record:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Trace not found or unauthorized",
         )
-    return trace.to_dict(mask_previews=mask_previews)
+    return _serialize_db_trace(record, mask_previews=mask_previews)
 
 
 @router.get("/metrics", response_model=ObservabilityMetricsSchema)
@@ -155,7 +145,7 @@ async def get_observability_metrics(
     tenant_ctx: TenantContext = Depends(require_permission(PermissionName.USAGE_READ)),
     db: AsyncSession = Depends(get_db),
 ):
-    """Retrieve operational latency percentiles, error rate, tokens, and cost estimates."""
+    """Retrieve operational latency percentiles, error rate, tokens, and cost estimates across all matching traces."""
     now = datetime.now(UTC)
     time_cutoff = None
     if period == "24h":
@@ -165,52 +155,99 @@ async def get_observability_metrics(
     elif period == "30d":
         time_cutoff = now - timedelta(days=30)
 
-    # 1. Check if DB has traces for this tenant
-    stmt = select(RequestTrace).where(RequestTrace.tenant_id == tenant_ctx.tenant.id)
+    base_filter = [RequestTrace.tenant_id == tenant_ctx.tenant.id]
     if time_cutoff:
-        stmt = stmt.where(RequestTrace.created_at >= time_cutoff)
-    stmt = stmt.order_by(RequestTrace.created_at.desc()).limit(1000)
+        base_filter.append(RequestTrace.created_at >= time_cutoff)
 
-    rows = (await db.execute(stmt)).scalars().all()
-    if not rows:
-        # Fallback to in-memory tracer summary
-        tracer = get_tracer()
-        return tracer.get_metrics_summary(tenant_id=tenant_ctx.tenant.id)
+    # 1. Total requests & general aggregations (all historical rows without 1,000 limit)
+    agg_stmt = select(
+        func.count(RequestTrace.id),
+        func.coalesce(func.sum(RequestTrace.total_tokens), 0),
+        func.coalesce(func.sum(RequestTrace.estimated_cost_usd), 0.0),
+        func.coalesce(func.avg(RequestTrace.total_duration_ms), 0.0),
+        func.coalesce(func.avg(RequestTrace.ttft_ms), 0.0),
+    ).where(*base_filter)
 
-    total_requests = len(rows)
-    completed_latencies = [r.total_duration_ms for r in rows if r.total_duration_ms is not None]
-    ttfts = [r.ttft_ms for r in rows if r.ttft_ms is not None]
-    errors = sum(1 for r in rows if r.status in ("FAILED", "CANCELLED"))
-    total_tokens = sum(r.total_tokens for r in rows)
-    total_cost = sum(r.estimated_cost_usd for r in rows if r.estimated_cost_usd is not None)
+    agg_row = (await db.execute(agg_stmt)).one()
+    total_requests = int(agg_row[0])
+    total_tokens = int(agg_row[1])
+    total_cost = float(agg_row[2])
+    avg_latency = float(agg_row[3])
+    avg_ttft = float(agg_row[4])
 
-    completed_latencies.sort()
+    if total_requests == 0:
+        return {
+            "total_requests": 0,
+            "error_rate": 0.0,
+            "avg_latency_ms": 0.0,
+            "p50_latency_ms": 0.0,
+            "p95_latency_ms": 0.0,
+            "p99_latency_ms": 0.0,
+            "avg_ttft_ms": 0.0,
+            "total_tokens": 0,
+            "estimated_cost_usd": 0.0,
+            "by_status": {},
+            "by_traffic_type": {},
+            "by_provider": {},
+            "by_error_category": {},
+        }
+
+    # 2. Status counts (separate CANCELLED from FAILED)
+    status_stmt = (
+        select(RequestTrace.status, func.count(RequestTrace.id))
+        .where(*base_filter)
+        .group_by(RequestTrace.status)
+    )
+    by_status = {row[0]: int(row[1]) for row in (await db.execute(status_stmt)).all()}
+
+    # Cancellation is separated from server errors
+    failed_count = by_status.get("FAILED", 0)
+    error_rate = round(failed_count / total_requests, 4) if total_requests > 0 else 0.0
+
+    # 3. Traffic type counts
+    traffic_stmt = (
+        select(RequestTrace.traffic_type, func.count(RequestTrace.id))
+        .where(*base_filter)
+        .group_by(RequestTrace.traffic_type)
+    )
+    by_traffic = {row[0]: int(row[1]) for row in (await db.execute(traffic_stmt)).all()}
+
+    # 4. Provider counts
+    provider_stmt = (
+        select(func.coalesce(RequestTrace.provider, "unknown"), func.count(RequestTrace.id))
+        .where(*base_filter)
+        .group_by(RequestTrace.provider)
+    )
+    by_provider = {row[0]: int(row[1]) for row in (await db.execute(provider_stmt)).all()}
+
+    # 5. Error category counts
+    error_cat_stmt = (
+        select(RequestTrace.error_category, func.count(RequestTrace.id))
+        .where(*base_filter, RequestTrace.error_category.isnot(None))
+        .group_by(RequestTrace.error_category)
+    )
+    by_error_cat = {row[0]: int(row[1]) for row in (await db.execute(error_cat_stmt)).all()}
+
+    # 6. Latency percentiles calculation
+    latencies_stmt = (
+        select(RequestTrace.total_duration_ms)
+        .where(*base_filter, RequestTrace.total_duration_ms.isnot(None))
+        .order_by(RequestTrace.total_duration_ms.asc())
+    )
+    completed_latencies = list((await db.execute(latencies_stmt)).scalars().all())
     n = len(completed_latencies)
     p50_val = completed_latencies[int(n * 0.50)] if n else 0.0
     p95_val = completed_latencies[min(int(n * 0.95), n - 1)] if n else 0.0
     p99_val = completed_latencies[min(int(n * 0.99), n - 1)] if n else 0.0
 
-    by_status: dict[str, int] = {}
-    by_traffic: dict[str, int] = {}
-    by_provider: dict[str, int] = {}
-    by_error_cat: dict[str, int] = {}
-
-    for r in rows:
-        by_status[r.status] = by_status.get(r.status, 0) + 1
-        by_traffic[r.traffic_type] = by_traffic.get(r.traffic_type, 0) + 1
-        prov = r.provider or "unknown"
-        by_provider[prov] = by_provider.get(prov, 0) + 1
-        if r.error_category:
-            by_error_cat[r.error_category] = by_error_cat.get(r.error_category, 0) + 1
-
     return {
         "total_requests": total_requests,
-        "error_rate": round(errors / total_requests, 4),
-        "avg_latency_ms": round(sum(completed_latencies) / n, 2) if n else 0.0,
+        "error_rate": error_rate,
+        "avg_latency_ms": round(avg_latency, 2),
         "p50_latency_ms": round(p50_val, 2),
         "p95_latency_ms": round(p95_val, 2),
         "p99_latency_ms": round(p99_val, 2),
-        "avg_ttft_ms": round(sum(ttfts) / len(ttfts), 2) if ttfts else 0.0,
+        "avg_ttft_ms": round(avg_ttft, 2),
         "total_tokens": total_tokens,
         "estimated_cost_usd": round(total_cost, 4),
         "by_status": by_status,

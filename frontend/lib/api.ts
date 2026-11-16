@@ -134,6 +134,12 @@ export interface AssistantVersionItem {
   created_at: string;
 }
 
+export interface AssistantToolsConfigItem {
+  enabled_tool_ids: string[];
+  require_approval_all?: boolean;
+  max_execution_steps?: number;
+}
+
 export interface AssistantItem {
   id: string;
   tenant_id: string;
@@ -156,8 +162,77 @@ export interface AssistantItem {
   status: string;
   current_version_num?: number;
   connected_kb_ids: string[];
+  tools_config?: AssistantToolsConfigItem | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface MCPConnectionItem {
+  id: string;
+  tenant_id: string;
+  user_id: string | null;
+  display_name: string;
+  server_url: string;
+  auth_mode: "NONE" | "BEARER_TOKEN" | "BASIC_AUTH" | "OAUTH2";
+  connection_status: "CONNECTED" | "DISCONNECTED" | "ERROR";
+  server_capabilities: Record<string, any>;
+  approved_tools: Array<{
+    name: string;
+    description?: string;
+    input_schema?: Record<string, any>;
+    schema_fingerprint?: string;
+    risk_level?: string;
+  }>;
+  is_enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MCPDiscoveredTool {
+  name: string;
+  description?: string;
+  input_schema?: Record<string, any>;
+  schema_fingerprint?: string;
+  risk_level?: string;
+}
+
+export interface MCPDiscoverResponse {
+  server_url: string;
+  tools: MCPDiscoveredTool[];
+}
+
+export interface ToolItem {
+  id: string;
+  name: string;
+  display_name: string;
+  description: string | null;
+  namespace: string;
+  tool_type: "BUILTIN" | "CUSTOM_HTTP" | "MCP";
+  risk_level: "READ_ONLY" | "WRITE" | "HIGH_RISK";
+  requires_approval: boolean;
+  is_enabled: boolean;
+  version: string;
+  input_schema?: Record<string, any>;
+  output_schema?: Record<string, any>;
+  http_config?: Record<string, any>;
+  created_at?: string | null;
+}
+
+export interface ToolApprovalItem {
+  id: string;
+  tenant_id: string;
+  conversation_id: string;
+  assistant_id: string;
+  user_id: string;
+  tool_id: string;
+  tool_name: string;
+  call_arguments: Record<string, any>;
+  status: "PENDING" | "APPROVED" | "DENIED" | "EXPIRED";
+  decision_by_user_id?: string | null;
+  approval_token?: string;
+  decision_at?: string | null;
+  expires_at: string;
+  created_at: string;
 }
 
 export interface ConversationItem {
@@ -1197,6 +1272,7 @@ class ApiClient {
     top_k?: number;
     system_prompt?: string;
     knowledge_base_ids?: string[];
+    tools_config?: AssistantToolsConfigItem;
   }): Promise<AssistantItem> {
     return this.request<AssistantItem>("/assistants", {
       method: "POST",
@@ -1224,6 +1300,7 @@ class ApiClient {
       system_prompt?: string;
       status?: string;
       knowledge_base_ids?: string[];
+      tools_config?: AssistantToolsConfigItem;
       change_summary?: string;
     }
   ): Promise<AssistantItem> {
@@ -1776,6 +1853,110 @@ class ApiClient {
         }
       }
     }
+  }
+
+  // =========================================================================
+  // M20: MCP Connections, Tool Registry & Human Approvals
+  // =========================================================================
+
+  async listMcpConnections(): Promise<MCPConnectionItem[]> {
+    return this.request<MCPConnectionItem[]>("/mcp/connections", { method: "GET" }, true);
+  }
+
+  async getMcpConnection(id: string): Promise<MCPConnectionItem> {
+    return this.request<MCPConnectionItem>(`/mcp/connections/${id}`, { method: "GET" }, true);
+  }
+
+  async createMcpConnection(payload: {
+    display_name: string;
+    server_url: string;
+    auth_mode: "NONE" | "BEARER_TOKEN" | "BASIC_AUTH" | "OAUTH2";
+    credential?: string;
+    is_personal?: boolean;
+  }): Promise<MCPConnectionItem> {
+    return this.request<MCPConnectionItem>("/mcp/connections", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }, true);
+  }
+
+  async discoverMcpTools(connectionId: string): Promise<MCPDiscoverResponse> {
+    return this.request<MCPDiscoverResponse>(`/mcp/connections/${connectionId}/discover`, {
+      method: "POST",
+    }, true);
+  }
+
+  async approveMcpTools(connectionId: string, toolNames: string[]): Promise<MCPConnectionItem> {
+    return this.request<MCPConnectionItem>(`/mcp/connections/${connectionId}/approve-tools`, {
+      method: "POST",
+      body: JSON.stringify({ tool_names: toolNames }),
+    }, true);
+  }
+
+  async deleteMcpConnection(connectionId: string): Promise<void> {
+    return this.request<void>(`/mcp/connections/${connectionId}`, { method: "DELETE" }, true);
+  }
+
+  async listTools(toolType?: string): Promise<ToolItem[]> {
+    const url = toolType ? `/tools?tool_type=${encodeURIComponent(toolType)}` : "/tools";
+    return this.request<ToolItem[]>(url, { method: "GET" }, true);
+  }
+
+  async getTool(toolId: string): Promise<ToolItem> {
+    return this.request<ToolItem>(`/tools/${toolId}`, { method: "GET" }, true);
+  }
+
+  async createTool(payload: {
+    name: string;
+    display_name: string;
+    endpoint_url: string;
+    description?: string;
+    method?: string;
+    input_schema?: Record<string, any>;
+    output_schema?: Record<string, any>;
+    headers?: Record<string, string>;
+    risk_level?: "READ_ONLY" | "WRITE" | "HIGH_RISK";
+    requires_approval?: boolean;
+    timeout_seconds?: number;
+  }): Promise<ToolItem> {
+    return this.request<ToolItem>("/tools", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }, true);
+  }
+
+  async executeTool(toolId: string, args: Record<string, any>): Promise<{ status_code: number; is_success: boolean; data: any }> {
+    return this.request<{ status_code: number; is_success: boolean; data: any }>(`/tools/${toolId}/execute`, {
+      method: "POST",
+      body: JSON.stringify({ arguments: args }),
+    }, true);
+  }
+
+  async deleteTool(toolId: string): Promise<void> {
+    return this.request<void>(`/tools/${toolId}`, { method: "DELETE" }, true);
+  }
+
+  async listPendingApprovals(conversationId: string): Promise<ToolApprovalItem[]> {
+    return this.request<ToolApprovalItem[]>(`/approvals/pending?conversation_id=${encodeURIComponent(conversationId)}`, {
+      method: "GET",
+    }, true);
+  }
+
+  async getApproval(approvalId: string): Promise<ToolApprovalItem> {
+    return this.request<ToolApprovalItem>(`/approvals/${approvalId}`, { method: "GET" }, true);
+  }
+
+  async approveTool(approvalId: string, token: string): Promise<ToolApprovalItem> {
+    return this.request<ToolApprovalItem>(`/approvals/${approvalId}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ token }),
+    }, true);
+  }
+
+  async denyTool(approvalId: string): Promise<ToolApprovalItem> {
+    return this.request<ToolApprovalItem>(`/approvals/${approvalId}/deny`, {
+      method: "POST",
+    }, true);
   }
 }
 

@@ -8,6 +8,7 @@ import {
   ConversationItem,
   MessageItem,
   MessageCitationItem,
+  ToolApprovalItem,
 } from "@/lib/api";
 import { dedupeCitations } from "@/lib/citations";
 import {
@@ -27,6 +28,7 @@ import {
   ChevronDown,
   Layers,
   Sparkles,
+  ShieldAlert,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
@@ -40,7 +42,7 @@ import MarkdownRenderer from "@/components/chat/MarkdownRenderer";
 
 
 export default function ConversationsWorkspacePage() {
-  const { activeWorkspace } = useAuth();
+  const { user, activeWorkspace } = useAuth();
 
   // State
   const [assistants, setAssistants] = useState<AssistantItem[]>([]);
@@ -48,6 +50,8 @@ export default function ConversationsWorkspacePage() {
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [activeConversation, setActiveConversation] = useState<ConversationItem | null>(null);
   const [messages, setMessages] = useState<MessageItem[]>([]);
+  const [pendingApprovals, setPendingApprovals] = useState<ToolApprovalItem[]>([]);
+  const [approvingIds, setApprovingIds] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
   const [inputMessage, setInputMessage] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -101,13 +105,18 @@ export default function ConversationsWorkspacePage() {
     async function loadConvMessages() {
       if (!activeConversation) {
         setMessages([]);
+        setPendingApprovals([]);
         return;
       }
       try {
         setLoadingMessages(true);
         setErrorMessage(null);
-        const msgList = await api.listMessages(activeConversation.id);
+        const [msgList, apprs] = await Promise.all([
+          api.listMessages(activeConversation.id),
+          api.listPendingApprovals(activeConversation.id).catch(() => []),
+        ]);
         setMessages(msgList);
+        setPendingApprovals(apprs || []);
       } catch (err) {
         console.error("Failed to load messages", err);
         setErrorMessage("Failed to load message history for this conversation.");
@@ -312,6 +321,25 @@ export default function ConversationsWorkspacePage() {
                   accumulatedCitations = dedupeCitations(accumulatedCitations, [data]);
                 }
                 setStreamingCitations([...accumulatedCitations]);
+              } else if (eventType === "tool_approval_required") {
+                const approvalItem: ToolApprovalItem = {
+                  id: data.approval_id,
+                  tenant_id: activeWorkspace?.tenant_id || "",
+                  conversation_id: conv.id,
+                  assistant_id: conv.assistant_id,
+                  user_id: user?.id || "",
+                  tool_id: data.tool_id || data.tool_name,
+                  tool_name: data.tool_name,
+                  call_arguments: data.arguments || {},
+                  status: "PENDING",
+                  approval_token: data.token,
+                  expires_at: data.expires_at || new Date(Date.now() + 600000).toISOString(),
+                  created_at: new Date().toISOString(),
+                };
+                setPendingApprovals((prev) => {
+                  const exists = prev.some((a) => a.id === approvalItem.id);
+                  return exists ? prev : [...prev, approvalItem];
+                });
               } else if (eventType === "message_end") {
                 // Completed
               } else if (eventType === "message_error") {
@@ -351,11 +379,15 @@ export default function ConversationsWorkspacePage() {
       setStreamingContent("");
       setStreamingCitations([]);
       abortControllerRef.current = null;
-      // Reload actual persisted messages from backend database to ensure consistency
+      // Reload actual persisted messages and pending approvals from backend database
       if (conv?.id) {
         try {
-          const freshMessages = await api.listMessages(conv.id);
+          const [freshMessages, freshApprs] = await Promise.all([
+            api.listMessages(conv.id),
+            api.listPendingApprovals(conv.id).catch(() => []),
+          ]);
           setMessages(freshMessages);
+          setPendingApprovals(freshApprs || []);
         } catch (e) {
           console.warn("Failed to refresh messages after stream:", e);
         }
@@ -366,6 +398,46 @@ export default function ConversationsWorkspacePage() {
       } catch (e) {
         console.warn("Failed to refresh conversations:", e);
       }
+    }
+  };
+
+  const handleApproveTool = async (approval: ToolApprovalItem) => {
+    setApprovingIds((prev) => new Set(prev).add(approval.id));
+    try {
+      await api.approveTool(approval.id, approval.approval_token || "");
+      setPendingApprovals((prev) => prev.filter((a) => a.id !== approval.id));
+      if (activeConversation) {
+        const fresh = await api.listMessages(activeConversation.id);
+        setMessages(fresh);
+      }
+    } catch (err: any) {
+      alert(err.message || "Failed to approve tool action.");
+    } finally {
+      setApprovingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(approval.id);
+        return next;
+      });
+    }
+  };
+
+  const handleDenyTool = async (approval: ToolApprovalItem) => {
+    setApprovingIds((prev) => new Set(prev).add(approval.id));
+    try {
+      await api.denyTool(approval.id);
+      setPendingApprovals((prev) => prev.filter((a) => a.id !== approval.id));
+      if (activeConversation) {
+        const fresh = await api.listMessages(activeConversation.id);
+        setMessages(fresh);
+      }
+    } catch (err: any) {
+      alert(err.message || "Failed to deny tool action.");
+    } finally {
+      setApprovingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(approval.id);
+        return next;
+      });
     }
   };
 
@@ -720,6 +792,70 @@ export default function ConversationsWorkspacePage() {
                   )}
                 </div>
               )}
+
+              {/* Pending Human-in-the-Loop Approval Cards */}
+              {pendingApprovals.map((appr) => (
+                <div
+                  key={appr.id}
+                  className="p-4 rounded-2xl border border-amber-200 bg-amber-50/70 shadow-xs max-w-2xl animate-fadeIn space-y-3"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="p-1.5 rounded-lg bg-amber-100 text-amber-800">
+                        <ShieldAlert size={16} />
+                      </span>
+                      <div>
+                        <span className="font-semibold text-xs text-gray-900">
+                          Human-in-the-Loop Approval Required
+                        </span>
+                        <p className="text-[11px] text-gray-600">
+                          The assistant requested execution of external action:{" "}
+                          <span className="font-mono font-bold text-gray-900">{appr.tool_name}</span>
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-amber-200/80 text-amber-900">
+                      Pending
+                    </span>
+                  </div>
+
+                  {appr.call_arguments && Object.keys(appr.call_arguments).length > 0 && (
+                    <div className="space-y-1">
+                      <span className="text-[11px] font-medium text-gray-600">Action Arguments:</span>
+                      <pre className="p-2.5 rounded-xl bg-slate-900 text-slate-100 text-[11px] font-mono overflow-x-auto max-h-36">
+                        {JSON.stringify(appr.call_arguments, null, 2)}
+                      </pre>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between pt-2 border-t border-amber-200/60">
+                    <span className="text-[10px] text-gray-500 font-mono">
+                      Expires: {new Date(appr.expires_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    </span>
+
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="xs"
+                        disabled={approvingIds.has(appr.id)}
+                        onClick={() => handleDenyTool(appr)}
+                        className="text-rose-700 hover:bg-rose-50 border-rose-200"
+                      >
+                        Deny
+                      </Button>
+                      <Button
+                        variant="primary"
+                        size="xs"
+                        disabled={approvingIds.has(appr.id)}
+                        onClick={() => handleApproveTool(appr)}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                      >
+                        {approvingIds.has(appr.id) ? "Approving..." : "Approve & Execute"}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
 
               <div ref={messagesEndRef} />
             </div>

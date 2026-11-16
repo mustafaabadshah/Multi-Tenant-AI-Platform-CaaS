@@ -213,7 +213,13 @@ class S3StorageProvider(StorageProvider):
             if seg not in ("", ".", "..")
         ]
         clean_key = "/".join(segments)
-        return f"{tenant_id}/{clean_key}"
+        # Strip duplicated tenant prefixes from historical keys (e.g. tenants/{tenant_id}/ or {tenant_id}/)
+        t_str = str(tenant_id)
+        if clean_key.startswith(f"tenants/{t_str}/"):
+            clean_key = clean_key[len(f"tenants/{t_str}/") :]
+        elif clean_key.startswith(f"{t_str}/"):
+            clean_key = clean_key[len(f"{t_str}/") :]
+        return f"{t_str}/{clean_key}"
 
     def _check_configured(self) -> None:
         if not self.bucket_name:

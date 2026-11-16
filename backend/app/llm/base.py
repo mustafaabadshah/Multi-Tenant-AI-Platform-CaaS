@@ -18,6 +18,7 @@ class LLMStreamChunk:
     """Streamed response delta chunk."""
     content_delta: str
     finish_reason: Optional[str] = None
+    tool_calls: Optional[list[dict[str, Any]]] = None
 
 
 @dataclass
@@ -28,6 +29,8 @@ class LLMResponse:
     tokens_used: dict[str, int] = field(default_factory=dict)
     finish_reason: str = "stop"
     raw_response: dict[str, Any] = field(default_factory=dict)
+    tool_calls: Optional[list[dict[str, Any]]] = None
+
 
 
 class LLMException(Exception):
@@ -76,6 +79,8 @@ class LLMConfig:
     base_url: Optional[str] = None
     timeout_seconds: int = 45
     extra_headers: dict[str, str] = field(default_factory=dict)
+    tools: Optional[list[dict[str, Any]]] = None
+
 
 
 class LLMProvider(ABC):

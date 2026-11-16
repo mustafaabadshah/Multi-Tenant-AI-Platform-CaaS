@@ -1,5 +1,5 @@
 from app.database.base import Base
-from app.models.administration import AuditLog, TenantQuota, UsageRecord
+from app.models.administration import AuditLog, QuotaReservation, TenantQuota, UsageRecord
 from app.models.assistant import (
     Assistant,
     AssistantKnowledgeBase,
@@ -29,12 +29,15 @@ from app.models.knowledge import (
     KnowledgeBase,
     RetrievalConfig,
 )
+from app.models.mcp import MCPConnection, ToolApproval, ToolInvocationLog
 from app.models.membership import TenantMembership
 from app.models.organization import Organization
 from app.models.provider import ProviderCredential, ProviderUsageLog
 from app.models.publishing import APIKey, AssistantPublication, PublicChatSession
 from app.models.role import Permission, ResourcePermission, Role, RolePermission
+from app.models.session import AuthSession
 from app.models.tenant import Tenant
+from app.models.tool import Tool
 from app.models.trace import ObservabilityPolicy, RequestTrace
 from app.models.user import User
 
@@ -47,7 +50,10 @@ __all__ = [
     "AssistantPublication",
     "AssistantVersion",
     "AuditLog",
+    "AuthSession",
     "Base",
+
+
     "ChunkEmbedding",
     "Conversation",
     "Department",
@@ -67,6 +73,7 @@ __all__ = [
     "IngestionJob",
     "Invitation",
     "KnowledgeBase",
+    "MCPConnection",
     "Message",
     "MessageAttachment",
     "MessageCitation",
@@ -77,6 +84,7 @@ __all__ = [
     "ProviderCredential",
     "ProviderUsageLog",
     "PublicChatSession",
+    "QuotaReservation",
     "RequestTrace",
     "ResourcePermission",
     "RetrievalConfig",
@@ -85,7 +93,11 @@ __all__ = [
     "Tenant",
     "TenantMembership",
     "TenantQuota",
+    "Tool",
+    "ToolApproval",
+    "ToolInvocationLog",
     "UsageRecord",
+
     "User",
     "VectorStoreConfig",
 ]

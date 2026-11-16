@@ -5,6 +5,13 @@ from typing import Any, Optional
 from pydantic import BaseModel, Field
 
 
+class AssistantToolsConfig(BaseModel):
+    enabled_tool_ids: list[str] = Field(default_factory=list)
+    mcp_connection_ids: list[uuid.UUID] = Field(default_factory=list)
+    max_execution_steps: int = Field(default=5, ge=1, le=10)
+    require_approval_all: bool = False
+
+
 class AssistantCreateRequest(BaseModel):
     name: str = Field(min_length=2, max_length=255)
     slug: Optional[str] = Field(default=None, max_length=255)
@@ -23,6 +30,7 @@ class AssistantCreateRequest(BaseModel):
     top_k: int = Field(default=5, ge=1, le=20)
     system_prompt: Optional[str] = None
     knowledge_base_ids: list[uuid.UUID] = Field(default_factory=list)
+    tools_config: Optional[AssistantToolsConfig] = None
 
 
 class AssistantUpdateRequest(BaseModel):
@@ -44,6 +52,7 @@ class AssistantUpdateRequest(BaseModel):
     status: Optional[str] = None
     knowledge_base_ids: Optional[list[uuid.UUID]] = None
     change_summary: Optional[str] = Field(default=None, max_length=500)
+    tools_config: Optional[AssistantToolsConfig] = None
 
 
 class AssistantResponse(BaseModel):
@@ -68,6 +77,7 @@ class AssistantResponse(BaseModel):
     status: str
     current_version_num: int = 1
     connected_kb_ids: list[uuid.UUID] = Field(default_factory=list)
+    tools_config: Optional[dict[str, Any]] = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
 

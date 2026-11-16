@@ -158,16 +158,74 @@ async def test_invited_membership_is_tenant_scoped(client: AsyncClient, seed_dat
 
 
 @pytest.mark.asyncio
-async def test_existing_user_invite_has_no_token(
+async def test_existing_user_invite_requires_acceptance_and_preserves_password(
     client: AsyncClient, seed_data: dict, db_session: AsyncSession
 ):
+    """An existing platform user receives a genuine invitation requiring acceptance, without resetting their password."""
     email = "emp_b@companyb.com"
     resp = await _invite(client, seed_data, email)
     assert resp.status_code == 201, resp.text
     body = resp.json()
+    raw_token = body["invitation_token"]
+    assert raw_token is not None
+    assert body["status"] == "INVITED"
+    assert await _get_invitation(db_session, email) is not None
+
+    # Before acceptance, user cannot access tenant_a with existing login credentials
+    login_b = await client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": "Password123!"},
+    )
+    assert login_b.status_code == 200
+    token_b = login_b.json()["access_token"]
+
+    denied = await client.get(
+        "/api/v1/assistants",
+        headers={"Authorization": f"Bearer {token_b}", "X-Tenant-ID": str(seed_data["tenant_a"].id)},
+    )
+    assert denied.status_code == 403
+
+    # Accept invitation
+    accept_resp = await _accept(client, raw_token, "DifferentPassword999!")
+    assert accept_resp.status_code == 200
+
+    # User's original password for the platform is preserved
+    login_orig = await client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": "Password123!"},
+    )
+    assert login_orig.status_code == 200
+
+    # User now has access to both workspaces
+    me_resp = await client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {login_orig.json()['access_token']}"},
+    )
+    assert me_resp.status_code == 200
+    tenant_ids = {ws["tenant_id"] for ws in me_resp.json()["workspaces"]}
+    assert str(seed_data["tenant_a"].id) in tenant_ids
+    assert str(seed_data["tenant_b"].id) in tenant_ids
+
+
+@pytest.mark.asyncio
+async def test_direct_assign_existing_user_without_token(
+    client: AsyncClient, seed_data: dict, db_session: AsyncSession
+):
+    """Direct administrative assignment immediately grants ACTIVE status without an invitation token."""
+    email = "owner_b@companyb.com"
+    assign_resp = await client.post(
+        "/api/v1/members/assign",
+        headers={
+            "Authorization": f"Bearer {seed_data['token_a_owner']}",
+            "X-Tenant-ID": str(seed_data["tenant_a"].id),
+        },
+        json={"email": email, "role": "employee"},
+    )
+    assert assign_resp.status_code == 201, assign_resp.text
+    body = assign_resp.json()
+    assert body["status"] == "ACTIVE"
     assert body["invitation_token"] is None
     assert body["invitation_expires_at"] is None
-    assert await _get_invitation(db_session, email) is None
 
 
 @pytest.mark.asyncio

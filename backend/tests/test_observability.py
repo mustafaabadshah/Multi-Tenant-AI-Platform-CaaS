@@ -111,6 +111,8 @@ async def test_observability_api_and_cross_tenant_isolation(
         traffic_type="developer",
     )
     trace_a.finish(status="COMPLETED")
+    await tracer.persist_to_database(trace_a, session=db_session)
+    await db_session.commit()
 
     # 1. Tenant A lists traces
     resp = await client.get("/api/v1/observability/traces", headers=headers_a)

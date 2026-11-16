@@ -55,6 +55,7 @@ class AssistantRepository(TenantScopedRepository[Assistant]):
             "top_k": assistant.top_k,
             "system_prompt": assistant.system_prompt,
             "status": assistant.status,
+            "tools_config": assistant.tools_config or {},
             "knowledge_base_ids": [str(k) for k in knowledge_base_ids],
         }
 
@@ -76,6 +77,7 @@ class AssistantRepository(TenantScopedRepository[Assistant]):
         retrieval_mode: str = "hybrid",
         top_k: int = 5,
         system_prompt: Optional[str] = None,
+        tools_config: Optional[dict[str, Any]] = None,
         knowledge_base_ids: Optional[list[uuid.UUID]] = None,
         actor_id: Optional[uuid.UUID] = None,
         change_summary: Optional[str] = None,
@@ -123,6 +125,7 @@ class AssistantRepository(TenantScopedRepository[Assistant]):
             retrieval_mode=retrieval_mode,
             top_k=top_k,
             system_prompt=system_prompt,
+            tools_config=tools_config or {},
             status="ACTIVE",
             current_version_num=1,
         )
@@ -179,6 +182,7 @@ class AssistantRepository(TenantScopedRepository[Assistant]):
         top_k: Optional[int] = None,
         system_prompt: Optional[str] = None,
         status: Optional[str] = None,
+        tools_config: Optional[dict[str, Any]] = None,
         knowledge_base_ids: Optional[list[uuid.UUID]] = None,
         actor_id: Optional[uuid.UUID] = None,
         change_summary: Optional[str] = None,
@@ -245,6 +249,9 @@ class AssistantRepository(TenantScopedRepository[Assistant]):
             changed = True
         if status is not None and status != assistant.status:
             assistant.status = status
+            changed = True
+        if tools_config is not None and tools_config != assistant.tools_config:
+            assistant.tools_config = tools_config
             changed = True
 
         current_kbs = await self.get_connected_kb_ids(assistant.id)
