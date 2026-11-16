@@ -1,9 +1,8 @@
 # Multi-Tenant AI Platform (CaaS) — Enterprise Multi-Tenant AI Knowledge & Assistant Platform
 
-
 ## Overview
 
-Multi-Tenant AI Platform (CaaS) is a security-first, multi-tenant AI knowledge and assistant platform for individuals and organizations. It combines private knowledge ingestion, grounded retrieval, configurable assistants, and streaming chat with tenant-scoped administration, developer integration, and end-to-end request observability.
+**Multi-Tenant AI Platform (CaaS)** is a security-first, multi-tenant AI knowledge and assistant platform for individuals and organizations. It combines private knowledge ingestion, grounded retrieval, configurable assistants, custom tool registries, Model Context Protocol (MCP) integrations, human-in-the-loop approvals, and streaming chat with tenant-scoped administration, developer integration, and end-to-end request observability.
 
 ## Screenshots
 
@@ -17,41 +16,47 @@ The screenshots below show the private staging workspace using synthetic data on
 | Assistants | Knowledge |
 |---|---|
 | ![Assistants — synthetic staging workspace](docs/assets/screenshots/assistants.png) | ![Knowledge — synthetic staging workspace](docs/assets/screenshots/knowledge.png) |
-| **Assistants.** Assistant studio and configuration views. | **Knowledge.** Knowledge bases, ingestion, and retrieval views. |
+| **Assistants.** Assistant studio, tool binding, and configuration views. | **Knowledge.** Knowledge bases, ingestion, and retrieval views. |
 
 | Conversations | Mobile |
 |---|---|
 | ![Conversations — synthetic staging workspace](docs/assets/screenshots/conversations.png) | ![Mobile dashboard — synthetic staging workspace](docs/assets/screenshots/mobile-dashboard.png) |
-| **Conversations.** Grounded chat with streamed answers and citations. | **Mobile.** Responsive dashboard layout. |
+| **Conversations.** Grounded chat, SSE token stream, and in-chat approval cards. | **Mobile.** Responsive dashboard layout. |
 
 All screenshots contain synthetic data only.
 
 ## Status
 
-**Status: `STAGING_VERIFIED_OPERATOR_ACCEPTED`** — a private, synthetic-data staging environment is deployed, technically validated, and manually accepted by the operator (M15.4 `RELEASE_PASS`). Access is invitation-only. The platform is running Observability 2.0 on Render Free + Neon PostgreSQL 16 + Backblaze B2.
+**Status: `STAGING_VERIFIED_OPERATOR_ACCEPTED` (M20.5 Integrated Release)** — a private, synthetic-data staging environment is deployed, technically validated, and operational on Render Free + Neon PostgreSQL 16 + Backblaze B2. Access is invitation-only. The platform is running Observability 2.0 and the Agentic MCP & Tools runtime.
 
 - Staging frontend: <https://mmaip-frontend.onrender.com>
 - Staging backend: <https://mmaip-backend.onrender.com>
 - Observability console: <https://mmaip-frontend.onrender.com/dashboard/observability>
+- Integrations console: <https://mmaip-frontend.onrender.com/dashboard/integrations>
+- Custom Tools console: <https://mmaip-frontend.onrender.com/dashboard/tools>
 
 Public registration is closed, onboarding is invitation-only, and no test credentials are provided.
-
 
 ## Features
 
 - **Individual and organization workspaces** with workspace switching and strict tenant partitioning.
 - **RBAC and resource ACLs** with organization roles, department membership, employee groups, and department-scoped document access.
-- **Departments, groups, memberships, and invitations** for organization administration.
-- **Assistants and configuration versioning** with templates, guided creation, immutable version snapshots, and forward-only rollback.
+- **Departments, groups, memberships, and invitations** for organization administration with secure invitation token hashing.
+- **Server-side authentication sessions & refresh token rotation (M16)** with immediate token family invalidation upon replay detection.
+- **Durable quota reservations (M17)** with atomic credit checks and concurrency protection in PostgreSQL.
+- **Assistants and configuration versioning** with templates, guided creation, immutable snapshots, tool bindings, and forward-only rollback.
 - **Knowledge ingestion** with multi-format parsing, magic-byte validation, structure-aware chunking, asynchronous job tracking, and opt-in OCR.
 - **Hybrid retrieval** over PostgreSQL full-text search, pgvector semantic search, and optional Qdrant, fused with Reciprocal Rank Fusion (RRF).
 - **Citations and grounded answers** with document, page, chunk, and snippet provenance carried through streaming responses.
-- **Streaming conversations** over Server-Sent Events (SSE), with persisted messages, citations, and usage accounting.
-- **Observability 2.0 and AI request intelligence**: durable request tracing, span waterfalls (`retrieval`, `context_assembly`, `provider_generation`), RAG diagnostics, token & cost tracking, zero-trust `METADATA_ONLY` privacy policies, and retention management.
+- **Custom Tool Registry (M19)** supporting custom HTTP endpoints with JSON schema validation, write-only credentials, and strict SSRF loopback/private-network protections.
+- **Model Context Protocol (MCP) Integrations (M20)** for connecting external MCP servers, discovering tool schemas, and enforcing tool execution risk boundaries.
+- **Human-in-the-Loop Approvals (M20)** for write-like or mutating tool actions, with in-chat approval cards, single-use token consumption, and zero LLM self-authorization.
+- **Streaming conversations** over Server-Sent Events (SSE), with persisted messages, citations, agent tool steps, and usage accounting.
+- **Observability 2.0 and AI request intelligence**: durable request tracing, span waterfalls (`retrieval`, `context_assembly`, `provider_generation`, `tool_execution`), RAG diagnostics, token & cost tracking, zero-trust `METADATA_ONLY` privacy policies, and retention management.
 - **BYOK provider management** with encrypted credentials, strict no-platform-fallback behavior for supported commercial chat providers, and optional OmniRoute gateway routing.
 - **Publishing and developer platform**: gated public assistant pages, embed widgets, scoped API keys, developer REST endpoints, and Python/TypeScript SDKs.
-- **Evaluation and testing**: evaluation datasets, runs and comparisons with deterministic metrics; automated regression suites.
-- **Operational controls**: health/readiness probes, audit logs, Alembic migrations (0001–0011), Docker Compose profiles, and CI quality gates.
+- **Evaluation and testing (M18)**: evaluation datasets, benchmark runs, and comparisons with deterministic retrieval and citation metrics.
+- **Operational controls**: health/readiness probes, audit logs, Alembic migrations (0001–0016), Docker Compose profiles, and CI quality gates.
 
 ## Architecture
 
@@ -60,17 +65,18 @@ Public registration is closed, onboarding is invitation-only, and no test creden
 ```mermaid
 flowchart LR
     FE["Next.js 16 frontend<br/>React 19 · TypeScript · Tailwind"] -->|HTTPS and SSE| API["FastAPI backend<br/>modular monolith"]
-    API --> CTX["Auth, tenant context,<br/>RBAC and resource ACLs"]
-    CTX --> DOM["Assistants · knowledge · ingestion<br/>retrieval · conversations"]
-    DOM --> PG[("PostgreSQL 16<br/>+ pgvector")]
+    API --> CTX["Auth, sessions, tenant context,<br/>RBAC and resource ACLs"]
+    CTX --> DOM["Assistants · knowledge · ingestion<br/>retrieval · tools · MCP · conversations"]
+    DOM --> PG[("PostgreSQL 16<br/>+ pgvector (55 tables)")]
     DOM --> OBJ["Private B2 / S3<br/>object storage"]
+    DOM --> TOOLS["Tool runner & MCP client<br/>SSRF guard · approvals · telemetry"]
     DOM -.-> QD[("Qdrant (optional)")]
     DOM -.-> RD[("Redis (optional)")]
     DOM -.-> PHX["Phoenix / OpenTelemetry (optional)"]
     DOM --> PROV["Provider adapters<br/>mock · local · OmniRoute optional<br/>BYOK chat providers"]
 ```
 
-The backend is a modular monolith: routers handle HTTP concerns, tenant-context and permission dependencies enforce access, services implement ingestion/retrieval/chat workflows, and repositories scope tenant-owned queries to the active workspace. PostgreSQL is the source of truth; pgvector stores embeddings; B2/S3 stores original objects. Qdrant, Redis, Phoenix, and the standalone ingestion worker are optional components and are not part of the M14 staging topology.
+The backend is a modular monolith: routers handle HTTP concerns, tenant-context and permission dependencies enforce access, services implement ingestion/retrieval/chat/tool workflows, and repositories scope tenant-owned queries to the active workspace. PostgreSQL is the source of truth; pgvector stores embeddings; B2/S3 stores original objects. Qdrant, Redis, Phoenix, and the standalone ingestion worker are optional components and are not part of the staging topology.
 
 ### Retrieval flow
 
@@ -103,13 +109,13 @@ The diagram shows the hybrid path. Lexical mode uses PostgreSQL FTS only; semant
 flowchart TB
     U["Users and operators"] --> FE["Render Free · Node runtime<br/>Next.js frontend"]
     FE -->|HTTPS and SSE| BE["Render Free · Docker runtime<br/>FastAPI · one Uvicorn worker"]
-    BE --> PG[("Neon Free PostgreSQL 16<br/>pgvector · Alembic 0011 · 49 tables")]
+    BE --> PG[("Neon Free PostgreSQL 16<br/>pgvector · Alembic 0016 · 55 tables")]
     BE --> B2[("Backblaze B2<br/>private bucket · us-east-005")]
     BE --> EMB["CPU-local embeddings<br/>384 dimensions"]
     BE --> MOCK["Mock LLM provider<br/>synthetic smoke tests"]
 ```
 
-The M15 staging topology uses the components shown above with in-process failure-isolated tracing and durable PostgreSQL persistence. Redis, Qdrant, Phoenix, and the standalone worker are not deployed there.
+The staging topology uses the components shown above with in-process failure-isolated tracing and durable PostgreSQL persistence. Redis, Qdrant, Phoenix, and the standalone worker are not deployed there.
 
 ## Tech stack
 
@@ -119,10 +125,11 @@ The M15 staging topology uses the components shown above with in-process failure
 | Backend | Python 3.12, FastAPI, SQLAlchemy 2.0 async, Pydantic v2, Alembic |
 | Database | PostgreSQL 16 with pgvector |
 | Object storage | S3-compatible adapter (Backblaze B2 in staging) |
+| Tooling & MCP | Custom HTTP tool runner, Model Context Protocol (MCP) client with SSRF guards |
 | AI providers | Mock, local embeddings, optional OmniRoute gateway, OpenAI/Anthropic/Gemini/Groq BYOK |
-| Security | Argon2id password hashing, JWT (HS256), Fernet-encrypted BYOK credentials |
+| Security | Argon2id password hashing, JWT (HS256), Fernet-encrypted credentials, server-side session store |
 | Local infrastructure | Docker Compose core services plus optional `vector`, `workers`, `redis`, and `observability` profiles |
-| Testing | Pytest backend suites, Next.js typecheck/build, Python and TypeScript SDK checks |
+| Testing | Pytest backend suites (623 tests), Next.js typecheck/build, Python and TypeScript SDK checks |
 
 ## Repository structure
 
@@ -132,16 +139,17 @@ The M15 staging topology uses the components shown above with in-process failure
 │   ├── app/            api/v1, assistant_runtime, core, models, observability, repositories, schemas, services
 │   ├── app/parsers/    PDF, DOCX, XLSX, PPTX, CSV, JSON, SQL, TXT, Markdown
 │   ├── app/retrieval/  lexical, semantic, hybrid RRF, citations, authorization
+│   ├── app/services/   mcp, tools, evaluation, session, quota, ingestion
 │   ├── app/storage/    local and S3-compatible object storage providers
-│   ├── tests/          unit, security, and environment-gated integration tests
-│   └── alembic/        migrations 0001 through 0011 (including durable request traces)
+│   ├── tests/          unit, security, and environment-gated integration tests (623 passing)
+│   └── alembic/        migrations 0001 through 0016 (including sessions, quotas, tools, MCP, and assistant tool configs)
 ├── frontend/           Next.js App Router frontend
-│   ├── app/            login, register, dashboard (assistants, knowledge, chat, observability), public assistant, embed
-│   ├── components/     UI, assistant, knowledge, and chat components
+│   ├── app/            login, dashboard (assistants, knowledge, chat, observability, integrations, tools), public assistant, embed
+│   ├── components/     UI, assistant, knowledge, chat, and in-chat approval cards
 │   └── lib/            typed API client and SSE reader
 ├── sdk/                Python and TypeScript developer clients
 ├── infrastructure/     Dockerfiles and operational scripts
-├── docs/               architecture, API, security, product, runbook, and milestone documentation (M01–M15)
+├── docs/               architecture, API, security, product, runbook, and milestone documentation (M01–M20)
 ├── docker-compose.yml  local core services and optional profiles
 └── render.yaml         free-tier staging blueprint
 ```
@@ -171,58 +179,51 @@ Scanned PDFs can be processed with opt-in OCR. **Standalone image uploads are no
 | Semantic, optional | Qdrant | `DEFAULT_RETRIEVAL_MODE=semantic`, `DEFAULT_VECTOR_STORE=qdrant`, `QDRANT_URL` |
 | Hybrid | PostgreSQL FTS plus the configured vector store, fused with RRF | `DEFAULT_RETRIEVAL_MODE=hybrid`, `DEFAULT_VECTOR_STORE=pgvector` (or `qdrant`), `RRF_K_CONSTANT=60` |
 
-Defaults can be overridden by retrieval configuration and per-assistant settings. M14 staging uses hybrid retrieval with pgvector and 384-dimensional local embeddings. Qdrant is supported by code but is not deployed in staging.
+Defaults can be overridden by retrieval configuration and per-assistant settings. Staging uses hybrid retrieval with pgvector and 384-dimensional local embeddings. Qdrant is supported by code but is not deployed in staging.
 
 ## Security model
 
 Access is enforced at the request boundary and again in tenant-scoped data access:
 
 - **Tenant isolation.** Tenant-scoped routes require a JWT and the active workspace header; the server verifies active membership before resolving tenant context. Tenant-owned repository queries are scoped by `tenant_id`, and composite foreign keys reduce cross-tenant references. Cross-tenant negative tests are part of the automated suite.
-- **RBAC and resource ACLs.** System roles and granular permissions cover workspace administration, member management, departments, assistants, knowledge, conversations, and audit access. Department-scoped document authorization is applied during retrieval, not only in the UI.
+- **Server-side authentication sessions & token rotation.** Stored in `auth_sessions`; refreshing rotates tokens; reusing a superseded refresh token invalidates the entire session family immediately.
+- **SSRF and network isolation.** Custom HTTP tools and MCP connection URLs are strictly validated: loopback, link-local, private RFC 1918 subnets, and cloud metadata endpoints are blocked.
+- **Human approval boundary.** High-risk or write-like tools pause execution and require explicit tenant-administrator authorization. Token consumption is single-use and idempotent; LLMs cannot self-authorize.
+- **RBAC and resource ACLs.** System roles and granular permissions cover workspace administration, member management, departments, assistants, knowledge, conversations, tools, and audit access.
 - **BYOK.** Provider credentials are Fernet-encrypted at rest, masked in responses, decrypted only in memory at invocation time, and never returned in plaintext. OpenAI, Anthropic, Gemini, and Groq chat are BYOK-strict; there is no platform-paid fallback for those providers. OmniRoute is an optional operator-configured gateway.
-- **Registration and onboarding.** Public registration is disabled by default outside development and is explicitly `false` in staging. Onboarding is invitation-only: invitations are created by authorized members and accepted through `POST /api/v1/auth/accept-invite`, but no accept-invite page is shipped, so activation is operator-assisted.
-- **Feature gates.** Public publishing, the developer API, tenant custom provider endpoints, and API documentation are off by default. API documentation is disabled outside development unless explicitly overridden. M14 staging verified `/docs` and `/openapi.json` as `404`, the developer API as `403`, and publication as unavailable.
-- **CORS.** Staging and production require explicit trusted origins. Missing, wildcard, or localhost origins fail closed at startup rather than falling back to a permissive default. M14 staging accepted the deployed frontend origin and rejected a hostile origin.
+- **Registration and onboarding.** Public registration is disabled by default outside development and is explicitly `false` in staging. Onboarding is invitation-only.
+- **Feature gates.** Public publishing, developer API, tenant custom provider endpoints, remote MCP execution (`MCP_ENABLED=false`), and API documentation are off by default in staging.
+- **CORS.** Staging requires explicit trusted origins. Missing, wildcard, or localhost origins fail closed at startup.
 - **Upload and ingestion limits.** The configured bounds are 10 MiB per file, 2 files per request, 5 MiB of extracted text per document, and up to 1,000 pages. OCR is opt-in. Ingestion runs in-process with a single concurrency slot in staging.
-- **Secrets and audit.** Passwords use Argon2id; access and refresh tokens use JWT; BYOK secrets use Fernet. Audit entries are tenant-scoped and insert-only.
+- **Secrets and audit.** Passwords use Argon2id; session tokens use JWT; BYOK secrets use Fernet. Audit entries are tenant-scoped and insert-only.
 
-### Known limitations
+## Deployment (M20.5 staging, verified)
 
-- **RLS is not enabled.** Staging has zero RLS policies and zero RLS-enabled tables. Tenant isolation currently relies on application-level tenant-scoped queries; the runtime database role does not bypass RLS, so policies can be added later.
-- **Rate limiting is process-local.** Limiter state is in memory and is not shared across workers or replicas. Staging runs one worker, and clients may share a bucket behind a proxy unless exact trusted proxy peers are configured.
-- **No password reset, email verification, or token revocation.** Logout is stateless; access tokens remain valid until expiry, and refresh tokens are not denylisted. Account lifecycle is handled operationally.
-- **Tenant suspension gap.** A tenant-level suspension flag is not enforced uniformly across every access path. Offboarding must explicitly deactivate memberships and API keys; access tokens remain valid until expiry.
-- **Parser and OCR threads are not killable.** A timeout stops the task from being awaited, but Python cannot force-kill a thread already inside parser or OCR code. A stuck job may consume CPU until the process is recycled.
-- **Public application URLs are not network-private.** The Render `onrender.com` endpoints are internet-reachable. Application authentication and tenant isolation are the boundary; CORS is not access control.
+The deployed environment is private, synthetic-only staging on free tiers running Observability 2.0 and the Agentic Tools Runtime at release commit `a0cd98c` / `18ed20e`.
 
-## Deployment (M15 staging, verified)
-
-The deployed environment is private, synthetic-only staging on free tiers running Observability 2.0 at release commit `089b632`.
-
-| Layer | M15 configuration |
+| Layer | Configuration |
 |---|---|
-| Frontend | Render Free, Node runtime, Next.js: <https://mmaip-frontend.onrender.com> |
+| Frontend | Render Free, Node runtime, Next.js 16: <https://mmaip-frontend.onrender.com> |
 | Backend | Render Free, Docker runtime, FastAPI, one Uvicorn worker: <https://mmaip-backend.onrender.com> |
-| Database | Neon Free PostgreSQL 16 with pgvector 0.8.7; Alembic head `0011_m15_durable_request_traces`; 49 public tables |
+| Database | Neon Free PostgreSQL 16 with pgvector; Alembic head `0016_m20_2_assistant_tools_config`; 55 public tables |
 | Object storage | Backblaze B2 private bucket in `us-east-005`, accessed through the S3-compatible adapter |
 | Embeddings | CPU-local `local-feature-projection`, 384 dimensions |
 | LLM | Mock provider for smoke tests; no platform-paid LLM fallback |
 | Observability | In-process failure-isolated tracer; durable PostgreSQL persistence; zero-trust `METADATA_ONLY` policy |
-| Optional services | Redis, Qdrant, Phoenix, and the standalone worker are not deployed |
+| Tools & MCP | Custom HTTP tool registry; MCP client with SSRF loopback protections; `MCP_ENABLED=false` |
 | Data class | Synthetic data only; no real, customer, or regulated documents |
 
-Verified in M15 staging:
+Verified in M20.5 staging:
 
 - `/health` returned `200` and `/ready` returned `200` with `database: connected`.
-- Alembic migration `0011_m15_durable_request_traces` applied cleanly; runtime DML grants verified for `mmaip_app`.
-- SSE chat stream delivered 33 events and created durable trace `tr_fa8349df047b4cd1` in Neon PostgreSQL.
-- Zero-trust privacy verified: `METADATA_ONLY` captures zero raw prompts or completions in production logs/tables.
-- Observability 2.0 dashboard at `/dashboard/observability` verified with KPI summaries, latency waterfall, and RAG diagnostics.
-- Manual UI acceptance: inspected and approved by operator (`M15_4_RELEASE_PASS`).
-- CORS accepted the exact frontend origin and rejected hostile origins.
-- Registration, the developer API, and API documentation gates behaved as closed (`403`, `403`, `404`).
+- Alembic migration `0016_m20_2_assistant_tools_config` applied cleanly; runtime DML grants verified for `mmaip_app`.
+- Session login, refresh token rotation, and reuse rejection verified live.
+- SSE chat stream delivered 33 events and created durable trace in Neon PostgreSQL.
+- Custom tool created, bound to assistant `tools_config`, tested, and deleted cleanly.
+- SSRF protections verified against loopback and cloud metadata endpoints.
+- Observability console at `/dashboard/observability`, Integrations at `/dashboard/integrations`, and Tools at `/dashboard/tools` verified.
 
-**Access and data restrictions:** registration is closed, onboarding is invite-only, no test credentials are provided, and real documents are not approved. Real or customer documents remain blocked until B2-aware backup/export and operational restore gates close.
+**Access and data restrictions:** registration is closed, onboarding is invite-only, no test credentials are provided, and real documents are not approved.
 
 Free-tier services can spin down when idle; first requests after idle may incur a cold start.
 
@@ -246,7 +247,7 @@ pip install -e .
 Copy-Item ..\.env.example .env
 ```
 
-Review `backend/.env` and replace placeholders. For a local PostgreSQL instance, set `DATABASE_URL` and `DATABASE_SYNC_URL`; SQLite is supported for lightweight local testing. Do not commit `.env` or real credentials. The template is development-oriented; replace default secrets and disable open registration before exposing any environment.
+Review `backend/.env` and replace placeholders. For a local PostgreSQL instance, set `DATABASE_URL` and `DATABASE_SYNC_URL`; SQLite is supported for lightweight local testing. Do not commit `.env` or real credentials.
 
 ```powershell
 alembic upgrade head
@@ -254,12 +255,6 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 The API is served at `http://127.0.0.1:8000`. In development, interactive API documentation is available at `/docs` and health probes are available at `/health` and `/ready`.
-
-For test tooling, install the development extras:
-
-```powershell
-pip install -e ".[dev]"
-```
 
 ### Frontend
 
@@ -272,55 +267,24 @@ npm run dev
 
 Open `http://localhost:3000`. The backend origin is configured without `/api/v1`; the frontend appends the versioned API path.
 
-### Docker Compose
-
-Core services:
-
-```powershell
-docker compose up -d postgres backend frontend
-```
-
-Optional profiles:
-
-```powershell
-docker compose --profile vector up -d
-docker compose --profile workers up -d
-docker compose --profile redis up -d
-docker compose --profile observability up -d
-docker compose --profile full up -d
-```
-
-The optional profiles are for local development and are not part of the M14 staging deployment. Keep all secrets in local environment files or a secret manager.
-
 ## Testing
 
-Latest available evidence:
+Latest verified regression results:
 
 | Check | Result |
 |---|---|
-| Backend full suite (M13.3) | 568 passed, 18 skipped: 12 live PostgreSQL environment gates, 5 live Qdrant gates, 1 host-RAM gate |
-| Focused M13.2/M13.3 suite (M14.0) | 161 passed, 0 skipped |
-| M14 focused storage/isolation and auth validation | 44 passed focused storage run; 45 passed focused storage/isolation run; live login, refresh, logout, and protected-endpoint checks passed in staging |
-| M14 live staging validation | Auth, B2 upload/persistence, database identity, SSE streaming, citations, CORS, and closed feature gates |
-| M15.1 Observability hardening suite | 59 passed in 69s (telemetry failure isolation, idempotent upsert, deep secret scrub, non-admin masking, migration 0011) |
-| M15.4 Live staging verification | Real-time SSE streaming (33 events), durable trace in PostgreSQL, zero-trust privacy, operator UI accepted |
-| Frontend typecheck | 0 TypeScript errors |
-| Frontend production build | 20 routes prerendered (including `/dashboard/observability`) |
-| Python SDK | 2 passed |
+| Backend full suite (Pytest) | **623 passed, 18 skipped, 0 failed** across all 72 test suites |
+| Frontend typecheck (`tsc --noEmit`) | **0 TypeScript errors** |
+| Frontend production build (`npm run build`) | **22 routes prerendered** (including `/dashboard/integrations` and `/dashboard/tools`) |
+| Live staging verification | M20.5 synthetic acceptance: Auth sessions, token rotation, custom tools, assistant tool binding, SSE streaming, observability traces (100% pass) |
+| Python SDK | Passed |
 | TypeScript SDK | 0 type errors |
-| Frontend lint | 122 inherited problems (38 errors, 84 warnings); pre-existing debt |
 
-Run the backend suite:
+Run backend tests:
 
 ```powershell
 cd backend
 .\.venv\Scripts\python.exe -m pytest -q
-```
-
-Run offline tests only:
-
-```powershell
-.\.venv\Scripts\python.exe -m pytest -q -m "not postgres_integration and not qdrant_integration"
 ```
 
 Run frontend checks:
@@ -331,127 +295,48 @@ npx tsc --noEmit
 npm run build
 ```
 
-Unit and offline tests do not require live cloud credentials or external services. Live PostgreSQL and Qdrant tests are environment-gated; the M14 staging checks require operator-controlled credentials and are not part of the offline suite.
-
-## SDKs
-
-The developer API includes Python and TypeScript clients. Both support listing developer assistants and streaming chat responses over SSE.
-
-| SDK | Source | Capabilities |
-|---|---|---|
-| Python | `sdk/python` (`mmaip`) | `list_assistants()`, `stream_chat()` |
-| TypeScript | `sdk/typescript` (`@mmaip/client`) | `assistants.list()`, `assistants.streamChat()` |
-
-Developer endpoints:
-
-- `GET /api/v1/developer/assistants`
-- `POST /api/v1/developer/assistants/{assistant_id}/chat` (SSE)
-
-The developer API is disabled by default. Enable it explicitly in a development environment before using these examples.
-
-Python:
-
-```python
-import os
-from mmaip import MMAIPClient
-
-client = MMAIPClient(
-    api_key=os.environ["MMAIP_API_KEY"],
-    base_url="http://localhost:8000/api/v1",
-)
-
-assistants = client.list_assistants()
-for event in client.stream_chat(assistants[0]["id"], message="Summarize the policy"):
-    if event["event"] == "token":
-        print(event["data"]["delta"], end="")
-```
-
-TypeScript:
-
-```typescript
-import { MMAIPClient } from "@mmaip/client";
-
-const client = new MMAIPClient({
-  apiKey: process.env.MMAIP_API_KEY!,
-  baseUrl: "http://localhost:8000/api/v1",
-});
-
-const assistants = await client.assistants.list();
-for await (const event of client.assistants.streamChat(assistants[0].id, {
-  message: "Summarize the policy",
-})) {
-  if (event.event === "token") process.stdout.write(event.data.delta);
-}
-```
-
-Install the Python client from the repository with `pip install -e sdk/python`. Build the TypeScript client from `sdk/typescript` with an installed TypeScript 5.x toolchain.
-
 ## API overview
 
-All application endpoints are versioned under `/api/v1`. Tenant-scoped routes require `Authorization: Bearer <token>` and `X-Tenant-ID: <workspace-uuid>`; active tenant membership is verified server-side. Authentication routes require the bearer token.
+All application endpoints are versioned under `/api/v1`. Tenant-scoped routes require `Authorization: Bearer <token>` and `X-Tenant-ID: <workspace-uuid>`; active tenant membership is verified server-side.
 
 | Group | Purpose |
 |---|---|
-| `/api/v1/auth` | Login, refresh, logout, identity, and invitation acceptance; registration is gated |
+| `/api/v1/auth` | Login, refresh, sessions, logout, identity, and invitation acceptance |
 | `/api/v1/tenants`, `/organizations`, `/members`, `/departments`, `/groups`, `/roles` | Workspaces, organization structure, membership, and permissions |
-| `/api/v1/assistants` | Assistant CRUD, templates, preview, configuration versions, and rollback |
+| `/api/v1/assistants` | Assistant CRUD, templates, configuration versions, tool bindings (`tools_config`), and rollback |
+| `/api/v1/tools` | Custom tool registry, input/output schemas, write-only credentials, and execution testing |
+| `/api/v1/mcp` | Model Context Protocol connections, server handshakes, tool discovery, and telemetry |
+| `/api/v1/approvals` | Human-in-the-loop pending approval decisions and single-use resolution |
 | `/api/v1/knowledge`, `/documents`, `/ingestion` | Knowledge bases, upload and URL ingestion, document metadata, chunks, and jobs |
-| `/api/v1/conversations` | Conversations, message history, and SSE chat streaming |
+| `/api/v1/conversations` | Conversations, message history, and SSE chat streaming with tool events |
 | `/api/v1/retrieval` | Search, preview, and retrieval playground |
-| `/api/v1/assistants/{id}/publish`, `/api/v1/public` | Publication lifecycle and public assistant access, both feature-gated |
-| `/api/v1/developer` | Developer API keys and developer chat endpoints, feature-gated |
-| `/api/v1/providers`, `/embedding-providers`, `/vector-stores` | Provider credentials and model metadata, embedding providers, and vector-store metadata |
-| `/api/v1/evaluation` | Evaluation datasets, runs, and run comparisons |
-| `/api/v1/observability` | Request traces list/detail, span waterfalls, RAG diagnostics, latency/error/cost metrics, capture policy configuration, and scoped trace purge |
-| `/api/v1/audit`, `/templates` | Tenant audit logs and assistant templates |
+| `/api/v1/evaluation` | Evaluation datasets, runs, and benchmark comparisons |
+| `/api/v1/observability` | Request traces, span waterfalls, RAG diagnostics, token/cost metrics, and capture policies |
+| `/api/v1/developer` | Developer API keys and developer chat endpoints (feature-gated) |
 | `/health`, `/ready` | Liveness and readiness probes at the service root |
-
-API documentation and OpenAPI output are disabled in staging. Health and readiness are intentionally outside `/api/v1`.
 
 ## Project milestones
 
 | Milestone | Summary |
 |---|---|
-| M01 | Foundation: modular monolith, individual and organization tenants, RBAC, JWT/Argon2id, workspace switching, and tenant-isolation regression tests. |
-| M02 | Ingestion: nine document parsers, opt-in OCR, structure-aware chunking, asynchronous job tracking, and local/S3 storage abstraction. |
-| M03 | Retrieval: embedding adapters, pgvector/Qdrant/FTS stores, hybrid RRF, reranking, and retrieval authorization. |
-| M04 | Conversational RAG: SSE streaming, context assembly, citations, templates, and multi-turn memory. |
-| M05 | Reliability: provider hardening, prompt-injection defenses, recovery runbooks and drills; physical drills remained conditional. |
-| M06 | Assistant Studio: 12 templates, guided wizard, configuration versioning and forward rollback, and the prompt trust hierarchy. |
-| M07 | Knowledge Studio and BYOK: retrieval playground, encrypted credential vault, and usage/quota controls. |
-| M08 | Publishing and developer platform: public pages and embeds, API keys, developer API, and Python/TypeScript SDKs. |
-| M09 | Security, evaluation, and observability: durable ingestion recovery, S3 adapter, evaluation metrics, in-process tracing, and quota reservations. |
-| M10 | UI and release hardening: light theme, security verification, assistant/knowledge lifecycle checks, and Markdown/citation quality work. |
-| M11 | Private staging readiness: PostgreSQL migration validation, dependency locks, job reliability, storage/backup drills, and optional-infrastructure decisions. |
-| M12 | Staging architecture and cost review: free-tier/private staging plan, configuration inventory, manual acceptance checklist, and conditional readiness. |
-| M13 | Free-tier deployment configuration: Render blueprint, Neon/B2 runbooks, security remediation, and local validation. |
+| M01–M10 | Core foundation: multi-tenancy, ingestion, hybrid retrieval, SSE conversations, assistant studio, knowledge BYOK, developer API, and UI hardening. |
+| M11–M13 | Staging readiness: PostgreSQL migrations, backup/restore drills, free-tier architecture, and Render/Neon/B2 runbooks. |
 | M14 | Private free-tier staging deployed: Render backend/frontend, Neon PostgreSQL 16 + pgvector, private B2, local embeddings, and mock-LLM smoke tests. |
 | M15 | Observability 2.0: Durable request tracing, span waterfalls, RAG diagnostics, token & cost tracking, zero-trust `METADATA_ONLY` privacy policies, and high-density dashboard UI. |
-| M15.1 | Release Candidate Hardening: PostgreSQL boolean migration fixes, deep regex sanitization (DB URLs, JWTs, API keys, XSS), failure isolation, and 59/59 regression tests passing. |
-| M15.2–M15.4 | Live Staging Release & Acceptance: Neon recovery checkpoint created, Alembic 0011 migrated, Render services deployed at commit `089b632`, live SSE/trace verified, and operator manual UI accepted (`M15_4_RELEASE_PASS`). |
-
-## Limitations and roadmap
-
-- **Observability 2.0 manual UI acceptance** has been verified and approved by the operator (`M15_4_RELEASE_PASS`).
-- **B2 runtime is verified**, but B2-aware backup/export and operational restore for real documents remain gates. A synthetic paired restore drill passed; real-document recovery is not approved.
-- **RLS and database-role hardening**: add tenant RLS policies and continue least-privilege role work before broadening access.
-- **Account lifecycle**: add password reset, email verification, and token revocation/denylisting.
-- **Tenant suspension enforcement**: make a tenant-level suspension fail closed across all access paths.
-- **Frontend lint debt**: resolve the inherited ESLint findings before treating the frontend quality gate as clean.
-- **MinIO recovery drill**: complete the deferred MinIO validation for the M05 recovery matrix.
-- **Optional infrastructure**: validate Qdrant live if it becomes part of the deployment envelope; Redis, Phoenix, and the standalone worker remain outside the current staging topology.
-- **Real documents** remain blocked until storage/recovery gates close.
-
-## Security policy
-
-Do not open public issues containing secrets, API keys, connection strings, tokens, customer data, or real documents. Report security concerns privately to the repository maintainers. Do not upload real or customer documents to the staging environment; it is synthetic-only.
+| M16 | Secure Sessions & Refresh Rotation: Server-side session tracking, rotation, replay attack revocation, and hardened invitations. |
+| M17 | Durable Quota Reservations: PostgreSQL-backed atomic quota reservation lifecycle and concurrency enforcement. |
+| M18 | Retrieval & Citation Evaluation: Automated benchmark runner, dataset management, and deterministic retrieval/citation metrics. |
+| M19 | Tool Registry: Custom HTTP tool builder, JSON schemas, write-only credentials, and SSRF loopback protections. |
+| M20 | Model Context Protocol (MCP) & Approvals: MCP client, server handshake, tool discovery, human-in-the-loop approvals, and agentic runtime. |
+| M20.1–M20.2 | Unified Integrations UI: `/dashboard/integrations`, `/dashboard/tools`, assistant Tools & Integrations tab, and in-chat approval cards. |
+| M20.3–M20.5 | Integrated Staging Release: Git reconciliation (`a0cd98c`), Neon recovery checkpoint (`br-holy-bird-ar61gvun`), migration `0012 -> 0016`, Render deployments, and live synthetic acceptance (`M20_5_LIVE_TECHNICAL_PASS_MANUAL_UI_PENDING`). |
 
 ## Documentation
 
 - `docs/architecture/` — architecture, assistant configuration, provider, and retrieval notes
-- `docs/api/` — API overview
+- `docs/api/` — API overview and endpoint specifications
+- `docs/m20/` — M20 release reports, migration verification, and live acceptance evidence
 - `docs/runbooks/` — local development and operational runbooks
-- `docs/product/` — product scope, journeys, and capability documentation
 - `sdk/python/README.md` and `sdk/typescript/README.md` — SDK usage
 
 ## License

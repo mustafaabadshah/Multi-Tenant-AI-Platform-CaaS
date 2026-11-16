@@ -1,4 +1,4 @@
-"""Parser Registry for MM AI Platform."""
+"""Parser Registry for Multi-Tenant AI Platform (CaaS)."""
 
 from pathlib import Path
 

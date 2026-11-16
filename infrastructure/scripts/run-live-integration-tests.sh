@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# MM AI Platform — Portable Live Infrastructure Integration Runner (Linux / Bash)
+# Multi-Tenant AI Platform (CaaS) — Portable Live Infrastructure Integration Runner (Linux / Bash)
 # Target Services: PostgreSQL 16 + pgvector, Qdrant v1.9.0
 # Reference: M05 BLK-01 Live Infrastructure Validation & Recovery Drills
 # ==============================================================================
@@ -78,7 +78,7 @@ fi
 mkdir -p "$OUTPUT_DIR"
 
 echo "=========================================================="
-echo "  MM AI Platform — Live Infrastructure Integration Runner"
+echo "  Multi-Tenant AI Platform (CaaS) — Live Infrastructure Integration Runner"
 echo "  Target Mode: ${MODE}"
 echo "  Output Directory: ${OUTPUT_DIR}"
 echo "  Include Drills: $([[ "$SKIP_DRILLS" == false ]] && echo 'YES' || echo 'NO')"
@@ -339,7 +339,7 @@ fi
 # Summary Report
 # ==============================================================================
 echo -e "\n=========================================================="
-echo "  MM AI Platform — Live Test Execution Summary"
+echo "  Multi-Tenant AI Platform (CaaS) — Live Test Execution Summary"
 echo "=========================================================="
 echo "Mode: $MODE"
 if [[ "$MODE" == "postgres" || "$MODE" == "all" ]]; then

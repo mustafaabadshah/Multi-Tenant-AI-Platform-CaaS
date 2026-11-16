@@ -1,4 +1,4 @@
-"""Document parsers package for MM AI Platform."""
+"""Document parsers package for Multi-Tenant AI Platform (CaaS)."""
 
 from app.parsers.base import (
     DocumentParser,

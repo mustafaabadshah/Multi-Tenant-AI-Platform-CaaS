@@ -1,4 +1,4 @@
--- PostgreSQL Initialization Script for MM AI Platform
+-- PostgreSQL Initialization Script for Multi-Tenant AI Platform (CaaS)
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 

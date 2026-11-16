@@ -1,4 +1,4 @@
-# MM AI Platform — API Overview & Endpoint Reference
+# Multi-Tenant AI Platform (CaaS) — API Overview & Endpoint Reference
 
 **Status:** IMPLEMENTED AND VERIFIED  
 **Base URL:** `/api/v1`  

@@ -39,7 +39,7 @@ if (-not (Test-Path -Path $BackupDir)) {
 
 $Timestamp = (Get-Date).ToString("yyyyMMdd_HHmmss")
 Write-Host "=========================================================="
-Write-Host "  MM AI Platform - Paired Disaster Recovery Backup"
+Write-Host "  Multi-Tenant AI Platform (CaaS) - Paired Disaster Recovery Backup"
 Write-Host "  Timestamp: $Timestamp"
 Write-Host "=========================================================="
 

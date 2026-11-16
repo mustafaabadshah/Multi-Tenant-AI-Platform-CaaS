@@ -1,4 +1,4 @@
-# MM AI Platform — REST API Specification (v1)
+# Multi-Tenant AI Platform (CaaS) — REST API Specification (v1)
 
 ## 1. Global Conventions
 

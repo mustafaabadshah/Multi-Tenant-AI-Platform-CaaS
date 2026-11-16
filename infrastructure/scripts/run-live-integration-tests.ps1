@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Automated sequential live integration test runner for MM AI Platform (M05 BLK-01).
+    Automated sequential live integration test runner for Multi-Tenant AI Platform (CaaS) (M05 BLK-01).
 
 .DESCRIPTION
     Safely executes live container integration tests for PostgreSQL 16, pgvector,
@@ -47,7 +47,7 @@ if (-not (Test-Path $OutputDir)) {
 }
 
 Write-Host "=========================================================="
-Write-Host "  MM AI Platform -- Live Infrastructure Integration Runner"
+Write-Host "  Multi-Tenant AI Platform (CaaS) -- Live Infrastructure Integration Runner"
 Write-Host "  Execution Mode: $Mode"
 Write-Host "  Output Directory: $OutputDir"
 Write-Host "=========================================================="
@@ -221,7 +221,7 @@ if ($Mode -eq "qdrant" -or $Mode -eq "all") {
 }
 
 Write-Host "`n=========================================================="
-Write-Host "  MM AI Platform -- Live Test Execution Summary"
+Write-Host "  Multi-Tenant AI Platform (CaaS) -- Live Test Execution Summary"
 Write-Host "=========================================================="
 Write-Host "Mode: $Mode"
 if ($Mode -eq "postgres" -or $Mode -eq "all") {

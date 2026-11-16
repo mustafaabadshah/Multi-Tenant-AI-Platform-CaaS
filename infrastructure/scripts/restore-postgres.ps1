@@ -44,7 +44,7 @@ if (-not (Test-Path -Path $BackupFilePath)) {
 }
 
 Write-Host "=========================================================="
-Write-Host "  MM AI Platform - PostgreSQL Disaster Recovery Restore"
+Write-Host "  Multi-Tenant AI Platform (CaaS) - PostgreSQL Disaster Recovery Restore"
 Write-Host "  Source: $BackupFilePath"
 Write-Host "  Target: [REDACTED]"
 Write-Host "=========================================================="

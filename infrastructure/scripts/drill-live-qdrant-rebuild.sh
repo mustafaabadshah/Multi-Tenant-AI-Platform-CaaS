@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# MM AI Platform — Live Qdrant Application-Driven Rebuild Drill (Linux / Bash)
+# Multi-Tenant AI Platform (CaaS) — Live Qdrant Application-Driven Rebuild Drill (Linux / Bash)
 # Purpose: Real containerized validation of Qdrant collection recreation,
 #          vector upsert, collection deletion simulation, and complete
 #          rebuild driven through IngestionService.reindex_knowledge_base

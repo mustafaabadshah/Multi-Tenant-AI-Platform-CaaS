@@ -27,7 +27,7 @@ if (-not (Test-Path -Path $BackupFilePath)) {
 }
 
 Write-Host "=========================================================="
-Write-Host "  MM AI Platform - Backup Integrity Verification"
+Write-Host "  Multi-Tenant AI Platform (CaaS) - Backup Integrity Verification"
 Write-Host "  Target: $BackupFilePath"
 Write-Host "=========================================================="
 

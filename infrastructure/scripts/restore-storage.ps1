@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Restores the MM AI Platform storage directory from a verified backup archive.
+    Restores the Multi-Tenant AI Platform (CaaS) storage directory from a verified backup archive.
 
 .DESCRIPTION
     Safely restores tenant-isolated uploaded documents, verifies archive integrity,
@@ -45,7 +45,7 @@ if (-not (Test-Path -Path $ArchiveFilePath)) {
 }
 
 Write-Host "=========================================================="
-Write-Host "  MM AI Platform - Storage Disaster Recovery Restore"
+Write-Host "  Multi-Tenant AI Platform (CaaS) - Storage Disaster Recovery Restore"
 Write-Host "  Source Archive: $ArchiveFilePath"
 Write-Host "  Target Storage: $TargetStoragePath"
 Write-Host "=========================================================="

@@ -1,4 +1,4 @@
-# MM AI Platform — M05 Portable Live Infrastructure Runner Guide
+# Multi-Tenant AI Platform (CaaS) — M05 Portable Live Infrastructure Runner Guide
 
 ## 1. Overview & Purpose
 

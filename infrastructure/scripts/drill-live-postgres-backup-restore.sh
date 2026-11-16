@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# MM AI Platform — Live PostgreSQL Backup & Isolated Restore Drill (Linux / Bash)
+# Multi-Tenant AI Platform (CaaS) — Live PostgreSQL Backup & Isolated Restore Drill (Linux / Bash)
 # Purpose: Real containerized validation of pg_dump, sha256 manifest,
 #          restoration into an isolated disposable target DB, verification
 #          of schema, records, relational constraints, in-memory live BYOK

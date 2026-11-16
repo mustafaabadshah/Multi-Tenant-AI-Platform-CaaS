@@ -1,6 +1,6 @@
-# MM AI Platform — Local Development Setup Guide
+# Multi-Tenant AI Platform (CaaS) — Local Development Setup Guide
 
-This guide describes how to configure, run, and test the MM AI Platform in a local development environment.
+This guide describes how to configure, run, and test the Multi-Tenant AI Platform (CaaS) in a local development environment.
 
 ---
 

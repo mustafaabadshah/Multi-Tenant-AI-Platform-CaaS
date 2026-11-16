@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Creates a verified, timestamped custom-format PostgreSQL backup for MM AI Platform.
+    Creates a verified, timestamped custom-format PostgreSQL backup for Multi-Tenant AI Platform (CaaS).
 
 .DESCRIPTION
     Executes pg_dump using PostgreSQL custom format (-Fc), captures the current Alembic revision,
@@ -45,7 +45,7 @@ $ChecksumFilePath = "${BackupFilePath}.sha256"
 $ManifestFilePath = "${BackupFilePath}.manifest.json"
 
 Write-Host "=========================================================="
-Write-Host "  MM AI Platform - PostgreSQL Backup Procedure"
+Write-Host "  Multi-Tenant AI Platform (CaaS) - PostgreSQL Backup Procedure"
 Write-Host "  Timestamp: $Timestamp"
 Write-Host "  Destination: $BackupFilePath"
 Write-Host "=========================================================="

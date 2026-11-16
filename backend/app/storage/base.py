@@ -1,4 +1,4 @@
-"""Storage provider interface for MM AI Platform."""
+"""Storage provider interface for Multi-Tenant AI Platform (CaaS)."""
 
 import re
 import uuid

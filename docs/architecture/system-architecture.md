@@ -1,4 +1,4 @@
-# MM AI Platform — System Architecture
+# Multi-Tenant AI Platform (CaaS) — System Architecture
 
 **Status:** IMPLEMENTED AND VERIFIED  
 **Version:** 1.0 (M05 Milestone Release)  
@@ -8,7 +8,7 @@
 
 ## 1. System Overview
 
-The **MM AI Platform** (Conversational AI-as-a-Service / CaaS) is a secure, multi-tenant enterprise platform that allows organizations to create specialized AI assistants grounded in private knowledge bases. It features strict multi-tenant isolation, department-level ACLs, asynchronous document processing, hybrid retrieval (pgvector + PostgreSQL FTS + optional Qdrant), BYOK provider management, and PDF citation inspection with bounding box overlays.
+The **Multi-Tenant AI Platform (CaaS)** (Conversational AI-as-a-Service / CaaS) is a secure, multi-tenant enterprise platform that allows organizations to create specialized AI assistants grounded in private knowledge bases. It features strict multi-tenant isolation, department-level ACLs, asynchronous document processing, hybrid retrieval (pgvector + PostgreSQL FTS + optional Qdrant), BYOK provider management, and PDF citation inspection with bounding box overlays.
 
 ---
 

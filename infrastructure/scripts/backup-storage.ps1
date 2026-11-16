@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Creates a verified, timestamped archive backup of the MM AI Platform storage directory.
+    Creates a verified, timestamped archive backup of the Multi-Tenant AI Platform (CaaS) storage directory.
 
 .DESCRIPTION
     Archives all tenant-isolated uploaded files (PDF, DOCX, XLSX, images, etc.),
@@ -50,7 +50,7 @@ $ChecksumFilePath = "${ArchiveFilePath}.sha256"
 $ManifestFilePath = "${ArchiveFilePath}.manifest.json"
 
 Write-Host "=========================================================="
-Write-Host "  MM AI Platform - Storage Disaster Recovery Backup"
+Write-Host "  Multi-Tenant AI Platform (CaaS) - Storage Disaster Recovery Backup"
 Write-Host "  Timestamp:    $Timestamp"
 Write-Host "  Source:       $StoragePath"
 Write-Host "  Destination:  $ArchiveFilePath"

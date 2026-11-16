@@ -1,4 +1,4 @@
-# MM AI Platform — Implementation Roadmap
+# Multi-Tenant AI Platform (CaaS) — Implementation Roadmap
 
 This roadmap documents the phased evolution from the current core multi-tenant foundation to an enterprise-grade AI chatbot platform.
 
