@@ -2,7 +2,7 @@
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,6 +22,12 @@ from app.schemas.assistant import (
     MessageResponse,
     SendMessageRequest,
 )
+from app.schemas.conversation_attachment import (
+    AttachmentPromotionRequest,
+    AttachmentPromotionResponse,
+    ConversationAttachmentResponse,
+)
+from app.services.conversation_attachment_service import ConversationAttachmentService
 
 router = APIRouter(prefix="/conversations", tags=["Conversations & Chat"])
 
@@ -234,3 +240,172 @@ async def stream_message(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# Conversation Attachments API
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/{conversation_id}/attachments",
+    response_model=ConversationAttachmentResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_attachment(
+    conversation_id: uuid.UUID,
+    file: UploadFile = File(...),
+    ctx: TenantContext = Depends(require_permission(PermissionName.ASSISTANT_READ.value)),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ConversationAttachmentResponse:
+    """Upload a document directly into the chat conversation for scoped retrieval."""
+    conv_stmt = select(Conversation).where(
+        Conversation.id == conversation_id,
+        Conversation.tenant_id == ctx.tenant.id,
+    )
+    conv = (await db.execute(conv_stmt)).scalar_one_or_none()
+    if not conv or (not ctx.is_admin and conv.user_id != current_user.id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Uploaded file is empty")
+
+    svc = ConversationAttachmentService(db, ctx.tenant.id)
+    try:
+        att = await svc.upload_attachment(
+            conversation_id=conversation_id,
+            uploader_user_id=current_user.id,
+            filename=file.filename or "uploaded_document",
+            content=content,
+            declared_content_type=file.content_type,
+        )
+        return ConversationAttachmentResponse.model_validate(att)
+    except ValueError as v_err:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(v_err))
+
+
+@router.get(
+    "/{conversation_id}/attachments",
+    response_model=list[ConversationAttachmentResponse],
+)
+async def list_attachments(
+    conversation_id: uuid.UUID,
+    ctx: TenantContext = Depends(require_permission(PermissionName.ASSISTANT_READ.value)),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[ConversationAttachmentResponse]:
+    """List all attachments in an authorized conversation."""
+    conv_stmt = select(Conversation).where(
+        Conversation.id == conversation_id,
+        Conversation.tenant_id == ctx.tenant.id,
+    )
+    conv = (await db.execute(conv_stmt)).scalar_one_or_none()
+    if not conv or (not ctx.is_admin and conv.user_id != current_user.id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+
+    svc = ConversationAttachmentService(db, ctx.tenant.id)
+    attachments = await svc.list_attachments(conversation_id)
+    return [ConversationAttachmentResponse.model_validate(a) for a in attachments]
+
+
+@router.get(
+    "/{conversation_id}/attachments/{attachment_id}",
+    response_model=ConversationAttachmentResponse,
+)
+async def get_attachment(
+    conversation_id: uuid.UUID,
+    attachment_id: uuid.UUID,
+    ctx: TenantContext = Depends(require_permission(PermissionName.ASSISTANT_READ.value)),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ConversationAttachmentResponse:
+    """Retrieve details of a specific conversation attachment."""
+    svc = ConversationAttachmentService(db, ctx.tenant.id)
+    att = await svc.get_attachment(conversation_id, attachment_id)
+    if not att:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found")
+    return ConversationAttachmentResponse.model_validate(att)
+
+
+@router.get(
+    "/{conversation_id}/attachments/{attachment_id}/download",
+)
+async def download_attachment(
+    conversation_id: uuid.UUID,
+    attachment_id: uuid.UUID,
+    ctx: TenantContext = Depends(require_permission(PermissionName.ASSISTANT_READ.value)),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Download the raw binary file for an authorized conversation attachment."""
+    svc = ConversationAttachmentService(db, ctx.tenant.id)
+    try:
+        att, data = await svc.get_attachment_bytes(conversation_id, attachment_id)
+        return Response(
+            content=data,
+            media_type=att.content_type,
+            headers={"Content-Disposition": f'attachment; filename="{att.filename}"'},
+        )
+    except ValueError as v_err:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(v_err))
+
+
+@router.delete(
+    "/{conversation_id}/attachments/{attachment_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_attachment(
+    conversation_id: uuid.UUID,
+    attachment_id: uuid.UUID,
+    ctx: TenantContext = Depends(require_permission(PermissionName.ASSISTANT_READ.value)),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Delete an attachment and its chunks from the conversation."""
+    svc = ConversationAttachmentService(db, ctx.tenant.id)
+    deleted = await svc.delete_attachment(conversation_id, attachment_id)
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found")
+
+
+@router.post(
+    "/{conversation_id}/attachments/{attachment_id}/promote",
+    response_model=AttachmentPromotionResponse,
+)
+async def promote_attachment(
+    conversation_id: uuid.UUID,
+    attachment_id: uuid.UUID,
+    payload: AttachmentPromotionRequest,
+    ctx: TenantContext = Depends(require_permission(PermissionName.DOCUMENT_UPLOAD.value)),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AttachmentPromotionResponse:
+    """Promote a conversation attachment into a permanent Knowledge Base document."""
+    conv_stmt = select(Conversation).where(
+        Conversation.id == conversation_id,
+        Conversation.tenant_id == ctx.tenant.id,
+    )
+    conv = (await db.execute(conv_stmt)).scalar_one_or_none()
+    if not conv or (not ctx.is_admin and conv.user_id != current_user.id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+
+    svc = ConversationAttachmentService(db, ctx.tenant.id)
+    try:
+        att, doc = await svc.promote_to_knowledge_base(
+            conversation_id=conversation_id,
+            attachment_id=attachment_id,
+            target_kb_id=payload.knowledge_base_id,
+            actor_user_id=current_user.id,
+        )
+        return AttachmentPromotionResponse(
+            attachment_id=att.id,
+            knowledge_base_id=payload.knowledge_base_id,
+            document_id=doc.id,
+            status="PROMOTED",
+            message=f"Attachment '{att.filename}' promoted successfully to Knowledge Base.",
+        )
+    except ValueError as v_err:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(v_err))
+

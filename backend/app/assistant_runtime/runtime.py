@@ -230,6 +230,22 @@ class AssistantRuntime:
             retrieval_span.finish()
             trace.retrieved_chunk_count = len(retrieved_results)
 
+        # 4b. Chat-Scoped Conversation Attachment Retrieval (M22)
+        if not is_public:
+            try:
+                from app.services.conversation_attachment_service import ConversationAttachmentService
+                att_svc = ConversationAttachmentService(self.session, self.tenant_id)
+                att_results = await att_svc.search_attachment_chunks(
+                    conversation_id=conversation_id,
+                    query=user_message,
+                    top_k=4,
+                )
+                if att_results:
+                    # Place conversation attachment chunks at the front for grounded chat focus
+                    retrieved_results = att_results + retrieved_results
+            except Exception as att_err:
+                logger.warning(f"Error searching conversation attachments: {att_err}")
+
         # 5. Assemble Context & Citations with 4-Tier Trust Hierarchy
         ctx_span = trace.start_span("context_assembly")
         messages, citations_data = build_rag_context(

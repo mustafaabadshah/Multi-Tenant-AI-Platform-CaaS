@@ -9,8 +9,17 @@ import {
   MessageItem,
   MessageCitationItem,
   ToolApprovalItem,
+  ConversationAttachmentItem,
+  KnowledgeBaseItem,
+  VoicePreferenceItem,
 } from "@/lib/api";
 import { dedupeCitations } from "@/lib/citations";
+import {
+  BrowserSpeechRecognizer,
+  BrowserSpeechSynthesizer,
+  VoiceMode,
+  cleanTextForSpeech,
+} from "@/lib/speech";
 import {
   Bot,
   Plus,
@@ -29,6 +38,15 @@ import {
   Layers,
   Sparkles,
   ShieldAlert,
+  Paperclip,
+  Mic,
+  MicOff,
+  Volume2,
+  VolumeX,
+  Bookmark,
+  Upload,
+  AlertCircle,
+  FileUp,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
@@ -39,12 +57,10 @@ import EmptyState from "@/components/ui/EmptyState";
 import Badge from "@/components/ui/Badge";
 import MarkdownRenderer from "@/components/chat/MarkdownRenderer";
 
-
-
 export default function ConversationsWorkspacePage() {
   const { user, activeWorkspace } = useAuth();
 
-  // State
+  // Core State
   const [assistants, setAssistants] = useState<AssistantItem[]>([]);
   const [selectedAssistantFilter, setSelectedAssistantFilter] = useState<string>("ALL");
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
@@ -62,6 +78,23 @@ export default function ConversationsWorkspacePage() {
   const [creatingChat, setCreatingChat] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // M22: Attachments State
+  const [attachments, setAttachments] = useState<ConversationAttachmentItem[]>([]);
+  const [loadingAttachments, setLoadingAttachments] = useState(false);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBaseItem[]>([]);
+  const [promoteAttachment, setPromoteAttachment] = useState<ConversationAttachmentItem | null>(null);
+  const [targetKbId, setTargetKbId] = useState<string>("");
+  const [promoteTitle, setPromoteTitle] = useState<string>("");
+  const [isPromoting, setIsPromoting] = useState(false);
+
+  // M23 & M24: Speech & Voice State
+  const [voiceMode, setVoiceMode] = useState<VoiceMode>("TEXT");
+  const [isListening, setIsListening] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
+  const [speechError, setSpeechError] = useState<string | null>(null);
+
   // Rename & Delete state
   const [editingConvId, setEditingConvId] = useState<string | null>(null);
   const [renameTitle, setRenameTitle] = useState("");
@@ -71,21 +104,71 @@ export default function ConversationsWorkspacePage() {
   // Citation inspection modal
   const [inspectCitation, setInspectCitation] = useState<MessageCitationItem | null>(null);
 
+  // Refs
   const abortControllerRef = useRef<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const speechRecognizerRef = useRef<BrowserSpeechRecognizer | null>(null);
+  const speechSynthesizerRef = useRef<BrowserSpeechSynthesizer | null>(null);
+  const voiceModeRef = useRef<VoiceMode>(voiceMode);
+  voiceModeRef.current = voiceMode;
 
-  // 1. Fetch Assistants and Conversations on Workspace load
+  // 1. Initialize Speech Engines
+  useEffect(() => {
+    const recognizer = new BrowserSpeechRecognizer("en-US");
+    const synthesizer = new BrowserSpeechSynthesizer();
+
+    recognizer.onStateChange((listening) => {
+      setIsListening(listening);
+      if (!listening) {
+        setSpeechError(null);
+      }
+    });
+
+    recognizer.onError((err) => {
+      setSpeechError(err);
+      setIsListening(false);
+    });
+
+    synthesizer.onSpeakingChange((speaking) => {
+      setIsSpeaking(speaking);
+      if (!speaking) {
+        setSpeakingMsgId(null);
+      }
+    });
+
+    speechRecognizerRef.current = recognizer;
+    speechSynthesizerRef.current = synthesizer;
+
+    // Load user voice preferences if available
+    api.getVoicePreferences()
+      .then((pref) => {
+        if (pref?.voice_mode) {
+          setVoiceMode(pref.voice_mode as VoiceMode);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      recognizer.abort();
+      synthesizer.cancel();
+    };
+  }, []);
+
+  // 2. Fetch Assistants, Knowledge Bases, and Conversations on Workspace load
   useEffect(() => {
     async function init() {
       if (!activeWorkspace) return;
       try {
         setLoadingConvList(true);
-        const [astList, convList] = await Promise.all([
+        const [astList, convList, kbList] = await Promise.all([
           api.listAssistants(),
           api.listConversations(),
+          api.listKnowledgeBases().catch(() => []),
         ]);
         setAssistants(astList);
         setConversations(convList);
+        setKnowledgeBases(kbList);
         if (convList.length > 0) {
           setActiveConversation(convList[0]);
         } else {
@@ -100,31 +183,45 @@ export default function ConversationsWorkspacePage() {
     init();
   }, [activeWorkspace]);
 
-  // 2. Fetch Messages when active conversation changes
+  // 3. Fetch Messages & Attachments when active conversation changes
   useEffect(() => {
-    async function loadConvMessages() {
+    // Stop ongoing speech on conversation switch
+    speechSynthesizerRef.current?.cancel();
+    speechRecognizerRef.current?.stop();
+    setIsSpeaking(false);
+    setIsListening(false);
+    setSpeakingMsgId(null);
+
+    async function loadConvData() {
       if (!activeConversation) {
         setMessages([]);
         setPendingApprovals([]);
+        setAttachments([]);
         return;
       }
       try {
         setLoadingMessages(true);
+        setLoadingAttachments(true);
         setErrorMessage(null);
-        const [msgList, apprs] = await Promise.all([
+
+        const [msgList, apprs, atts] = await Promise.all([
           api.listMessages(activeConversation.id),
           api.listPendingApprovals(activeConversation.id).catch(() => []),
+          api.listConversationAttachments(activeConversation.id).catch(() => []),
         ]);
+
         setMessages(msgList);
         setPendingApprovals(apprs || []);
+        setAttachments(atts || []);
       } catch (err) {
-        console.error("Failed to load messages", err);
-        setErrorMessage("Failed to load message history for this conversation.");
+        console.error("Failed to load conversation details", err);
+        setErrorMessage("Failed to load details for this conversation.");
       } finally {
         setLoadingMessages(false);
+        setLoadingAttachments(false);
       }
     }
-    loadConvMessages();
+    loadConvData();
   }, [activeConversation]);
 
   // Auto-scroll to bottom
@@ -147,6 +244,22 @@ export default function ConversationsWorkspacePage() {
       return matchesSearch && matchesAssistant;
     });
   }, [conversations, searchQuery, selectedAssistantFilter]);
+
+  // Setup recognizer transcript callback
+  useEffect(() => {
+    if (!speechRecognizerRef.current) return;
+    speechRecognizerRef.current.onTranscript((transcript: string, isFinal: boolean) => {
+      if (voiceModeRef.current === "DICTATION") {
+        setInputMessage(transcript);
+      } else if (voiceModeRef.current === "VOICE_CONVERSATION") {
+        setInputMessage(transcript);
+        if (isFinal && transcript.trim()) {
+          speechRecognizerRef.current?.stop();
+          handleSendMessageWithText(transcript.trim());
+        }
+      }
+    });
+  }, []);
 
   // Create new conversation
   const handleCreateNewChat = async (targetAssistantId?: string) => {
@@ -182,11 +295,9 @@ export default function ConversationsWorkspacePage() {
     }
     try {
       const updated = await api.updateConversation(convId, { title: renameTitle.trim() });
-      setConversations((prev) =>
-        prev.map((c) => (c.id === convId ? { ...c, title: updated.title } : c))
-      );
+      setConversations((prev) => prev.map((c) => (c.id === convId ? updated : c)));
       if (activeConversation?.id === convId) {
-        setActiveConversation((prev) => (prev ? { ...prev, title: updated.title } : null));
+        setActiveConversation(updated);
       }
     } catch (err) {
       console.error("Failed to rename conversation", err);
@@ -214,14 +325,121 @@ export default function ConversationsWorkspacePage() {
     }
   };
 
-  // Send Message & Stream SSE response
-  const handleSendMessage = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!inputMessage.trim() || streaming) return;
+  // M22: File Upload Handler
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0 || !activeConversation) return;
+
+    const file = files[0];
+    try {
+      setUploadingAttachment(true);
+      setErrorMessage(null);
+      const created = await api.uploadConversationAttachment(activeConversation.id, file);
+      setAttachments((prev) => [created, ...prev]);
+    } catch (err: any) {
+      console.error("Failed to upload conversation attachment", err);
+      setErrorMessage(err.message || "Failed to upload document.");
+    } finally {
+      setUploadingAttachment(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  };
+
+  // M22: Delete Attachment Handler
+  const handleDeleteAttachment = async (attachmentId: string) => {
+    if (!activeConversation) return;
+    try {
+      await api.deleteConversationAttachment(activeConversation.id, attachmentId);
+      setAttachments((prev) => prev.filter((a) => a.id !== attachmentId));
+    } catch (err) {
+      console.error("Failed to delete attachment", err);
+    }
+  };
+
+  // M22: Promote Attachment Handler
+  const handlePromoteAttachment = async () => {
+    if (!activeConversation || !promoteAttachment || !targetKbId) return;
+    try {
+      setIsPromoting(true);
+      const res = await api.promoteConversationAttachment(
+        activeConversation.id,
+        promoteAttachment.id,
+        targetKbId,
+        promoteTitle.trim() || undefined
+      );
+      setAttachments((prev) =>
+        prev.map((a) =>
+          a.id === promoteAttachment.id
+            ? {
+                ...a,
+                is_promoted: true,
+                promoted_knowledge_base_id: res.knowledge_base_id,
+                promoted_document_id: res.document_id,
+                promoted_at: res.promoted_at,
+              }
+            : a
+        )
+      );
+      setPromoteAttachment(null);
+      setTargetKbId("");
+      setPromoteTitle("");
+    } catch (err: any) {
+      console.error("Failed to promote attachment", err);
+      setErrorMessage(err.message || "Failed to promote document to Knowledge Base.");
+    } finally {
+      setIsPromoting(false);
+    }
+  };
+
+  // M23 & M24: Toggle Microphone
+  const handleToggleMic = () => {
+    if (!speechRecognizerRef.current) return;
+    if (isListening) {
+      speechRecognizerRef.current.stop();
+    } else {
+      setSpeechError(null);
+      speechRecognizerRef.current.start();
+    }
+  };
+
+  // M23: Speak individual assistant message
+  const handleToggleSpeakMessage = (msgId: string, text: string) => {
+    const synthesizer = speechSynthesizerRef.current;
+    if (!synthesizer) return;
+
+    if (speakingMsgId === msgId && isSpeaking) {
+      synthesizer.cancel();
+      setSpeakingMsgId(null);
+      return;
+    }
+
+    setSpeakingMsgId(msgId);
+    synthesizer.speak(text, {
+      onEnd: () => {
+        setSpeakingMsgId(null);
+      },
+      onError: () => {
+        setSpeakingMsgId(null);
+      },
+    });
+  };
+
+  // M23: Stop Speech
+  const handleStopSpeaking = () => {
+    speechSynthesizerRef.current?.cancel();
+    setIsSpeaking(false);
+    setSpeakingMsgId(null);
+  };
+
+  // Core Send & Stream SSE response with text parameter support
+  const handleSendMessageWithText = async (customPrompt?: string) => {
+    const textToSend = (customPrompt ?? inputMessage).trim();
+    if (!textToSend || streaming) return;
 
     let conv = activeConversation;
     if (!conv) {
-      // Auto-create conversation with first assistant
       if (assistants.length === 0) {
         alert("Please create an assistant first.");
         return;
@@ -229,7 +447,7 @@ export default function ConversationsWorkspacePage() {
       try {
         conv = await api.createConversation({
           assistant_id: assistants[0].id,
-          title: inputMessage.slice(0, 30) + (inputMessage.length > 30 ? "..." : ""),
+          title: textToSend.slice(0, 30) + (textToSend.length > 30 ? "..." : ""),
         });
         setConversations((prev) => [conv!, ...prev]);
         setActiveConversation(conv);
@@ -239,7 +457,6 @@ export default function ConversationsWorkspacePage() {
       }
     }
 
-    const userPrompt = inputMessage.trim();
     setInputMessage("");
 
     // Optimistically push user message
@@ -247,8 +464,8 @@ export default function ConversationsWorkspacePage() {
       id: "temp-user-" + Date.now(),
       conversation_id: conv.id,
       sender_type: "user",
-      content: userPrompt,
-      token_count: Math.ceil(userPrompt.length / 4),
+      content: textToSend,
+      token_count: Math.ceil(textToSend.length / 4),
       created_at: new Date().toISOString(),
       citations: [],
     };
@@ -278,7 +495,7 @@ export default function ConversationsWorkspacePage() {
             Authorization: `Bearer ${token}`,
             "X-Tenant-ID": tenantId,
           },
-          body: JSON.stringify({ content: userPrompt }),
+          body: JSON.stringify({ content: textToSend }),
           signal: abortController.signal,
         }
       );
@@ -364,6 +581,19 @@ export default function ConversationsWorkspacePage() {
           citations: accumulatedCitations,
         };
         setMessages((prev) => [...prev, finalAssistantMsg]);
+
+        // M24: Automated TTS in LISTEN or VOICE_CONVERSATION modes
+        const currentMode = voiceModeRef.current;
+        if (currentMode === "LISTEN" || currentMode === "VOICE_CONVERSATION") {
+          speechSynthesizerRef.current?.speak(accumulatedText, {
+            onEnd: () => {
+              // In Voice Conversation mode: if no pending approvals are blocking, resume listening
+              if (voiceModeRef.current === "VOICE_CONVERSATION" && pendingApprovals.length === 0) {
+                speechRecognizerRef.current?.start();
+              }
+            },
+          });
+        }
       }
     } catch (err: any) {
       if (err.name !== "AbortError") {
@@ -379,7 +609,7 @@ export default function ConversationsWorkspacePage() {
       setStreamingContent("");
       setStreamingCitations([]);
       abortControllerRef.current = null;
-      // Reload actual persisted messages and pending approvals from backend database
+
       if (conv?.id) {
         try {
           const [freshMessages, freshApprs] = await Promise.all([
@@ -401,6 +631,11 @@ export default function ConversationsWorkspacePage() {
     }
   };
 
+  const handleSendMessage = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    await handleSendMessageWithText();
+  };
+
   const handleApproveTool = async (approval: ToolApprovalItem) => {
     setApprovingIds((prev) => new Set(prev).add(approval.id));
     try {
@@ -411,7 +646,8 @@ export default function ConversationsWorkspacePage() {
         setMessages(fresh);
       }
     } catch (err: any) {
-      alert(err.message || "Failed to approve tool action.");
+      console.error("Failed to approve tool execution", err);
+      alert(`Approval execution failed: ${err.message}`);
     } finally {
       setApprovingIds((prev) => {
         const next = new Set(prev);
@@ -422,63 +658,50 @@ export default function ConversationsWorkspacePage() {
   };
 
   const handleDenyTool = async (approval: ToolApprovalItem) => {
-    setApprovingIds((prev) => new Set(prev).add(approval.id));
     try {
       await api.denyTool(approval.id);
       setPendingApprovals((prev) => prev.filter((a) => a.id !== approval.id));
-      if (activeConversation) {
-        const fresh = await api.listMessages(activeConversation.id);
-        setMessages(fresh);
-      }
     } catch (err: any) {
-      alert(err.message || "Failed to deny tool action.");
-    } finally {
-      setApprovingIds((prev) => {
-        const next = new Set(prev);
-        next.delete(approval.id);
-        return next;
-      });
+      console.error("Failed to deny tool", err);
     }
   };
 
   const handleStopStreaming = () => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
-      setStreaming(false);
-      if (streamingContent.trim() && activeConversation) {
-        const stoppedMsg: MessageItem = {
-          id: "asst-stopped-" + Date.now(),
-          conversation_id: activeConversation.id,
-          sender_type: "assistant",
-          content: streamingContent + " [Stopped by user]",
-          token_count: Math.ceil(streamingContent.length / 4),
-          created_at: new Date().toISOString(),
-          citations: streamingCitations,
-        };
-        setMessages((prev) => [...prev, stoppedMsg]);
-      }
-      setStreamingContent("");
-      setStreamingCitations([]);
     }
+    speechSynthesizerRef.current?.cancel();
+    setStreaming(false);
+  };
+
+  // Change Voice Mode
+  const handleSelectVoiceMode = (mode: VoiceMode) => {
+    setVoiceMode(mode);
+    if (mode === "TEXT") {
+      speechRecognizerRef.current?.stop();
+      speechSynthesizerRef.current?.cancel();
+    } else if (mode === "VOICE_CONVERSATION") {
+      speechRecognizerRef.current?.start();
+    }
+    api.updateVoicePreferences({ voice_mode: mode }).catch(() => {});
   };
 
   return (
-    <div className="h-[calc(100vh-8rem)] flex rounded-xl border border-gray-200 bg-white overflow-hidden shadow-xs">
-      {/* 1. LEFT PANE: Conversation History & Assistant Selector */}
-      <div className="w-80 border-r border-gray-200 flex flex-col bg-gray-50/60 shrink-0">
-        {/* Top Action Bar */}
-        <div className="p-3 border-b border-gray-200 bg-white space-y-2">
+    <div className="flex h-[calc(100vh-64px)] overflow-hidden bg-white">
+      {/* 1. LEFT SIDEBAR: Conversations List */}
+      <div className="w-80 border-r border-gray-200 flex flex-col bg-gray-50/50 shrink-0">
+        <div className="p-4 border-b border-gray-200 space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
               <MessageSquare size={16} className="text-blue-600" />
-              <span>Conversations</span>
+              <span>Chats</span>
             </h2>
             <Button
               variant="primary"
               size="xs"
               icon={Plus}
               onClick={() => handleCreateNewChat()}
-              isLoading={creatingChat}
+              disabled={creatingChat || assistants.length === 0}
             >
               New Chat
             </Button>
@@ -489,60 +712,82 @@ export default function ConversationsWorkspacePage() {
             <select
               value={selectedAssistantFilter}
               onChange={(e) => setSelectedAssistantFilter(e.target.value)}
-              className="w-full px-2.5 py-1.5 text-xs bg-white border border-gray-300 rounded-lg text-gray-800 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+              className="w-full text-xs bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-gray-700 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-medium appearance-none cursor-pointer pr-7"
             >
               <option value="ALL">All Assistants ({assistants.length})</option>
-              {assistants.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name} ({a.llm_provider || "auto"})
+              {assistants.map((ast) => (
+                <option key={ast.id} value={ast.id}>
+                  {ast.name} ({ast.llm_provider})
                 </option>
               ))}
             </select>
+            <ChevronDown
+              size={13}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+            />
           </div>
 
           {/* Search Box */}
           <div className="relative">
-            <Search size={14} className="absolute left-2.5 top-2.5 text-gray-400" />
+            <Search
+              size={13}
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400"
+            />
             <input
               type="text"
-              placeholder="Search conversations..."
+              placeholder="Filter chats..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-gray-300 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+              className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-gray-200 rounded-lg text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500"
             />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                <X size={12} />
+              </button>
+            )}
           </div>
         </div>
 
         {/* Conversation List */}
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
           {loadingConvList ? (
-            <div className="flex flex-col items-center justify-center py-12 text-gray-400">
-              <Spinner size="md" />
-              <p className="text-xs mt-2">Loading chats...</p>
+            <div className="py-8 flex justify-center">
+              <Spinner size="sm" />
             </div>
           ) : filteredConversations.length === 0 ? (
-            <div className="text-center py-10 px-3">
-              <MessageSquare size={28} className="mx-auto mb-2 text-gray-300" />
-              <p className="text-xs text-gray-500 font-medium">No conversations found</p>
-              <p className="text-[11px] text-gray-400 mt-1">Start a new chat to begin prompting.</p>
+            <div className="text-center py-8 px-4">
+              <p className="text-xs text-gray-400">No conversations found.</p>
+              <Button
+                variant="ghost"
+                size="xs"
+                onClick={() => handleCreateNewChat()}
+                className="mt-2 text-blue-600"
+              >
+                Start your first chat
+              </Button>
             </div>
           ) : (
             filteredConversations.map((conv) => {
               const isSelected = activeConversation?.id === conv.id;
+              const isEditing = editingConvId === conv.id;
               const convAssistant = assistants.find((a) => a.id === conv.assistant_id);
 
               return (
                 <div
                   key={conv.id}
                   onClick={() => setActiveConversation(conv)}
-                  className={`group relative p-2.5 rounded-lg border text-left transition-colors cursor-pointer ${
+                  className={`group relative flex flex-col p-2.5 rounded-xl text-left transition-all cursor-pointer border ${
                     isSelected
-                      ? "bg-white border-blue-500 shadow-xs ring-1 ring-blue-500/20"
-                      : "bg-white/70 border-gray-200 hover:bg-white hover:border-gray-300"
+                      ? "bg-white border-blue-500 shadow-xs"
+                      : "bg-transparent border-transparent hover:bg-white/80 hover:border-gray-200"
                   }`}
                 >
-                  <div className="flex items-start justify-between gap-1">
-                    {editingConvId === conv.id ? (
+                  <div className="flex items-center justify-between gap-1">
+                    {isEditing ? (
                       <input
                         type="text"
                         autoFocus
@@ -565,7 +810,6 @@ export default function ConversationsWorkspacePage() {
                       </h4>
                     )}
 
-                    {/* Quick hover actions */}
                     <div className="hidden group-hover:flex items-center gap-0.5 shrink-0 bg-white/90 pl-1">
                       <button
                         type="button"
@@ -611,7 +855,7 @@ export default function ConversationsWorkspacePage() {
         </div>
       </div>
 
-      {/* 2. RIGHT PANE: First-Class Active Chat Canvas */}
+      {/* 2. RIGHT PANE: Chat Canvas */}
       <div className="flex-1 flex flex-col min-w-0 bg-white">
         {activeConversation ? (
           <>
@@ -636,7 +880,64 @@ export default function ConversationsWorkspacePage() {
                 </div>
               </div>
 
+              {/* Mode Selector & Action Buttons */}
               <div className="flex items-center gap-2">
+                {/* Voice Mode Selector */}
+                <div className="flex items-center p-0.5 rounded-lg bg-gray-100 border border-gray-200 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => handleSelectVoiceMode("TEXT")}
+                    className={`px-2 py-1 rounded-md font-medium transition-colors flex items-center gap-1 ${
+                      voiceMode === "TEXT"
+                        ? "bg-white text-gray-900 shadow-xs"
+                        : "text-gray-500 hover:text-gray-900"
+                    }`}
+                    title="Text Mode: keyboard input and text responses"
+                  >
+                    <MessageSquare size={13} />
+                    <span className="hidden sm:inline">Text</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectVoiceMode("DICTATION")}
+                    className={`px-2 py-1 rounded-md font-medium transition-colors flex items-center gap-1 ${
+                      voiceMode === "DICTATION"
+                        ? "bg-white text-blue-600 shadow-xs"
+                        : "text-gray-500 hover:text-gray-900"
+                    }`}
+                    title="Dictation Mode: microphone to editable text"
+                  >
+                    <Mic size={13} />
+                    <span className="hidden sm:inline">Dictate</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectVoiceMode("LISTEN")}
+                    className={`px-2 py-1 rounded-md font-medium transition-colors flex items-center gap-1 ${
+                      voiceMode === "LISTEN"
+                        ? "bg-white text-emerald-600 shadow-xs"
+                        : "text-gray-500 hover:text-gray-900"
+                    }`}
+                    title="Listen Mode: answers read aloud with TTS"
+                  >
+                    <Volume2 size={13} />
+                    <span className="hidden sm:inline">Listen</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectVoiceMode("VOICE_CONVERSATION")}
+                    className={`px-2 py-1 rounded-md font-medium transition-colors flex items-center gap-1 ${
+                      voiceMode === "VOICE_CONVERSATION"
+                        ? "bg-white text-purple-600 shadow-xs font-semibold"
+                        : "text-gray-500 hover:text-gray-900"
+                    }`}
+                    title="Voice Conversation Mode: voice input and spoken answers"
+                  >
+                    <Sparkles size={13} />
+                    <span className="hidden sm:inline">Voice Chat</span>
+                  </button>
+                </div>
+
                 <Button
                   variant="secondary"
                   size="xs"
@@ -649,37 +950,64 @@ export default function ConversationsWorkspacePage() {
               </div>
             </div>
 
-            {/* Error Banner */}
-            {errorMessage && (
-              <div className="px-6 py-2.5 bg-red-50 border-b border-red-200 text-xs text-red-700 flex items-center justify-between">
-                <span>{errorMessage}</span>
+            {/* Error Notification Banner */}
+            {(errorMessage || speechError) && (
+              <div className="px-6 py-2 bg-rose-50 border-b border-rose-100 flex items-center justify-between text-xs text-rose-700">
+                <span className="flex items-center gap-1.5">
+                  <AlertCircle size={14} className="shrink-0" />
+                  <span>{errorMessage || speechError}</span>
+                </span>
                 <button
                   type="button"
-                  onClick={() => setErrorMessage(null)}
-                  className="text-red-500 hover:text-red-700"
+                  onClick={() => {
+                    setErrorMessage(null);
+                    setSpeechError(null);
+                  }}
+                  className="text-rose-500 hover:text-rose-700"
                 >
-                  <X size={14} />
+                  <X size={13} />
                 </button>
               </div>
             )}
 
-            {/* Message Thread History */}
-            <div className="flex-1 p-6 overflow-y-auto space-y-5">
+            {/* Speaking Status Pill */}
+            {isSpeaking && (
+              <div className="px-6 py-1.5 bg-blue-50 border-b border-blue-100 flex items-center justify-between text-xs text-blue-700">
+                <div className="flex items-center gap-2">
+                  <Volume2 size={14} className="animate-pulse text-blue-600" />
+                  <span className="font-medium">Speaking response aloud...</span>
+                </div>
+                <Button
+                  variant="outline"
+                  size="xs"
+                  icon={VolumeX}
+                  onClick={handleStopSpeaking}
+                  className="text-blue-700 border-blue-200 hover:bg-blue-100"
+                >
+                  Stop Speaking
+                </Button>
+              </div>
+            )}
+
+            {/* Messages Scroll View */}
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
               {loadingMessages ? (
-                <div className="flex items-center justify-center py-20 text-gray-400">
+                <div className="py-12 flex justify-center">
                   <Spinner size="md" />
                 </div>
               ) : messages.length === 0 && !streaming ? (
-                <div className="text-center py-24 max-w-md mx-auto">
-                  <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-3">
-                    <Bot size={24} />
+                <div className="h-full flex flex-col items-center justify-center text-center p-8 text-gray-400 space-y-3">
+                  <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-500 flex items-center justify-center">
+                    <Sparkles size={24} />
                   </div>
-                  <h4 className="text-base font-semibold text-gray-900 mb-1">
-                    Ready to assist
-                  </h4>
-                  <p className="text-xs text-gray-500 mb-4">
-                    Send a question to begin. Responses will ground automatically in connected tenant knowledge bases with provenance citations.
-                  </p>
+                  <div>
+                    <h4 className="text-sm font-semibold text-gray-700">
+                      Start your conversation with {activeAssistant?.name}
+                    </h4>
+                    <p className="text-xs text-gray-400 max-w-sm mt-1">
+                      Type a message, speak via microphone, or attach documents to ask grounded questions.
+                    </p>
+                  </div>
                 </div>
               ) : (
                 messages.map((msg) => {
@@ -699,6 +1027,21 @@ export default function ConversationsWorkspacePage() {
                             minute: "2-digit",
                           })}
                         </span>
+                        {/* Speaker Button on Assistant Messages */}
+                        {!isUser && (
+                          <button
+                            type="button"
+                            onClick={() => handleToggleSpeakMessage(msg.id, msg.content)}
+                            title={speakingMsgId === msg.id && isSpeaking ? "Stop" : "Listen aloud"}
+                            className="p-1 rounded text-gray-400 hover:text-blue-600 hover:bg-gray-100 transition-colors"
+                          >
+                            {speakingMsgId === msg.id && isSpeaking ? (
+                              <VolumeX size={12} className="text-rose-500 animate-pulse" />
+                            ) : (
+                              <Volume2 size={12} />
+                            )}
+                          </button>
+                        )}
                       </div>
 
                       <div
@@ -860,10 +1203,124 @@ export default function ConversationsWorkspacePage() {
               <div ref={messagesEndRef} />
             </div>
 
+            {/* Attachment Chips Drawer (Above Input) */}
+            {attachments.length > 0 && (
+              <div className="px-6 py-2 border-t border-gray-100 bg-gray-50/70 flex items-center gap-2 overflow-x-auto">
+                <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider shrink-0 flex items-center gap-1">
+                  <Paperclip size={12} />
+                  <span>Attachments ({attachments.length}):</span>
+                </span>
+                <div className="flex items-center gap-2">
+                  {attachments.map((att) => (
+                    <div
+                      key={att.id}
+                      className="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-white border border-gray-200 text-xs shadow-xs shrink-0"
+                    >
+                      <FileText size={13} className="text-blue-500 shrink-0" />
+                      <span className="font-medium text-gray-800 truncate max-w-[140px]" title={att.original_filename}>
+                        {att.original_filename}
+                      </span>
+                      <span className="text-[10px] text-gray-400 font-mono">
+                        {(att.file_size / 1024).toFixed(0)} KB
+                      </span>
+
+                      {/* Status indicator */}
+                      {att.status === "READY" ? (
+                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 font-medium">
+                          Ready
+                        </span>
+                      ) : att.status === "PROCESSING" ? (
+                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-50 text-amber-700 font-medium animate-pulse">
+                          Indexing...
+                        </span>
+                      ) : (
+                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-rose-50 text-rose-700 font-medium">
+                          Failed
+                        </span>
+                      )}
+
+                      {/* Promote to KB action */}
+                      {att.is_promoted ? (
+                        <span className="text-[10px] flex items-center gap-0.5 text-blue-600 font-medium" title="Promoted to Knowledge Base">
+                          <Check size={11} />
+                          <span>Saved to KB</span>
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPromoteAttachment(att);
+                            setPromoteTitle(att.original_filename);
+                            if (knowledgeBases.length > 0) {
+                              setTargetKbId(knowledgeBases[0].id);
+                            }
+                          }}
+                          className="text-[11px] text-blue-600 hover:text-blue-800 font-medium hover:underline flex items-center gap-0.5"
+                          title="Promote document to Knowledge Base"
+                        >
+                          <Bookmark size={11} />
+                          <span>Save to KB</span>
+                        </button>
+                      )}
+
+                      {/* Delete attachment */}
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteAttachment(att.id)}
+                        className="text-gray-400 hover:text-rose-600 p-0.5 rounded transition-colors"
+                        title="Remove attachment from chat"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Bottom Input Area */}
             <div className="p-4 border-t border-gray-200 bg-white">
               <form onSubmit={handleSendMessage} className="space-y-2">
                 <div className="relative flex items-center">
+                  {/* Hidden File Input for Paperclip */}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    className="hidden"
+                    accept=".pdf,.docx,.txt,.csv"
+                    onChange={handleFileUpload}
+                  />
+
+                  {/* Attachment & Mic Controls (Left of Textarea) */}
+                  <div className="absolute left-2 flex items-center gap-1 z-10">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploadingAttachment || streaming}
+                      className="p-1.5 rounded-lg text-gray-500 hover:text-blue-600 hover:bg-gray-100 transition-colors"
+                      title="Attach document (PDF, DOCX, TXT, CSV)"
+                    >
+                      {uploadingAttachment ? (
+                        <Spinner size="sm" />
+                      ) : (
+                        <Paperclip size={16} />
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleToggleMic}
+                      className={`p-1.5 rounded-lg transition-colors ${
+                        isListening
+                          ? "bg-rose-100 text-rose-600 animate-pulse ring-2 ring-rose-400/50"
+                          : "text-gray-500 hover:text-blue-600 hover:bg-gray-100"
+                      }`}
+                      title={isListening ? "Stop listening" : "Speak message via microphone"}
+                    >
+                      {isListening ? <MicOff size={16} /> : <Mic size={16} />}
+                    </button>
+                  </div>
+
                   <textarea
                     rows={1}
                     value={inputMessage}
@@ -874,9 +1331,13 @@ export default function ConversationsWorkspacePage() {
                         handleSendMessage();
                       }
                     }}
-                    placeholder={`Message ${activeAssistant?.name || "Assistant"}...`}
+                    placeholder={
+                      isListening
+                        ? "Listening... speak now"
+                        : `Message ${activeAssistant?.name || "Assistant"}...`
+                    }
                     disabled={streaming}
-                    className="w-full resize-none pl-4 pr-24 py-2.5 text-sm bg-gray-50 border border-gray-300 rounded-xl text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-blue-600 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+                    className="w-full resize-none pl-20 pr-24 py-2.5 text-sm bg-gray-50 border border-gray-300 rounded-xl text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-blue-600 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
                   />
 
                   <div className="absolute right-2 flex items-center gap-1">
@@ -896,7 +1357,7 @@ export default function ConversationsWorkspacePage() {
                         variant="primary"
                         size="xs"
                         icon={Send}
-                        disabled={!inputMessage.trim()}
+                        disabled={!inputMessage.trim() && !isListening}
                       >
                         Send
                       </Button>
@@ -905,10 +1366,10 @@ export default function ConversationsWorkspacePage() {
                 </div>
 
                 <div className="flex items-center justify-between text-[11px] text-gray-400 px-1">
-                  <span>Enter to send · Shift+Enter for new line</span>
+                  <span>Enter to send · Shift+Enter for new line · Mic & Document aware</span>
                   <span className="flex items-center gap-1 text-gray-500">
                     <Sparkles size={12} className="text-blue-500" />
-                    <span>Multi-Tenant RAG Grounded</span>
+                    <span>Multimodal Agentic Runtime</span>
                   </span>
                 </div>
               </form>
@@ -982,6 +1443,82 @@ export default function ConversationsWorkspacePage() {
                 onClick={() => setInspectCitation(null)}
               >
                 Close
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* M22: Knowledge Base Promotion Modal */}
+      {promoteAttachment && (
+        <Modal
+          isOpen={true}
+          onClose={() => setPromoteAttachment(null)}
+          title="Promote Document to Knowledge Base"
+          description="Permanently index this conversation attachment into a shared Knowledge Base."
+          maxWidth="md"
+        >
+          <div className="space-y-4">
+            <div className="p-3 rounded-lg bg-gray-50 border border-gray-200 text-xs space-y-1">
+              <div className="font-semibold text-gray-800">{promoteAttachment.original_filename}</div>
+              <div className="text-gray-500 font-mono">
+                {(promoteAttachment.file_size / 1024).toFixed(0)} KB · {promoteAttachment.chunk_count} chunks extracted
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-xs font-medium text-gray-700">
+                Destination Knowledge Base
+              </label>
+              {knowledgeBases.length === 0 ? (
+                <p className="text-xs text-rose-600">
+                  No Knowledge Bases found in this workspace. Please create a Knowledge Base first.
+                </p>
+              ) : (
+                <select
+                  value={targetKbId}
+                  onChange={(e) => setTargetKbId(e.target.value)}
+                  className="w-full text-xs bg-white border border-gray-300 rounded-lg p-2 text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                >
+                  {knowledgeBases.map((kb) => (
+                    <option key={kb.id} value={kb.id}>
+                      {kb.name} ({kb.status || "ACTIVE"})
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-xs font-medium text-gray-700">
+                Document Title (Optional)
+              </label>
+              <input
+                type="text"
+                value={promoteTitle}
+                onChange={(e) => setPromoteTitle(e.target.value)}
+                placeholder={promoteAttachment.original_filename}
+                className="w-full text-xs bg-white border border-gray-300 rounded-lg p-2 text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-gray-100">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setPromoteAttachment(null)}
+                disabled={isPromoting}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                icon={Bookmark}
+                onClick={handlePromoteAttachment}
+                disabled={isPromoting || !targetKbId}
+              >
+                {isPromoting ? "Promoting..." : "Promote to KB"}
               </Button>
             </div>
           </div>

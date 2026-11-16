@@ -1958,6 +1958,93 @@ class ApiClient {
       method: "POST",
     }, true);
   }
+
+  // Conversation Attachments (M22)
+  async listConversationAttachments(conversationId: string): Promise<ConversationAttachmentItem[]> {
+    return this.request<ConversationAttachmentItem[]>(`/conversations/${conversationId}/attachments`, { method: "GET" }, true);
+  }
+
+  async uploadConversationAttachment(conversationId: string, file: File): Promise<ConversationAttachmentItem> {
+    const formData = new FormData();
+    formData.append("file", file);
+    return this.request<ConversationAttachmentItem>(`/conversations/${conversationId}/attachments`, {
+      method: "POST",
+      body: formData,
+    }, true);
+  }
+
+  async getConversationAttachment(conversationId: string, attachmentId: string): Promise<ConversationAttachmentItem> {
+    return this.request<ConversationAttachmentItem>(`/conversations/${conversationId}/attachments/${attachmentId}`, { method: "GET" }, true);
+  }
+
+  async deleteConversationAttachment(conversationId: string, attachmentId: string): Promise<void> {
+    return this.request<void>(`/conversations/${conversationId}/attachments/${attachmentId}`, { method: "DELETE" }, true);
+  }
+
+  async promoteConversationAttachment(
+    conversationId: string,
+    attachmentId: string,
+    targetKnowledgeBaseId: string,
+    title?: string
+  ): Promise<AttachmentPromotionResult> {
+    return this.request<AttachmentPromotionResult>(`/conversations/${conversationId}/attachments/${attachmentId}/promote`, {
+      method: "POST",
+      body: JSON.stringify({
+        target_knowledge_base_id: targetKnowledgeBaseId,
+        title: title || undefined,
+      }),
+    }, true);
+  }
+
+  // Speech & Voice (M23)
+  async getVoicePreferences(): Promise<VoicePreferenceItem> {
+    return this.request<VoicePreferenceItem>("/speech/preferences", { method: "GET" }, true);
+  }
+
+  async updateVoicePreferences(payload: Partial<VoicePreferenceItem>): Promise<VoicePreferenceItem> {
+    return this.request<VoicePreferenceItem>("/speech/preferences", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }, true);
+  }
+}
+
+export interface ConversationAttachmentItem {
+  id: string;
+  tenant_id: string;
+  conversation_id: string;
+  message_id?: string | null;
+  uploader_user_id: string;
+  original_filename: string;
+  content_type: string;
+  file_size: number;
+  sha256_hash: string;
+  status: "UPLOADED" | "PROCESSING" | "READY" | "FAILED";
+  extraction_status: "PENDING" | "EXTRACTED" | "EMPTY" | "FAILED";
+  chunk_count: number;
+  is_promoted: boolean;
+  promoted_knowledge_base_id?: string | null;
+  promoted_document_id?: string | null;
+  promoted_at?: string | null;
+  error_message?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AttachmentPromotionResult {
+  attachment_id: string;
+  is_promoted: boolean;
+  knowledge_base_id: string;
+  document_id: string;
+  promoted_at: string;
+}
+
+export interface VoicePreferenceItem {
+  voice_mode: "TEXT" | "DICTATION" | "LISTEN" | "VOICE_CONVERSATION";
+  preferred_voice?: string | null;
+  speech_rate: number;
+  auto_read: boolean;
+  language: string;
 }
 
 export const api = new ApiClient();

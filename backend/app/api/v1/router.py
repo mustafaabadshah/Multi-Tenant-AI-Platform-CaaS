@@ -23,6 +23,7 @@ from app.api.v1.roles import router as roles_router
 from app.api.v1.templates import router as templates_router
 from app.api.v1.approvals import router as approvals_router
 from app.api.v1.mcp import router as mcp_router
+from app.api.v1.speech import router as speech_router
 from app.api.v1.tenants import router as tenants_router
 from app.api.v1.tools import router as tools_router
 from app.api.v1.vector_stores import router as vector_stores_router
@@ -44,6 +45,7 @@ api_v1_router.include_router(publishing_router)
 api_v1_router.include_router(developer_router)
 api_v1_router.include_router(public_chat_router)
 api_v1_router.include_router(conversations_router)
+api_v1_router.include_router(speech_router)
 api_v1_router.include_router(knowledge_router)
 api_v1_router.include_router(documents_router)
 api_v1_router.include_router(ingestion_router)

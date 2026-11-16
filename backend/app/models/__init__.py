@@ -12,7 +12,15 @@ from app.models.config import (
     ProviderConnection,
     VectorStoreConfig,
 )
-from app.models.conversation import Conversation, Message, MessageAttachment, MessageCitation
+from app.models.conversation import (
+    Conversation,
+    ConversationAttachment,
+    ConversationAttachmentChunk,
+    Message,
+    MessageAttachment,
+    MessageCitation,
+    VoicePreference,
+)
 from app.models.department import Department
 from app.models.evaluation import EvalDataset, EvalDatasetItem, EvalRun, EvalRunResult
 from app.models.group import EmployeeGroup, GroupMembership
@@ -56,6 +64,8 @@ __all__ = [
 
     "ChunkEmbedding",
     "Conversation",
+    "ConversationAttachment",
+    "ConversationAttachmentChunk",
     "Department",
     "Document",
     "DocumentChunk",
@@ -100,4 +110,5 @@ __all__ = [
 
     "User",
     "VectorStoreConfig",
+    "VoicePreference",
 ]
