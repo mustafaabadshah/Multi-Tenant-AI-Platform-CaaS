@@ -142,6 +142,14 @@ class Settings(BaseSettings):
     MCP_ENABLED: bool = True
     MCP_ALLOWED_HOSTS: str = "*"
 
+    # Web Intelligence & Agentic Web Tools (Milestone 27)
+    WEB_READER_ENABLED: bool = True
+    WEB_SEARCH_ENABLED: bool = True
+    WEB_KB_IMPORT_ENABLED: bool = True
+    WEB_ALLOWED_DOMAINS: str = ""
+    BRAVE_SEARCH_API_KEY: str | None = None
+    WEB_MAX_PAGES_PER_REQUEST: int = 5
+
 
 @lru_cache
 def get_settings() -> Settings:

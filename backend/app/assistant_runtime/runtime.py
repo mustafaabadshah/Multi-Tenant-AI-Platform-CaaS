@@ -246,6 +246,34 @@ class AssistantRuntime:
             except Exception as att_err:
                 logger.warning(f"Error searching conversation attachments: {att_err}")
 
+        # 4c. Conversation-Scoped Web Context Retrieval (M27)
+        if not is_public:
+            try:
+                from app.services.web.context_store import get_web_context_store
+                web_store = get_web_context_store()
+                cached_pages = web_store.get_pages(conversation_id)
+                if cached_pages:
+                    for cp in cached_pages:
+                        if not any(r.document_id == str(cp.canonical_url) for r in retrieved_results):
+                            web_chunk = VectorSearchResult(
+                                chunk_id=str(uuid.uuid5(uuid.NAMESPACE_URL, cp.canonical_url)),
+                                document_id=str(cp.canonical_url),
+                                document_title=cp.title or cp.hostname,
+                                knowledge_base_id=None,
+                                content=cp.extracted_text[:2000],
+                                score=0.95,
+                                metadata={
+                                    "source_type": "web",
+                                    "source_url": cp.canonical_url,
+                                    "domain": cp.hostname,
+                                    "title": cp.title,
+                                    "retrieved_at": cp.retrieved_at.isoformat(),
+                                },
+                            )
+                            retrieved_results.append(web_chunk)
+            except Exception as web_err:
+                logger.warning(f"Error loading conversation web context: {web_err}")
+
         # 5. Assemble Context & Citations with 4-Tier Trust Hierarchy
         ctx_span = trace.start_span("context_assembly")
         messages, citations_data = build_rag_context(
@@ -358,6 +386,7 @@ class AssistantRuntime:
         llm_config.tools = raw_tools
 
         full_content_chunks: list[str] = []
+        dynamic_citations: list[dict[str, Any]] = []
         gen_span = trace.start_span("provider_generation")
         gen_span.set_attribute("provider", asst.llm_provider)
         gen_span.set_attribute("model", asst.default_model or "auto")
@@ -445,6 +474,49 @@ class AssistantRuntime:
                         yield format_sse("tool_call_completed", {"tool_name": tc_name, "result_summary": summary[:500]})
                         messages.append(LLMMessage(role="tool", content=summary))
 
+                        # M27: Web Source Discovered Hook
+                        if tc_name == "web_read_url" and isinstance(exec_result, dict) and exec_result.get("status") == "SUCCESS":
+                            try:
+                                from app.services.web.context_store import get_web_context_store, WebPageContext
+                                from datetime import datetime, timezone
+                                web_store = get_web_context_store()
+                                canonical_url = exec_result.get("canonical_url") or exec_result.get("url") or tc_args.get("url", "")
+                                page_title = exec_result.get("title") or exec_result.get("hostname") or canonical_url
+                                web_store.store_page(
+                                    conversation_id=conversation_id,
+                                    page=WebPageContext(
+                                        canonical_url=canonical_url,
+                                        original_url=exec_result.get("original_url", canonical_url),
+                                        title=page_title,
+                                        extracted_text=exec_result.get("extracted_text", ""),
+                                        hostname=exec_result.get("hostname", ""),
+                                        content_type=exec_result.get("content_type", "text/html"),
+                                        retrieved_at=datetime.now(timezone.utc),
+                                    ),
+                                )
+                                yield format_sse("web_source_discovered", {
+                                    "url": canonical_url,
+                                    "title": page_title,
+                                    "domain": exec_result.get("hostname", ""),
+                                    "status": "SUCCESS",
+                                })
+                                cit_num = len(citations_data) + len(dynamic_citations) + 1
+                                dynamic_citations.append({
+                                    "id": str(uuid.uuid5(uuid.NAMESPACE_URL, canonical_url)),
+                                    "citation_num": cit_num,
+                                    "chunk_id": None,
+                                    "document_name": page_title[:255],
+                                    "page_number": None,
+                                    "heading_path": None,
+                                    "snippet": (exec_result.get("extracted_text") or "")[:300],
+                                    "citation_text": (exec_result.get("extracted_text") or "")[:300],
+                                    "source_type": "web",
+                                    "source_url": canonical_url,
+                                    "domain": exec_result.get("hostname", ""),
+                                })
+                            except Exception as c_err:
+                                logger.warning(f"Error recording web source: {c_err}")
+
                     except Exception as t_err:
                         duration_ms = int((time.perf_counter() - t_start) * 1000)
                         err_msg = str(t_err)
@@ -521,7 +593,8 @@ class AssistantRuntime:
         self.session.add(assistant_msg)
         await self.session.flush()
 
-        for c in citations_data:
+        all_citations_to_save = citations_data + dynamic_citations
+        for c in all_citations_to_save:
             citation_obj = MessageCitation(
                 id=uuid.uuid4(),
                 tenant_id=self.tenant_id,
@@ -529,7 +602,7 @@ class AssistantRuntime:
                 chunk_id=uuid.UUID(c["chunk_id"]) if c.get("chunk_id") else None,
                 document_name=c["document_name"],
                 citation_num=c["citation_num"],
-                citation_text=c["snippet"],
+                citation_text=c.get("snippet") or c.get("citation_text") or "",
             )
             self.session.add(citation_obj)
 

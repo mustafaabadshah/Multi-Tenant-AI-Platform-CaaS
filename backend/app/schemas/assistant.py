@@ -139,6 +139,9 @@ class MessageCitationResponse(BaseModel):
     snippet: Optional[str] = None
     score: Optional[float] = None
     bounding_box: Optional[dict[str, Any]] = None
+    source_type: Optional[str] = "document"
+    source_url: Optional[str] = None
+    domain: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

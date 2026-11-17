@@ -17,7 +17,11 @@ import { dedupeCitations } from "@/lib/citations";
 import {
   BrowserSpeechRecognizer,
   BrowserSpeechSynthesizer,
+  VoiceSessionController,
   VoiceMode,
+  RecognitionState,
+  VoiceSessionState,
+  TranscriptResult,
   cleanTextForSpeech,
 } from "@/lib/speech";
 import {
@@ -47,6 +51,8 @@ import {
   Upload,
   AlertCircle,
   FileUp,
+  Globe,
+  Activity,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
@@ -88,6 +94,14 @@ export default function ConversationsWorkspacePage() {
   const [promoteTitle, setPromoteTitle] = useState<string>("");
   const [isPromoting, setIsPromoting] = useState(false);
 
+  // M27: Web Source Save to Knowledge Base State
+  const [saveWebCitation, setSaveWebCitation] = useState<MessageCitationItem | null>(null);
+  const [saveWebKbId, setSaveWebKbId] = useState<string>("");
+  const [saveWebTitle, setSaveWebTitle] = useState<string>("");
+  const [saveWebMode, setSaveWebMode] = useState<"REFERENCE" | "FULL_CONTENT">("REFERENCE");
+  const [saveWebNotes, setSaveWebNotes] = useState<string>("");
+  const [isSavingWebSource, setIsSavingWebSource] = useState<boolean>(false);
+
   // M23 & M24: Speech & Voice State
   const [voiceMode, setVoiceMode] = useState<VoiceMode>("TEXT");
   const [isListening, setIsListening] = useState(false);
@@ -104,31 +118,68 @@ export default function ConversationsWorkspacePage() {
   // Citation inspection modal
   const [inspectCitation, setInspectCitation] = useState<MessageCitationItem | null>(null);
 
+  // M27.1 Speech and Voice Session States
+  const [recognitionState, setRecognitionState] = useState<RecognitionState>("IDLE");
+  const [voiceSessionState, setVoiceSessionState] = useState<VoiceSessionState>("INACTIVE");
+  const [voiceTranscript, setVoiceTranscript] = useState<string>("");
+  const [showAudioDiagnostics, setShowAudioDiagnostics] = useState<boolean>(false);
+  const [diagCapabilities, setDiagCapabilities] = useState<{
+    recognitionSupported: boolean;
+    synthesisSupported: boolean;
+    isSecure: boolean;
+    micPermission: string;
+    voicesCount: number;
+  }>({
+    recognitionSupported: false,
+    synthesisSupported: false,
+    isSecure: false,
+    micPermission: "prompt",
+    voicesCount: 0,
+  });
+  const [diagTesting, setDiagTesting] = useState<string | null>(null);
+
   // Refs
   const abortControllerRef = useRef<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const speechRecognizerRef = useRef<BrowserSpeechRecognizer | null>(null);
   const speechSynthesizerRef = useRef<BrowserSpeechSynthesizer | null>(null);
+  const voiceSessionRef = useRef<VoiceSessionController | null>(null);
   const voiceModeRef = useRef<VoiceMode>(voiceMode);
   voiceModeRef.current = voiceMode;
   const isSubmittingVoiceRef = useRef<boolean>(false);
+  const pendingApprovalsRef = useRef<ToolApprovalItem[]>([]);
+  pendingApprovalsRef.current = pendingApprovals;
+  const handleSendMessageWithTextRef = useRef<(text?: string) => Promise<void>>(async () => {});
 
-  // 1. Initialize Speech Engines
+  // 1. Initialize Speech Engines & Voice Session Controller
   useEffect(() => {
     const recognizer = new BrowserSpeechRecognizer("en-US");
     const synthesizer = new BrowserSpeechSynthesizer();
+    const voiceSession = new VoiceSessionController(recognizer, synthesizer);
 
-    recognizer.onStateChange((listening) => {
-      setIsListening(listening);
-      if (!listening) {
+    speechRecognizerRef.current = recognizer;
+    speechSynthesizerRef.current = synthesizer;
+    voiceSessionRef.current = voiceSession;
+
+    recognizer.onState((st) => {
+      setRecognitionState(st);
+      setIsListening(st === "LISTENING");
+      if (st === "LISTENING" || st === "IDLE") {
         setSpeechError(null);
       }
     });
 
-    recognizer.onError((err) => {
-      setSpeechError(err);
+    recognizer.onError((err: any) => {
+      setSpeechError(typeof err === "string" ? err : err.message);
       setIsListening(false);
+    });
+
+    recognizer.onTranscript((result: any) => {
+      const text = typeof result === "string" ? result : result.fullTranscript;
+      if (voiceModeRef.current === "DICTATION") {
+        setInputMessage(text);
+      }
     });
 
     synthesizer.onSpeakingChange((speaking) => {
@@ -138,19 +189,71 @@ export default function ConversationsWorkspacePage() {
       }
     });
 
-    speechRecognizerRef.current = recognizer;
-    speechSynthesizerRef.current = synthesizer;
+    voiceSession.onStateChange((st) => {
+      setVoiceSessionState(st);
+    });
+
+    voiceSession.onTranscript((text) => {
+      setVoiceTranscript(text);
+    });
+
+    voiceSession.setTurnSubmitHandler(async (spokenText) => {
+      await handleSendMessageWithTextRef.current(spokenText);
+    });
+
+    // Check capabilities for diagnostics
+    if (typeof window !== "undefined") {
+      const isSecure = window.isSecureContext ?? false;
+      const recSupported = recognizer.isSupported();
+      const synthSupported = synthesizer.isSupported();
+      const voicesCount = synthesizer.getVoices().length;
+
+      let micPerm = "unknown";
+      if (navigator?.permissions?.query) {
+        navigator.permissions
+          .query({ name: "microphone" as PermissionName })
+          .then((p) => {
+            micPerm = p.state;
+            setDiagCapabilities({
+              recognitionSupported: recSupported,
+              synthesisSupported: synthSupported,
+              isSecure,
+              micPermission: micPerm,
+              voicesCount,
+            });
+          })
+          .catch(() => {
+            setDiagCapabilities({
+              recognitionSupported: recSupported,
+              synthesisSupported: synthSupported,
+              isSecure,
+              micPermission: "prompt",
+              voicesCount,
+            });
+          });
+      } else {
+        setDiagCapabilities({
+          recognitionSupported: recSupported,
+          synthesisSupported: synthSupported,
+          isSecure,
+          micPermission: micPerm,
+          voicesCount,
+        });
+      }
+    }
 
     // Load user voice preferences if available
     api.getVoicePreferences()
       .then((pref) => {
         if (pref?.voice_mode) {
           setVoiceMode(pref.voice_mode as VoiceMode);
+          voiceModeRef.current = pref.voice_mode as VoiceMode;
         }
       })
       .catch(() => {});
 
     return () => {
+      voiceSession.endSession();
       recognizer.abort();
       synthesizer.cancel();
       isSubmittingVoiceRef.current = false;
@@ -188,11 +291,13 @@ export default function ConversationsWorkspacePage() {
   // 3. Fetch Messages & Attachments when active conversation changes
   useEffect(() => {
     // Stop ongoing speech on conversation switch
+    voiceSessionRef.current?.endSession();
     speechSynthesizerRef.current?.cancel();
     speechRecognizerRef.current?.stop();
     setIsSpeaking(false);
     setIsListening(false);
     setSpeakingMsgId(null);
+    setVoiceTranscript("");
     isSubmittingVoiceRef.current = false;
 
     async function loadConvData() {
@@ -247,26 +352,6 @@ export default function ConversationsWorkspacePage() {
       return matchesSearch && matchesAssistant;
     });
   }, [conversations, searchQuery, selectedAssistantFilter]);
-
-  // Setup recognizer transcript callback
-  useEffect(() => {
-    if (!speechRecognizerRef.current) return;
-    speechRecognizerRef.current.onTranscript((transcript: string, isFinal: boolean) => {
-      if (voiceModeRef.current === "VOICE_CONVERSATION") {
-        setInputMessage(transcript);
-        if (isFinal && transcript.trim() && !isSubmittingVoiceRef.current && !streaming) {
-          isSubmittingVoiceRef.current = true;
-          speechRecognizerRef.current?.stop();
-          handleSendMessageWithText(transcript.trim()).finally(() => {
-            isSubmittingVoiceRef.current = false;
-          });
-        }
-      } else {
-        // DICTATION, TEXT, and LISTEN modes all receive continuous transcript in input
-        setInputMessage(transcript);
-      }
-    });
-  }, [streaming]);
 
   // Create new conversation
   const handleCreateNewChat = async (targetAssistantId?: string) => {
@@ -366,6 +451,44 @@ export default function ConversationsWorkspacePage() {
   };
 
   // M22: Promote Attachment Handler
+  const handleOpenSaveWebSource = (cit: MessageCitationItem) => {
+    setSaveWebCitation(cit);
+    setSaveWebTitle(cit.document_name || "");
+    setSaveWebMode("REFERENCE");
+    setSaveWebNotes("");
+    if (knowledgeBases.length > 0) {
+      setSaveWebKbId(knowledgeBases[0].id);
+    }
+  };
+
+  const handleSaveWebSource = async () => {
+    if (!saveWebCitation || !saveWebKbId) return;
+    setIsSavingWebSource(true);
+    try {
+      const url = saveWebCitation.source_url || (saveWebCitation.document_name.startsWith("http") ? saveWebCitation.document_name : "");
+      if (!url) {
+        alert("No valid URL found for this web source.");
+        return;
+      }
+      await api.saveWebSourceToKB(
+        url,
+        saveWebKbId,
+        saveWebTitle.trim() || undefined,
+        saveWebMode,
+        saveWebNotes.trim() || undefined
+      );
+      alert("Web source successfully saved to Knowledge Base!");
+      setSaveWebCitation(null);
+      setSaveWebTitle("");
+      setSaveWebNotes("");
+    } catch (err: any) {
+      console.error("Failed to save web source to KB", err);
+      alert(`Failed to save to Knowledge Base: ${err.message}`);
+    } finally {
+      setIsSavingWebSource(false);
+    }
+  };
+
   const handlePromoteAttachment = async () => {
     if (!activeConversation || !promoteAttachment || !targetKbId) return;
     try {
@@ -400,37 +523,59 @@ export default function ConversationsWorkspacePage() {
     }
   };
 
-  // M23 & M24: Change Voice Mode
+  // M23, M24 & M27.1: Change Voice Mode
   const handleVoiceModeChange = async (newMode: VoiceMode) => {
     setVoiceMode(newMode);
     voiceModeRef.current = newMode;
-    if (newMode === "TEXT" && isListening) {
-      speechRecognizerRef.current?.stop();
-    } else if (newMode === "VOICE_CONVERSATION" && !isListening) {
-      setSpeechError(null);
-      speechRecognizerRef.current?.start();
-    }
+    setSpeechError(null);
+
+    // Cancel existing sessions cleanly on mode change
+    voiceSessionRef.current?.endSession();
+    speechRecognizerRef.current?.stop();
+    speechSynthesizerRef.current?.cancel();
+    setIsListening(false);
+    setIsSpeaking(false);
+    setVoiceTranscript("");
+
     try {
       await api.updateVoicePreferences({ voice_mode: newMode });
     } catch (_) {}
   };
 
-  // M23 & M24: Toggle Microphone
+  // M23, M24 & M27.1: Toggle Microphone
   const handleToggleMic = () => {
+    setSpeechError(null);
+
+    if (voiceMode === "VOICE_CONVERSATION") {
+      const session = voiceSessionRef.current;
+      if (!session) return;
+      if (voiceSessionState !== "INACTIVE") {
+        session.endSession();
+      } else {
+        session.startSession();
+      }
+      return;
+    }
+
+    // If currently in TEXT mode, clicking mic enters DICTATION mode
+    if (voiceMode === "TEXT") {
+      setVoiceMode("DICTATION");
+      voiceModeRef.current = "DICTATION";
+    }
+
     const recognizer = speechRecognizerRef.current;
     if (!recognizer) return;
-    if (isListening) {
+
+    if (!recognizer.isSupported()) {
+      setSpeechError(
+        "Speech recognition is not supported in this browser. Please use Google Chrome, Microsoft Edge, or Safari."
+      );
+      return;
+    }
+
+    if (recognitionState === "LISTENING" || recognitionState === "STARTING") {
       recognizer.stop();
     } else {
-      setSpeechError(null);
-      if (voiceMode === "TEXT") {
-        setVoiceMode("DICTATION");
-        voiceModeRef.current = "DICTATION";
-      }
-      if (!recognizer.isSupported()) {
-        setSpeechError("Speech recognition is not supported in this browser. Please use Google Chrome, Microsoft Edge, or Safari.");
-        return;
-      }
       const ok = recognizer.start();
       if (!ok) {
         setSpeechError("Could not start microphone. Please check browser microphone permissions.");
@@ -469,6 +614,7 @@ export default function ConversationsWorkspacePage() {
 
   // Core Send & Stream SSE response with text parameter support
   const handleSendMessageWithText = async (customPrompt?: string) => {
+    handleSendMessageWithTextRef.current = handleSendMessageWithText;
     const textToSend = (customPrompt ?? inputMessage).trim();
     if (!textToSend || streaming) return;
 
@@ -565,6 +711,22 @@ export default function ConversationsWorkspacePage() {
               if (eventType === "token") {
                 accumulatedText += data.delta ?? data.token ?? "";
                 setStreamingContent(accumulatedText);
+              } else if (eventType === "web_source_discovered") {
+                if (data.url) {
+                  const webCit: MessageCitationItem = {
+                    id: "web-" + Math.random().toString(36).substring(2, 9),
+                    citation_num: accumulatedCitations.length + 1,
+                    chunk_id: null,
+                    document_name: data.title || data.domain || data.url,
+                    citation_text: data.title || data.url,
+                    source_type: "web",
+                    source_url: data.url,
+                    domain: data.domain,
+                    page_number: null,
+                  };
+                  accumulatedCitations = dedupeCitations(accumulatedCitations, [webCit]);
+                  setStreamingCitations([...accumulatedCitations]);
+                }
               } else if (eventType === "citation" || eventType === "retrieval_complete") {
                 if (data.citations && Array.isArray(data.citations)) {
                   accumulatedCitations = dedupeCitations(accumulatedCitations, data.citations);
@@ -591,6 +753,7 @@ export default function ConversationsWorkspacePage() {
                   const exists = prev.some((a) => a.id === approvalItem.id);
                   return exists ? prev : [...prev, approvalItem];
                 });
+                voiceSessionRef.current?.notifyWaitingForApproval();
               } else if (eventType === "message_end") {
                 // Completed
               } else if (eventType === "message_error") {
@@ -616,26 +779,18 @@ export default function ConversationsWorkspacePage() {
         };
         setMessages((prev) => [...prev, finalAssistantMsg]);
 
-        // M24: Automated TTS in LISTEN or VOICE_CONVERSATION modes
+        // M24 & M27.1: Automated TTS in LISTEN or VOICE_CONVERSATION modes
         const currentMode = voiceModeRef.current;
-        if (currentMode === "LISTEN" || currentMode === "VOICE_CONVERSATION") {
-          // Explicitly stop microphone to prevent acoustic feedback loop
+        if (currentMode === "VOICE_CONVERSATION") {
+          if (pendingApprovalsRef.current.length > 0) {
+            voiceSessionRef.current?.notifyWaitingForApproval();
+          } else {
+            voiceSessionRef.current?.speakResponse(accumulatedText);
+          }
+        } else if (currentMode === "LISTEN") {
           speechRecognizerRef.current?.stop();
           setIsListening(false);
-          speechSynthesizerRef.current?.speak(accumulatedText, {
-            onEnd: () => {
-              setIsSpeaking(false);
-              setSpeakingMsgId(null);
-              // In Voice Conversation mode: if no pending approvals are blocking, resume listening
-              if (voiceModeRef.current === "VOICE_CONVERSATION" && pendingApprovals.length === 0) {
-                speechRecognizerRef.current?.start();
-              }
-            },
-            onError: () => {
-              setIsSpeaking(false);
-              setSpeakingMsgId(null);
-            },
-          });
+          speechSynthesizerRef.current?.speak(accumulatedText);
         }
       }
     } catch (err: any) {
@@ -683,10 +838,14 @@ export default function ConversationsWorkspacePage() {
     setApprovingIds((prev) => new Set(prev).add(approval.id));
     try {
       await api.approveTool(approval.id, approval.approval_token || "");
-      setPendingApprovals((prev) => prev.filter((a) => a.id !== approval.id));
+      const remaining = pendingApprovals.filter((a) => a.id !== approval.id);
+      setPendingApprovals(remaining);
       if (activeConversation) {
         const fresh = await api.listMessages(activeConversation.id);
         setMessages(fresh);
+      }
+      if (voiceModeRef.current === "VOICE_CONVERSATION" && remaining.length === 0) {
+        voiceSessionRef.current?.notifyApprovalResolved();
       }
     } catch (err: any) {
       console.error("Failed to approve tool execution", err);
@@ -703,7 +862,11 @@ export default function ConversationsWorkspacePage() {
   const handleDenyTool = async (approval: ToolApprovalItem) => {
     try {
       await api.denyTool(approval.id);
-      setPendingApprovals((prev) => prev.filter((a) => a.id !== approval.id));
+      const remaining = pendingApprovals.filter((a) => a.id !== approval.id);
+      setPendingApprovals(remaining);
+      if (voiceModeRef.current === "VOICE_CONVERSATION" && remaining.length === 0) {
+        voiceSessionRef.current?.notifyApprovalResolved();
+      }
     } catch (err: any) {
       console.error("Failed to deny tool", err);
     }
@@ -718,17 +881,58 @@ export default function ConversationsWorkspacePage() {
     isSubmittingVoiceRef.current = false;
   };
 
-  // Change Voice Mode
-  const handleSelectVoiceMode = (mode: VoiceMode) => {
-    setVoiceMode(mode);
-    isSubmittingVoiceRef.current = false;
-    if (mode === "TEXT") {
-      speechRecognizerRef.current?.stop();
-      speechSynthesizerRef.current?.cancel();
-    } else if (mode === "VOICE_CONVERSATION") {
-      speechRecognizerRef.current?.start();
+  // M27.1: Operator Audio Diagnostics Handlers
+  const handleTestMicrophone = async () => {
+    setDiagTesting("microphone");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      setTimeout(() => {
+        stream.getTracks().forEach((t) => t.stop());
+        setDiagTesting(null);
+        alert("Microphone test PASSED: Real audio stream opened successfully.");
+      }, 1000);
+    } catch (err: any) {
+      setDiagTesting(null);
+      alert(`Microphone test FAILED: ${err.message}`);
     }
-    api.updateVoicePreferences({ voice_mode: mode }).catch(() => {});
+  };
+
+  const handleTestSpeechRecognition = () => {
+    const rec = speechRecognizerRef.current;
+    if (!rec || !rec.isSupported()) {
+      alert("Speech recognition is UNSUPPORTED in this browser.");
+      return;
+    }
+    setDiagTesting("recognition");
+    rec.start();
+    setTimeout(() => {
+      rec.stop();
+      setDiagTesting(null);
+      alert("Speech recognition test triggered. Observe recognition status banner.");
+    }, 2500);
+  };
+
+  const handleTestSpeaker = () => {
+    const synth = speechSynthesizerRef.current;
+    if (!synth || !synth.isSupported()) {
+      alert("Speech synthesis is UNSUPPORTED in this browser.");
+      return;
+    }
+    setDiagTesting("speaker");
+    synth.testVoice(undefined, () => {
+      setDiagTesting(null);
+    });
+  };
+
+  const handleStopAllAudio = () => {
+    voiceSessionRef.current?.endSession();
+    speechSynthesizerRef.current?.cancel();
+    speechRecognizerRef.current?.stop();
+    setIsSpeaking(false);
+    setIsListening(false);
+    setSpeakingMsgId(null);
+    setVoiceTranscript("");
+    setDiagTesting(null);
   };
 
   return (
@@ -931,7 +1135,7 @@ export default function ConversationsWorkspacePage() {
                 <div className="flex items-center p-0.5 rounded-lg bg-gray-100 border border-gray-200 text-xs">
                   <button
                     type="button"
-                    onClick={() => handleSelectVoiceMode("TEXT")}
+                    onClick={() => handleVoiceModeChange("TEXT")}
                     className={`px-2 py-1 rounded-md font-medium transition-colors flex items-center gap-1 ${
                       voiceMode === "TEXT"
                         ? "bg-white text-gray-900 shadow-xs"
@@ -944,7 +1148,7 @@ export default function ConversationsWorkspacePage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleSelectVoiceMode("DICTATION")}
+                    onClick={() => handleVoiceModeChange("DICTATION")}
                     className={`px-2 py-1 rounded-md font-medium transition-colors flex items-center gap-1 ${
                       voiceMode === "DICTATION"
                         ? "bg-white text-blue-600 shadow-xs"
@@ -957,7 +1161,7 @@ export default function ConversationsWorkspacePage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleSelectVoiceMode("LISTEN")}
+                    onClick={() => handleVoiceModeChange("LISTEN")}
                     className={`px-2 py-1 rounded-md font-medium transition-colors flex items-center gap-1 ${
                       voiceMode === "LISTEN"
                         ? "bg-white text-emerald-600 shadow-xs"
@@ -970,7 +1174,7 @@ export default function ConversationsWorkspacePage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleSelectVoiceMode("VOICE_CONVERSATION")}
+                    onClick={() => handleVoiceModeChange("VOICE_CONVERSATION")}
                     className={`px-2 py-1 rounded-md font-medium transition-colors flex items-center gap-1 ${
                       voiceMode === "VOICE_CONVERSATION"
                         ? "bg-white text-purple-600 shadow-xs font-semibold"
@@ -1114,22 +1318,35 @@ export default function ConversationsWorkspacePage() {
                           <span className="text-[10px] uppercase font-semibold text-gray-400 mr-1">
                             Sources:
                           </span>
-                          {msg.citations.map((c) => (
-                            <button
-                              key={c.id || c.citation_num}
-                              type="button"
-                              onClick={() => setInspectCitation(c)}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium transition-colors cursor-pointer"
-                            >
-                              <FileText size={11} className="text-gray-500" />
-                              <span className="truncate max-w-[120px]">
-                                {c.document_name || "Document"}
-                              </span>
-                              <span className="text-[10px] text-gray-400">
-                                p.{c.page_number || 1}
-                              </span>
-                            </button>
-                          ))}
+                          {msg.citations.map((c) => {
+                            const isWeb = c.source_type === "web" || !!c.source_url;
+                            return (
+                              <button
+                                key={c.id || c.citation_num}
+                                type="button"
+                                onClick={() => setInspectCitation(c)}
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                                  isWeb
+                                    ? "bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200/60"
+                                    : "bg-gray-100 hover:bg-gray-200 text-gray-700"
+                                }`}
+                              >
+                                {isWeb ? (
+                                  <Globe size={11} className="text-emerald-600" />
+                                ) : (
+                                  <FileText size={11} className="text-gray-500" />
+                                )}
+                                <span className="truncate max-w-[130px]">
+                                  {c.document_name || "Document"}
+                                </span>
+                                {!isWeb && (
+                                  <span className="text-[10px] text-gray-400">
+                                    p.{c.page_number || 1}
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
@@ -1386,53 +1603,269 @@ export default function ConversationsWorkspacePage() {
                 </div>
 
                 {/* Speaking indicator / Stop speaking */}
-                {isSpeaking && (
-                  <div className="flex items-center gap-2 px-2.5 py-1 rounded-md bg-indigo-50 border border-indigo-200 text-indigo-700 animate-fadeIn text-[11px]">
-                    <Volume2 size={12} className="animate-pulse" />
-                    <span>Assistant is speaking...</span>
-                    <button
-                      type="button"
-                      onClick={handleStopSpeaking}
-                      className="ml-1 text-xs text-indigo-900 underline font-semibold hover:text-indigo-950"
-                    >
-                      Mute
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Active Listening Indicator */}
-              {isListening && (
-                <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs animate-fadeIn">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
-                    <Mic size={13} className="text-rose-600" />
-                    <span className="font-medium">
-                      Listening... speak into your microphone
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => speechRecognizerRef.current?.stop()}
-                      className="text-xs text-rose-800 font-semibold hover:underline"
-                    >
-                      Stop Listening
-                    </button>
-                    {inputMessage.trim() && (
+                <div className="flex items-center gap-2">
+                  {isSpeaking && (
+                    <div className="flex items-center gap-2 px-2.5 py-1 rounded-md bg-indigo-50 border border-indigo-200 text-indigo-700 animate-fadeIn text-[11px]">
+                      <Volume2 size={12} className="animate-pulse" />
+                      <span>Speaking...</span>
                       <button
                         type="button"
-                        onClick={() => {
-                          speechRecognizerRef.current?.stop();
-                          handleSendMessage();
-                        }}
-                        className="px-2 py-0.5 rounded bg-rose-600 text-white text-[11px] font-semibold hover:bg-rose-700"
+                        onClick={handleStopSpeaking}
+                        className="ml-1 text-xs text-indigo-900 underline font-semibold hover:text-indigo-950"
                       >
-                        Send Now
+                        Mute
                       </button>
-                    )}
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => setShowAudioDiagnostics((prev) => !prev)}
+                    className={`px-2 py-1 rounded-md text-[11px] font-medium flex items-center gap-1 transition-colors ${
+                      showAudioDiagnostics
+                        ? "bg-blue-100 text-blue-800 font-semibold"
+                        : "text-gray-500 hover:text-gray-800 hover:bg-gray-100"
+                    }`}
+                    title="Toggle Operator Audio Diagnostics"
+                  >
+                    <Activity size={12} />
+                    <span>Audio Diagnostics</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Operator Audio Diagnostics Panel */}
+              {showAudioDiagnostics && (
+                <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl space-y-2.5 text-xs text-gray-700 animate-fadeIn">
+                  <div className="flex items-center justify-between border-b border-gray-200 pb-1.5">
+                    <span className="font-semibold text-gray-900 flex items-center gap-1.5">
+                      <Activity size={13} className="text-blue-600" />
+                      Operator Audio Diagnostics
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowAudioDiagnostics(false)}
+                      className="text-gray-400 hover:text-gray-700"
+                    >
+                      <X size={13} />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+                    <div className="p-2 bg-white rounded border border-gray-200/80">
+                      <span className="text-gray-400 block text-[10px] uppercase font-semibold">Secure Context</span>
+                      <span className={diagCapabilities.isSecure ? "text-emerald-700 font-medium" : "text-amber-700 font-medium"}>
+                        {diagCapabilities.isSecure ? "YES (HTTPS/Local)" : "NO (Insecure)"}
+                      </span>
+                    </div>
+
+                    <div className="p-2 bg-white rounded border border-gray-200/80">
+                      <span className="text-gray-400 block text-[10px] uppercase font-semibold">Speech Recognition</span>
+                      <span className={diagCapabilities.recognitionSupported ? "text-emerald-700 font-medium" : "text-rose-700 font-medium"}>
+                        {diagCapabilities.recognitionSupported ? "Available" : "Not supported"}
+                      </span>
+                    </div>
+
+                    <div className="p-2 bg-white rounded border border-gray-200/80">
+                      <span className="text-gray-400 block text-[10px] uppercase font-semibold">Speech Synthesis</span>
+                      <span className={diagCapabilities.synthesisSupported ? "text-emerald-700 font-medium" : "text-rose-700 font-medium"}>
+                        {diagCapabilities.synthesisSupported ? `${diagCapabilities.voicesCount} voices loaded` : "Not supported"}
+                      </span>
+                    </div>
+
+                    <div className="p-2 bg-white rounded border border-gray-200/80">
+                      <span className="text-gray-400 block text-[10px] uppercase font-semibold">Engine State</span>
+                      <span className="text-blue-700 font-medium font-mono text-[10px]">
+                        STT: {recognitionState} | Voice: {voiceSessionState}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={handleTestMicrophone}
+                      disabled={diagTesting !== null}
+                      className="px-2.5 py-1 bg-white border border-gray-300 hover:bg-gray-100 rounded text-[11px] font-medium text-gray-700 disabled:opacity-50"
+                    >
+                      {diagTesting === "microphone" ? "Testing Mic..." : "Test Microphone"}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleTestSpeechRecognition}
+                      disabled={diagTesting !== null || !diagCapabilities.recognitionSupported}
+                      className="px-2.5 py-1 bg-white border border-gray-300 hover:bg-gray-100 rounded text-[11px] font-medium text-gray-700 disabled:opacity-50"
+                    >
+                      {diagTesting === "recognition" ? "Testing STT..." : "Test Speech Recognition"}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleTestSpeaker}
+                      disabled={diagTesting !== null || !diagCapabilities.synthesisSupported}
+                      className="px-2.5 py-1 bg-white border border-gray-300 hover:bg-gray-100 rounded text-[11px] font-medium text-gray-700 disabled:opacity-50"
+                    >
+                      {diagTesting === "speaker" ? "Speaking Sample..." : "Test Speaker"}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleStopAllAudio}
+                      className="px-2.5 py-1 bg-rose-50 border border-rose-200 hover:bg-rose-100 rounded text-[11px] font-medium text-rose-700 ml-auto"
+                    >
+                      Stop All Audio
+                    </button>
                   </div>
                 </div>
+              )}
+
+              {/* Dictation Mode Active Banner */}
+              {voiceMode === "DICTATION" && (recognitionState === "LISTENING" || recognitionState === "STARTING") && (
+                <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 text-xs animate-fadeIn">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-blue-500 animate-ping" />
+                    <Mic size={13} className="text-blue-600" />
+                    <span className="font-medium">
+                      Dictating... speak clearly into your microphone. Words appear in textarea.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => speechRecognizerRef.current?.stop()}
+                    className="text-xs text-blue-800 font-semibold hover:underline"
+                  >
+                    Stop Dictating
+                  </button>
+                </div>
+              )}
+
+              {/* Voice Chat Mode Status Cards */}
+              {voiceMode === "VOICE_CONVERSATION" && (
+                <>
+                  {voiceSessionState === "INACTIVE" && (
+                    <div className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 border border-blue-200/80 animate-fadeIn">
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-1.5 rounded-lg bg-blue-100/80 text-blue-700">
+                          <Sparkles size={14} />
+                        </div>
+                        <div>
+                          <span className="text-xs font-semibold text-gray-800 block">Voice Chat Ready</span>
+                          <span className="text-[11px] text-gray-500 block">
+                            Tap Start to begin continuous turn-based voice conversation.
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => voiceSessionRef.current?.startSession()}
+                        className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+                      >
+                        <Mic size={13} />
+                        <span>Start Voice Chat</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {(voiceSessionState === "LISTENING" || voiceSessionState === "STARTING" || voiceSessionState === "READY") && (
+                    <div className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-rose-50 border border-rose-200 text-xs animate-fadeIn">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
+                        <Mic size={14} className="text-rose-600" />
+                        <span className="font-semibold text-rose-800">Listening...</span>
+                        {voiceTranscript ? (
+                          <span className="text-rose-900 font-medium italic">"{voiceTranscript}"</span>
+                        ) : (
+                          <span className="text-rose-600 italic">speak your question clearly</span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => voiceSessionRef.current?.endSession()}
+                        className="text-xs text-rose-800 font-semibold hover:underline cursor-pointer"
+                      >
+                        End Voice Chat
+                      </button>
+                    </div>
+                  )}
+
+                  {(voiceSessionState === "TRANSCRIBING" || voiceSessionState === "SUBMITTING") && (
+                    <div className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-blue-50 border border-blue-200 text-xs text-blue-800 animate-fadeIn">
+                      <div className="flex items-center gap-2">
+                        <Spinner size="sm" />
+                        <span className="font-semibold">Submitting speech turn:</span>
+                        <span className="italic">"{voiceTranscript}"</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {voiceSessionState === "THINKING" && (
+                    <div className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-indigo-50 border border-indigo-200 text-xs text-indigo-800 animate-fadeIn">
+                      <div className="flex items-center gap-2">
+                        <Spinner size="sm" />
+                        <span className="font-semibold">Assistant is thinking...</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {voiceSessionState === "SPEAKING" && (
+                    <div className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-indigo-50 border border-indigo-200 text-xs text-indigo-800 animate-fadeIn">
+                      <div className="flex items-center gap-2">
+                        <Volume2 size={14} className="text-indigo-600 animate-pulse" />
+                        <span className="font-semibold">Assistant is speaking aloud...</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => voiceSessionRef.current?.stopAudio()}
+                          className="px-2 py-0.5 rounded bg-indigo-200 hover:bg-indigo-300 text-indigo-900 font-semibold text-[11px] cursor-pointer"
+                        >
+                          Mute Audio
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => voiceSessionRef.current?.endSession()}
+                          className="text-indigo-700 hover:underline text-[11px] cursor-pointer"
+                        >
+                          End Voice Chat
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {voiceSessionState === "WAITING_FOR_APPROVAL" && (
+                    <div className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-amber-50 border border-amber-300 text-xs text-amber-900 animate-fadeIn">
+                      <div className="flex items-center gap-2">
+                        <ShieldAlert size={14} className="text-amber-600" />
+                        <span className="font-semibold">Voice Paused:</span>
+                        <span>Tool execution requires authorization. Review and approve/deny in chat above.</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => voiceSessionRef.current?.endSession()}
+                        className="text-amber-800 hover:underline font-semibold cursor-pointer"
+                      >
+                        Cancel Voice Chat
+                      </button>
+                    </div>
+                  )}
+
+                  {voiceSessionState === "ERROR" && (
+                    <div className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-red-50 border border-red-200 text-xs text-red-800 animate-fadeIn">
+                      <div className="flex items-center gap-2">
+                        <AlertCircle size={14} className="text-red-600" />
+                        <span>Voice error detected. Check microphone permissions.</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => voiceSessionRef.current?.startSession()}
+                        className="font-semibold underline cursor-pointer"
+                      >
+                        Retry
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
 
               {/* Speech Error Banner */}
@@ -1579,42 +2012,222 @@ export default function ConversationsWorkspacePage() {
       )}
 
       {/* Citation Inspection Modal */}
-      {inspectCitation && (
+      {inspectCitation && (() => {
+        const isWeb = inspectCitation.source_type === "web" || !!inspectCitation.source_url;
+        const webUrl = inspectCitation.source_url || (inspectCitation.document_name.startsWith("http") ? inspectCitation.document_name : null);
+        return (
+          <Modal
+            isOpen={true}
+            onClose={() => setInspectCitation(null)}
+            title={`Citation [${inspectCitation.citation_num}]: ${inspectCitation.document_name || "Document"}`}
+            description={isWeb ? "Web Source · Verified Page Reference" : `Page ${inspectCitation.page_number || 1} · Verified Chunk Reference`}
+            maxWidth="lg"
+          >
+            <div className="space-y-4">
+              <div className="p-4 rounded-lg bg-gray-50 border border-gray-200">
+                <h5 className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">
+                  Referenced Excerpt
+                </h5>
+                <p className="text-xs text-gray-800 leading-relaxed font-mono whitespace-pre-wrap">
+                  {inspectCitation.citation_text || inspectCitation.snippet || "No text available"}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-xs text-gray-500">
+                <div>
+                  <span className="font-semibold block text-gray-700">
+                    {isWeb ? "Source Website:" : "Source Document:"}
+                  </span>
+                  <span className="truncate block">{inspectCitation.document_name}</span>
+                </div>
+                <div>
+                  <span className="font-semibold block text-gray-700">
+                    {isWeb ? "Source URL / Domain:" : "Page Reference:"}
+                  </span>
+                  {isWeb && webUrl ? (
+                    <a
+                      href={webUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:underline truncate block"
+                    >
+                      {inspectCitation.domain || webUrl}
+                    </a>
+                  ) : (
+                    <span>Page {inspectCitation.page_number || 1}</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-between items-center pt-2 border-t border-gray-100">
+                <div className="flex items-center gap-2">
+                  {isWeb && webUrl && (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="xs"
+                        icon={ExternalLink}
+                        onClick={() => window.open(webUrl, "_blank", "noopener,noreferrer")}
+                      >
+                        Open Source
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="xs"
+                        icon={Bookmark}
+                        onClick={() => {
+                          const cit = inspectCitation;
+                          setInspectCitation(null);
+                          handleOpenSaveWebSource(cit);
+                        }}
+                      >
+                        Save to KB
+                      </Button>
+                    </>
+                  )}
+                </div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setInspectCitation(null)}
+                >
+                  Close
+                </Button>
+              </div>
+            </div>
+          </Modal>
+        );
+      })()}
+
+      {/* M27: Save Web Source to Knowledge Base Modal */}
+      {saveWebCitation && (
         <Modal
           isOpen={true}
-          onClose={() => setInspectCitation(null)}
-          title={`Citation [${inspectCitation.citation_num}]: ${inspectCitation.document_name || "Document"}`}
-          description={`Page ${inspectCitation.page_number || 1} · Verified Chunk Reference`}
-          maxWidth="lg"
+          onClose={() => setSaveWebCitation(null)}
+          title="Save Web Source to Knowledge Base"
+          description="Index this external web reference into a shared Knowledge Base."
+          maxWidth="md"
         >
           <div className="space-y-4">
-            <div className="p-4 rounded-lg bg-gray-50 border border-gray-200">
-              <h5 className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">
-                Referenced Excerpt
-              </h5>
-              <p className="text-xs text-gray-800 leading-relaxed font-mono whitespace-pre-wrap">
-                {inspectCitation.citation_text || inspectCitation.snippet || "No text available"}
-              </p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 text-xs text-gray-500">
-              <div>
-                <span className="font-semibold block text-gray-700">Source Document:</span>
-                <span>{inspectCitation.document_name}</span>
+            <div className="p-3 rounded-lg bg-emerald-50/60 border border-emerald-200/80 text-xs space-y-1">
+              <div className="font-semibold text-emerald-950 flex items-center gap-1.5">
+                <Globe size={13} className="text-emerald-600" />
+                <span className="truncate">{saveWebCitation.document_name}</span>
               </div>
-              <div>
-                <span className="font-semibold block text-gray-700">Page Reference:</span>
-                <span>Page {inspectCitation.page_number || 1}</span>
+              <div className="text-emerald-700/80 font-mono text-[11px] truncate">
+                {saveWebCitation.source_url || (saveWebCitation.document_name.startsWith("http") ? saveWebCitation.document_name : "")}
               </div>
             </div>
 
-            <div className="flex justify-end pt-2 border-t border-gray-100">
+            <div className="space-y-2">
+              <label className="block text-xs font-medium text-gray-700">
+                Destination Knowledge Base
+              </label>
+              {knowledgeBases.length === 0 ? (
+                <p className="text-xs text-rose-600">
+                  No Knowledge Bases found in this workspace. Please create a Knowledge Base first.
+                </p>
+              ) : (
+                <select
+                  value={saveWebKbId}
+                  onChange={(e) => setSaveWebKbId(e.target.value)}
+                  className="w-full text-xs bg-white border border-gray-300 rounded-lg p-2 text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                >
+                  {knowledgeBases.map((kb) => (
+                    <option key={kb.id} value={kb.id}>
+                      {kb.name} ({kb.status || "ACTIVE"})
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-xs font-medium text-gray-700">
+                Document Title (Optional)
+              </label>
+              <input
+                type="text"
+                value={saveWebTitle}
+                onChange={(e) => setSaveWebTitle(e.target.value)}
+                placeholder="Title for saved web source"
+                className="w-full text-xs bg-white border border-gray-300 rounded-lg p-2 text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-xs font-medium text-gray-700">
+                Storage Mode
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSaveWebMode("REFERENCE")}
+                  className={`p-2.5 rounded-lg border text-left transition-colors ${
+                    saveWebMode === "REFERENCE"
+                      ? "border-blue-500 bg-blue-50/50 text-blue-900"
+                      : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+                  }`}
+                >
+                  <div className="font-semibold text-xs flex items-center gap-1.5">
+                    <Bookmark size={12} className="text-blue-600" />
+                    <span>Bookmark Reference</span>
+                  </div>
+                  <p className="text-[10px] text-gray-500 mt-0.5">
+                    Store URL, title, and citation. Safe and lightweight.
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSaveWebMode("FULL_CONTENT")}
+                  className={`p-2.5 rounded-lg border text-left transition-colors ${
+                    saveWebMode === "FULL_CONTENT"
+                      ? "border-blue-500 bg-blue-50/50 text-blue-900"
+                      : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+                  }`}
+                >
+                  <div className="font-semibold text-xs flex items-center gap-1.5">
+                    <FileText size={12} className="text-blue-600" />
+                    <span>Full Content</span>
+                  </div>
+                  <p className="text-[10px] text-gray-500 mt-0.5">
+                    Extract and index text chunks for hybrid RAG search.
+                  </p>
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-xs font-medium text-gray-700">
+                Notes / Summary (Optional)
+              </label>
+              <textarea
+                value={saveWebNotes}
+                onChange={(e) => setSaveWebNotes(e.target.value)}
+                placeholder="Add optional notes or commentary about this web source..."
+                rows={2}
+                className="w-full text-xs bg-white border border-gray-300 rounded-lg p-2 text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-none"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-gray-100">
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => setInspectCitation(null)}
+                onClick={() => setSaveWebCitation(null)}
+                disabled={isSavingWebSource}
               >
-                Close
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                icon={Bookmark}
+                onClick={handleSaveWebSource}
+                disabled={isSavingWebSource || !saveWebKbId}
+              >
+                {isSavingWebSource ? "Saving..." : "Save Web Source"}
               </Button>
             </div>
           </div>

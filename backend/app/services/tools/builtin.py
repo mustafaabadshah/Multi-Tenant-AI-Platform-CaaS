@@ -133,4 +133,111 @@ BUILTIN_TOOL_DEFINITIONS = [
             },
         },
     },
+    {
+        "name": "web_read_url",
+        "display_name": "Secure Web Page Reader",
+        "description": "Reads and extracts clean, structured text content from a public web page URL with SSRF protection.",
+        "namespace": "builtin",
+        "tool_type": "BUILTIN",
+        "risk_level": "READ_ONLY",
+        "requires_approval": False,
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "The public HTTP/HTTPS URL of the web page to read.",
+                },
+                "max_length": {
+                    "type": "integer",
+                    "description": "Maximum characters of text to extract (default 20000).",
+                },
+            },
+            "required": ["url"],
+        },
+        "output_schema": {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string"},
+                "title": {"type": "string"},
+                "text": {"type": "string"},
+                "status": {"type": "string"},
+            },
+        },
+    },
+    {
+        "name": "web_search",
+        "display_name": "Agentic Web Search",
+        "description": "Searches the public web for relevant websites, articles, and documentation with citations.",
+        "namespace": "builtin",
+        "tool_type": "BUILTIN",
+        "risk_level": "READ_ONLY",
+        "requires_approval": False,
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "The search query to look up on the web.",
+                },
+                "count": {
+                    "type": "integer",
+                    "description": "Maximum number of results to return (default 5).",
+                },
+            },
+            "required": ["query"],
+        },
+        "output_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "results": {"type": "array"},
+            },
+        },
+    },
+    {
+        "name": "web_save_to_kb",
+        "display_name": "Save Web Source to Knowledge Base",
+        "description": "Persists a retrieved public web page into an authorized Knowledge Base as either a REFERENCE (bookmark) or FULL_CONTENT.",
+        "namespace": "builtin",
+        "tool_type": "BUILTIN",
+        "risk_level": "WRITE",
+        "requires_approval": True,
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "The canonical URL of the web page to save.",
+                },
+                "knowledge_base_id": {
+                    "type": "string",
+                    "description": "The UUID of the destination Knowledge Base.",
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Optional custom title for the saved document.",
+                },
+                "storage_mode": {
+                    "type": "string",
+                    "enum": ["REFERENCE", "FULL_CONTENT"],
+                    "description": "Storage mode: REFERENCE (bookmark/metadata) or FULL_CONTENT (extracted text). Defaults to REFERENCE.",
+                },
+                "notes": {
+                    "type": "string",
+                    "description": "Optional notes or summary to store alongside the web source.",
+                },
+            },
+            "required": ["url", "knowledge_base_id"],
+        },
+        "output_schema": {
+            "type": "object",
+            "properties": {
+                "document_id": {"type": "string"},
+                "title": {"type": "string"},
+                "storage_mode": {"type": "string"},
+                "status": {"type": "string"},
+            },
+        },
+    },
 ]

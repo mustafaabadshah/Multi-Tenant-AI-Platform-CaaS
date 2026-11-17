@@ -170,25 +170,36 @@ async def list_messages(
 
     output = []
     for m in messages:
-        c_list = [
-            MessageCitationResponse(
-                id=c.id,
-                citation_num=c.citation_num,
-                chunk_id=c.chunk_id,
-                document_name=c.document_name,
-                citation_text=c.citation_text,
-                snippet=c.citation_text,
-                page_number=1,
-                bounding_box={
-                    "page": 1,
-                    "x": 72.0,
-                    "y": 90.0 + (((c.citation_num - 1) % 7) * 85.0),
-                    "width": 468.0,
-                    "height": 65.0,
-                },
+        c_list = []
+        for c in m.citations:
+            is_web = c.document_name.startswith("http://") or c.document_name.startswith("https://") or "http" in c.document_name
+            web_url = c.document_name if (c.document_name.startswith("http://") or c.document_name.startswith("https://")) else None
+            domain_name = None
+            if web_url:
+                from urllib.parse import urlparse
+                domain_name = urlparse(web_url).hostname
+
+            c_list.append(
+                MessageCitationResponse(
+                    id=c.id,
+                    citation_num=c.citation_num,
+                    chunk_id=c.chunk_id,
+                    document_name=c.document_name,
+                    citation_text=c.citation_text,
+                    snippet=c.citation_text,
+                    page_number=None if is_web else 1,
+                    bounding_box=None if is_web else {
+                        "page": 1,
+                        "x": 72.0,
+                        "y": 90.0 + (((c.citation_num - 1) % 7) * 85.0),
+                        "width": 468.0,
+                        "height": 65.0,
+                    },
+                    source_type="web" if is_web else "document",
+                    source_url=web_url,
+                    domain=domain_name,
+                )
             )
-            for c in m.citations
-        ]
         output.append(
             MessageResponse(
                 id=m.id,

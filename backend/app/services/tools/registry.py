@@ -201,7 +201,47 @@ class ToolRegistryService:
             city = str(arguments.get("city", "London")).strip()
             return synthetic_weather_lookup(city)
 
-        # 3. Custom HTTP tool
+        # 3. Built-in web reader (Milestone 27)
+        if tool_id_or_name in ("web_read_url", "builtin_web_read_url"):
+            from app.services.web.reader import get_web_fetch_service
+            url = str(arguments.get("url", "")).strip()
+            max_length = int(arguments.get("max_length", 20000))
+            service = get_web_fetch_service()
+            result = await service.read_webpage(url, tenant_id=self.tenant_id, max_text_length=max_length)
+            return result.to_dict()
+
+        # 4. Built-in web search (Milestone 27)
+        if tool_id_or_name in ("web_search", "builtin_web_search"):
+            from app.services.web.search import get_web_search_service
+            query = str(arguments.get("query", "")).strip()
+            count = int(arguments.get("count", 5))
+            service = get_web_search_service()
+            result = await service.search(query, count=count)
+            return result.to_dict()
+
+        # 5. Built-in save to knowledge base (Milestone 27)
+        if tool_id_or_name in ("web_save_to_kb", "builtin_web_save_to_kb"):
+            from app.services.web.kb_saver import WebKBSaveService, WebSaveMode
+            url = str(arguments.get("url", "")).strip()
+            kb_id_str = str(arguments.get("knowledge_base_id", "")).strip()
+            if not kb_id_str:
+                raise ValueError("knowledge_base_id is required to save a web source.")
+            kb_uuid = uuid.UUID(kb_id_str)
+            title = arguments.get("title")
+            notes = arguments.get("notes")
+            mode_str = str(arguments.get("storage_mode", "REFERENCE")).upper()
+            storage_mode = WebSaveMode.FULL_CONTENT if mode_str == "FULL_CONTENT" else WebSaveMode.REFERENCE
+
+            kb_saver = WebKBSaveService(self.session, self.tenant_id, self.user_id)
+            return await kb_saver.save_web_source_to_kb(
+                url=url,
+                knowledge_base_id=kb_uuid,
+                title=title,
+                storage_mode=storage_mode,
+                notes=notes,
+            )
+
+        # 6. Custom HTTP tool
         tool = await self.get_tool(tool_id_or_name)
         if not tool:
             raise ValueError(f"Tool '{tool_id_or_name}' not found or unauthorized.")

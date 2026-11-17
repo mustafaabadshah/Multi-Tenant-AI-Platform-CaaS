@@ -263,6 +263,9 @@ export interface MessageCitationItem {
     width: number;
     height: number;
   } | null;
+  source_type?: "document" | "web" | string | null;
+  source_url?: string | null;
+  domain?: string | null;
 }
 
 export type CitationItem = MessageCitationItem;
@@ -1995,6 +1998,32 @@ class ApiClient {
         title: title || undefined,
       }),
     }, true);
+  }
+
+  // Web Intelligence (M27)
+  async saveWebSourceToKB(
+    url: string,
+    knowledgeBaseId: string,
+    title?: string,
+    storageMode: "REFERENCE" | "FULL_CONTENT" = "REFERENCE",
+    notes?: string
+  ): Promise<{ document_id: string; title: string; storage_mode: string; status: string }> {
+    return this.request<{ document_id: string; title: string; storage_mode: string; status: string }>(
+      "/tools/builtin_web_save_to_kb/execute",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          arguments: {
+            url,
+            knowledge_base_id: knowledgeBaseId,
+            title,
+            storage_mode: storageMode,
+            notes,
+          },
+        }),
+      },
+      true
+    );
   }
 
   // Speech & Voice (M23)

@@ -365,6 +365,7 @@ function InlineView({
             );
           case "citation": {
             const matchingCit = citations.find((c) => c.citation_num === tok.num);
+            const isWeb = matchingCit ? (matchingCit.source_type === "web" || !!matchingCit.source_url) : false;
             if (matchingCit && onCitationClick) {
               return (
                 <button
@@ -372,7 +373,11 @@ function InlineView({
                   type="button"
                   onClick={() => onCitationClick(matchingCit)}
                   aria-label={`Citation ${tok.num}: ${matchingCit.document_name}`}
-                  className="inline-flex items-center px-1.5 py-0.5 mx-0.5 rounded text-[11px] font-semibold bg-blue-100 text-blue-700 hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-colors cursor-pointer align-baseline"
+                  className={`inline-flex items-center px-1.5 py-0.5 mx-0.5 rounded text-[11px] font-semibold ${
+                    isWeb
+                      ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/80 focus:ring-emerald-400"
+                      : "bg-blue-100 text-blue-700 hover:bg-blue-200 focus:ring-blue-400"
+                  } focus:outline-none focus:ring-2 transition-colors cursor-pointer align-baseline`}
                 >
                   [{tok.num}]
                 </button>
@@ -382,7 +387,11 @@ function InlineView({
             return (
               <span
                 key={i}
-                className="inline-flex items-center px-1.5 py-0.2 mx-0.5 rounded text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200/80 align-baseline cursor-default shadow-2xs"
+                className={`inline-flex items-center px-1.5 py-0.2 mx-0.5 rounded text-[11px] font-medium ${
+                  isWeb
+                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200/80"
+                    : "bg-blue-50 text-blue-700 border border-blue-200/80"
+                } align-baseline cursor-default shadow-2xs`}
               >
                 [{tok.num}]
               </span>
