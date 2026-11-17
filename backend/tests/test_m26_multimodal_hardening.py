@@ -75,8 +75,9 @@ def clean_text_for_speech_py(raw_text: str) -> str:
     cleaned = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", cleaned)
     # 4. Remove standalone URLs
     cleaned = re.sub(r"https?://\S+", "", cleaned)
-    # 5. Remove numbered citations [1], [1, 2]
+    # 5. Remove numbered citations [1], [1, 2] and unicode citations 【1】, 【4】
     cleaned = re.sub(r"\[\d+(?:,\s*\d+)*\]", "", cleaned)
+    cleaned = re.sub(r"【\d+(?:,\s*\d+)*】", "", cleaned)
     # 6. Remove markdown formatting characters
     cleaned = re.sub(r"^[#>\-\*\+]\s+", "", cleaned, flags=re.MULTILINE)
     cleaned = re.sub(r"(\*\*|__)(.*?)\1", r"\2", cleaned)
@@ -400,7 +401,7 @@ def test_clean_text_for_speech_sanitization():
         "Here is the result:\n"
         "```python\nimport secret\nsecret.expose()\n```\n"
         "Check this `API_KEY` and visit [Docs](https://example.com/docs).\n"
-        "Refer to sources [1] and [2, 3] for **high-priority** *details*.\n"
+        "Refer to sources [1] and [2, 3] as well as 【4】 for **high-priority** *details*.\n"
         "| Col1 | Col2 |\n|---|---|\n| A | B |"
     )
     cleaned = clean_text_for_speech_py(raw)
@@ -411,6 +412,7 @@ def test_clean_text_for_speech_sanitization():
     assert "Docs" in cleaned
     assert "[1]" not in cleaned
     assert "[2, 3]" not in cleaned
+    assert "【4】" not in cleaned
     assert "**" not in cleaned
     assert "high-priority details" in cleaned
     assert "|" not in cleaned

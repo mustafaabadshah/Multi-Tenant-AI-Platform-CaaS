@@ -1990,6 +1990,7 @@ class ApiClient {
     return this.request<AttachmentPromotionResult>(`/conversations/${conversationId}/attachments/${attachmentId}/promote`, {
       method: "POST",
       body: JSON.stringify({
+        knowledge_base_id: targetKnowledgeBaseId,
         target_knowledge_base_id: targetKnowledgeBaseId,
         title: title || undefined,
       }),
@@ -2015,28 +2016,34 @@ export interface ConversationAttachmentItem {
   conversation_id: string;
   message_id?: string | null;
   uploader_user_id: string;
-  original_filename: string;
+  filename: string;
+  original_filename?: string;
   content_type: string;
   file_size: number;
-  sha256_hash: string;
+  sha256_hash?: string;
   status: "UPLOADED" | "PROCESSING" | "READY" | "FAILED";
-  extraction_status: "PENDING" | "EXTRACTED" | "EMPTY" | "FAILED";
-  chunk_count: number;
+  extraction_status?: "PENDING" | "EXTRACTED" | "EMPTY" | "FAILED";
+  total_chunks?: number;
+  chunk_count?: number;
+  total_pages?: number;
   is_promoted: boolean;
   promoted_knowledge_base_id?: string | null;
   promoted_document_id?: string | null;
   promoted_at?: string | null;
   error_message?: string | null;
+  metadata_json?: Record<string, any>;
   created_at: string;
   updated_at: string;
 }
 
 export interface AttachmentPromotionResult {
   attachment_id: string;
-  is_promoted: boolean;
+  is_promoted?: boolean;
+  status?: string;
+  message?: string;
   knowledge_base_id: string;
   document_id: string;
-  promoted_at: string;
+  promoted_at?: string | null;
 }
 
 export interface VoicePreferenceItem {

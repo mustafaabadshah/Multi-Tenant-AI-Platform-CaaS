@@ -252,9 +252,7 @@ export default function ConversationsWorkspacePage() {
   useEffect(() => {
     if (!speechRecognizerRef.current) return;
     speechRecognizerRef.current.onTranscript((transcript: string, isFinal: boolean) => {
-      if (voiceModeRef.current === "DICTATION") {
-        setInputMessage(transcript);
-      } else if (voiceModeRef.current === "VOICE_CONVERSATION") {
+      if (voiceModeRef.current === "VOICE_CONVERSATION") {
         setInputMessage(transcript);
         if (isFinal && transcript.trim() && !isSubmittingVoiceRef.current && !streaming) {
           isSubmittingVoiceRef.current = true;
@@ -263,6 +261,9 @@ export default function ConversationsWorkspacePage() {
             isSubmittingVoiceRef.current = false;
           });
         }
+      } else {
+        // DICTATION, TEXT, and LISTEN modes all receive continuous transcript in input
+        setInputMessage(transcript);
       }
     });
   }, [streaming]);
@@ -373,7 +374,7 @@ export default function ConversationsWorkspacePage() {
         activeConversation.id,
         promoteAttachment.id,
         targetKbId,
-        promoteTitle.trim() || undefined
+        (promoteTitle || "").trim() || undefined
       );
       setAttachments((prev) =>
         prev.map((a) =>
@@ -399,14 +400,41 @@ export default function ConversationsWorkspacePage() {
     }
   };
 
+  // M23 & M24: Change Voice Mode
+  const handleVoiceModeChange = async (newMode: VoiceMode) => {
+    setVoiceMode(newMode);
+    voiceModeRef.current = newMode;
+    if (newMode === "TEXT" && isListening) {
+      speechRecognizerRef.current?.stop();
+    } else if (newMode === "VOICE_CONVERSATION" && !isListening) {
+      setSpeechError(null);
+      speechRecognizerRef.current?.start();
+    }
+    try {
+      await api.updateVoicePreferences({ voice_mode: newMode });
+    } catch (_) {}
+  };
+
   // M23 & M24: Toggle Microphone
   const handleToggleMic = () => {
-    if (!speechRecognizerRef.current) return;
+    const recognizer = speechRecognizerRef.current;
+    if (!recognizer) return;
     if (isListening) {
-      speechRecognizerRef.current.stop();
+      recognizer.stop();
     } else {
       setSpeechError(null);
-      speechRecognizerRef.current.start();
+      if (voiceMode === "TEXT") {
+        setVoiceMode("DICTATION");
+        voiceModeRef.current = "DICTATION";
+      }
+      if (!recognizer.isSupported()) {
+        setSpeechError("Speech recognition is not supported in this browser. Please use Google Chrome, Microsoft Edge, or Safari.");
+        return;
+      }
+      const ok = recognizer.start();
+      if (!ok) {
+        setSpeechError("Could not start microphone. Please check browser microphone permissions.");
+      }
     }
   };
 
@@ -1234,8 +1262,8 @@ export default function ConversationsWorkspacePage() {
                       className="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-white border border-gray-200 text-xs shadow-xs shrink-0"
                     >
                       <FileText size={13} className="text-blue-500 shrink-0" />
-                      <span className="font-medium text-gray-800 truncate max-w-[140px]" title={att.original_filename}>
-                        {att.original_filename}
+                      <span className="font-medium text-gray-800 truncate max-w-[140px]" title={att.filename || (att as any).original_filename}>
+                        {att.filename || (att as any).original_filename}
                       </span>
                       <span className="text-[10px] text-gray-400 font-mono">
                         {(att.file_size / 1024).toFixed(0)} KB
@@ -1267,7 +1295,7 @@ export default function ConversationsWorkspacePage() {
                           type="button"
                           onClick={() => {
                             setPromoteAttachment(att);
-                            setPromoteTitle(att.original_filename);
+                            setPromoteTitle(att.filename || (att as any).original_filename || "");
                             if (knowledgeBases.length > 0) {
                               setTargetKbId(knowledgeBases[0].id);
                             }
@@ -1296,7 +1324,134 @@ export default function ConversationsWorkspacePage() {
             )}
 
             {/* Bottom Input Area */}
-            <div className="p-4 border-t border-gray-200 bg-white">
+            <div className="p-4 border-t border-gray-200 bg-white space-y-2.5">
+              {/* Voice Mode Selector & Speech Status */}
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-1 bg-gray-100 p-0.5 rounded-lg border border-gray-200/80">
+                  <button
+                    type="button"
+                    onClick={() => handleVoiceModeChange("TEXT")}
+                    className={`px-2 py-1 rounded-md font-medium flex items-center gap-1 transition-colors ${
+                      voiceMode === "TEXT"
+                        ? "bg-white text-gray-900 shadow-2xs font-semibold"
+                        : "text-gray-500 hover:text-gray-900"
+                    }`}
+                    title="Standard text chat"
+                  >
+                    <MessageSquare size={12} />
+                    <span>Text</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleVoiceModeChange("DICTATION")}
+                    className={`px-2 py-1 rounded-md font-medium flex items-center gap-1 transition-colors ${
+                      voiceMode === "DICTATION"
+                        ? "bg-white text-blue-600 shadow-2xs font-semibold"
+                        : "text-gray-500 hover:text-gray-900"
+                    }`}
+                    title="Dictation: Click mic or speak to write text"
+                  >
+                    <Mic size={12} />
+                    <span>Dictate</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleVoiceModeChange("LISTEN")}
+                    className={`px-2 py-1 rounded-md font-medium flex items-center gap-1 transition-colors ${
+                      voiceMode === "LISTEN"
+                        ? "bg-white text-indigo-600 shadow-2xs font-semibold"
+                        : "text-gray-500 hover:text-gray-900"
+                    }`}
+                    title="Auto-Read: Assistant reads aloud all generated responses"
+                  >
+                    <Volume2 size={12} />
+                    <span>Auto-Read</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleVoiceModeChange("VOICE_CONVERSATION")}
+                    className={`px-2 py-1 rounded-md font-medium flex items-center gap-1 transition-colors ${
+                      voiceMode === "VOICE_CONVERSATION"
+                        ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-xs font-semibold"
+                        : "text-gray-500 hover:text-gray-900"
+                    }`}
+                    title="GPT Voice: Hands-free conversational loop (speak -> auto-answer -> listen)"
+                  >
+                    <Sparkles size={12} />
+                    <span>Voice Chat</span>
+                  </button>
+                </div>
+
+                {/* Speaking indicator / Stop speaking */}
+                {isSpeaking && (
+                  <div className="flex items-center gap-2 px-2.5 py-1 rounded-md bg-indigo-50 border border-indigo-200 text-indigo-700 animate-fadeIn text-[11px]">
+                    <Volume2 size={12} className="animate-pulse" />
+                    <span>Assistant is speaking...</span>
+                    <button
+                      type="button"
+                      onClick={handleStopSpeaking}
+                      className="ml-1 text-xs text-indigo-900 underline font-semibold hover:text-indigo-950"
+                    >
+                      Mute
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Active Listening Indicator */}
+              {isListening && (
+                <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs animate-fadeIn">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
+                    <Mic size={13} className="text-rose-600" />
+                    <span className="font-medium">
+                      Listening... speak into your microphone
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => speechRecognizerRef.current?.stop()}
+                      className="text-xs text-rose-800 font-semibold hover:underline"
+                    >
+                      Stop Listening
+                    </button>
+                    {inputMessage.trim() && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          speechRecognizerRef.current?.stop();
+                          handleSendMessage();
+                        }}
+                        className="px-2 py-0.5 rounded bg-rose-600 text-white text-[11px] font-semibold hover:bg-rose-700"
+                      >
+                        Send Now
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Speech Error Banner */}
+              {speechError && (
+                <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-xs">
+                  <div className="flex items-center gap-1.5">
+                    <AlertCircle size={13} className="text-amber-600" />
+                    <span>{speechError}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSpeechError(null)}
+                    className="text-amber-600 hover:text-amber-900"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              )}
+
               <form onSubmit={handleSendMessage} className="space-y-2">
                 <div className="relative flex items-center">
                   {/* Hidden File Input for Paperclip */}
@@ -1477,9 +1632,11 @@ export default function ConversationsWorkspacePage() {
         >
           <div className="space-y-4">
             <div className="p-3 rounded-lg bg-gray-50 border border-gray-200 text-xs space-y-1">
-              <div className="font-semibold text-gray-800">{promoteAttachment.original_filename}</div>
+              <div className="font-semibold text-gray-800">
+                {promoteAttachment.filename || (promoteAttachment as any).original_filename || "Attachment"}
+              </div>
               <div className="text-gray-500 font-mono">
-                {(promoteAttachment.file_size / 1024).toFixed(0)} KB · {promoteAttachment.chunk_count} chunks extracted
+                {(promoteAttachment.file_size / 1024).toFixed(0)} KB · {promoteAttachment.total_chunks ?? (promoteAttachment as any).chunk_count ?? 0} chunks extracted
               </div>
             </div>
 
@@ -1512,9 +1669,9 @@ export default function ConversationsWorkspacePage() {
               </label>
               <input
                 type="text"
-                value={promoteTitle}
+                value={promoteTitle || ""}
                 onChange={(e) => setPromoteTitle(e.target.value)}
-                placeholder={promoteAttachment.original_filename}
+                placeholder={promoteAttachment.filename || (promoteAttachment as any).original_filename || "Document title"}
                 className="w-full text-xs bg-white border border-gray-300 rounded-lg p-2 text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
               />
             </div>

@@ -415,20 +415,29 @@ async def promote_attachment(
     if not conv or conv.status == "DELETED" or (not ctx.is_admin and conv.user_id != current_user.id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
 
+    target_kb = payload.knowledge_base_id or payload.target_knowledge_base_id
+    if not target_kb:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Either knowledge_base_id or target_knowledge_base_id must be provided",
+        )
+
     svc = ConversationAttachmentService(db, ctx.tenant.id)
     try:
         att, doc = await svc.promote_to_knowledge_base(
             conversation_id=conversation_id,
             attachment_id=attachment_id,
-            target_kb_id=payload.knowledge_base_id,
+            target_kb_id=target_kb,
             actor_user_id=current_user.id,
+            title=payload.title,
         )
         return AttachmentPromotionResponse(
             attachment_id=att.id,
-            knowledge_base_id=payload.knowledge_base_id,
+            knowledge_base_id=target_kb,
             document_id=doc.id,
             status="PROMOTED",
             message=f"Attachment '{att.filename}' promoted successfully to Knowledge Base.",
+            promoted_at=att.promoted_at,
         )
     except ValueError as v_err:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(v_err))

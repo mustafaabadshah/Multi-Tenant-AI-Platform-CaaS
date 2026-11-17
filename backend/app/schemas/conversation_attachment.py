@@ -43,7 +43,9 @@ class ConversationAttachmentChunkResponse(BaseModel):
 
 
 class AttachmentPromotionRequest(BaseModel):
-    knowledge_base_id: uuid.UUID = Field(description="Target Knowledge Base ID to promote attachment into")
+    knowledge_base_id: Optional[uuid.UUID] = Field(default=None, description="Target Knowledge Base ID to promote attachment into")
+    target_knowledge_base_id: Optional[uuid.UUID] = Field(default=None, description="Target Knowledge Base ID alias")
+    title: Optional[str] = Field(default=None, description="Optional custom title for the promoted Knowledge Base document")
 
 
 class AttachmentPromotionResponse(BaseModel):
@@ -52,6 +54,7 @@ class AttachmentPromotionResponse(BaseModel):
     document_id: uuid.UUID
     status: str = "PROMOTED"
     message: str = "Attachment successfully promoted to knowledge base"
+    promoted_at: Optional[datetime] = None
 
 
 class VoicePreferenceResponse(BaseModel):

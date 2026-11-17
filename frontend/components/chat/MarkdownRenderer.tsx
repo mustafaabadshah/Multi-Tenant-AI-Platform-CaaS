@@ -32,7 +32,7 @@ interface MarkdownRendererProps {
 }
 
 type BlockType =
-  | { kind: "paragraph"; inline: InlineToken[] }
+  | { kind: "paragraph"; lines: InlineToken[][]; inline?: InlineToken[] }
   | { kind: "heading"; level: 1 | 2 | 3 | 4 | 5 | 6; inline: InlineToken[] }
   | { kind: "unordered_list"; items: InlineToken[][] }
   | { kind: "ordered_list"; items: InlineToken[][]; start: number }
@@ -125,13 +125,18 @@ function parseInline(text: string): InlineToken[] {
         }
       }
     }
-    // Citation: [N] where N is an integer
-    if (text[i] === "[") {
-      const closeBracket = text.indexOf("]", i + 1);
+    // Citation: [N] or 【N】 (supports single numbers or comma-separated lists like [1, 2] / 【1, 4】)
+    if (text[i] === "[" || text[i] === "【") {
+      const isFullWidth = text[i] === "【";
+      const closeChar = isFullWidth ? "】" : "]";
+      const closeBracket = text.indexOf(closeChar, i + 1);
       if (closeBracket !== -1) {
-        const inner = text.slice(i + 1, closeBracket);
-        if (/^\d+$/.test(inner)) {
-          tokens.push({ t: "citation", num: parseInt(inner, 10) });
+        const inner = text.slice(i + 1, closeBracket).trim();
+        const parts = inner.split(/[\s,]+/).filter(Boolean);
+        if (parts.length > 0 && parts.every((p) => /^\d+$/.test(p))) {
+          for (const p of parts) {
+            tokens.push({ t: "citation", num: parseInt(p, 10) });
+          }
           i = closeBracket + 1;
           continue;
         }
@@ -252,6 +257,27 @@ function parseBlocks(markdown: string): BlockType[] {
       continue;
     }
 
+    // Table: Tab-separated tabular data (TSV format from LLMs)
+    if (line.includes("\t") && (i + 1 < lines.length && (lines[i + 1].includes("\t") || lines[i + 1].trim() === ""))) {
+      const parseTabCells = (row: string) =>
+        row
+          .split("\t")
+          .filter((c) => c !== "")
+          .map((cell) => parseInline(cell.trim()));
+
+      const header = parseTabCells(line);
+      i++;
+      const rows: InlineToken[][][] = [];
+      while (i < lines.length && lines[i].includes("\t") && lines[i].trim() !== "") {
+        rows.push(parseTabCells(lines[i]));
+        i++;
+      }
+      if (rows.length > 0 || header.length > 1) {
+        blocks.push({ kind: "table", header, rows });
+        continue;
+      }
+    }
+
     // Blank line — skip
     if (line.trim() === "") {
       i++;
@@ -268,13 +294,17 @@ function parseBlocks(markdown: string): BlockType[] {
       !lines[i].startsWith("> ") &&
       !/^(\s*)[-*+]\s/.test(lines[i]) &&
       !/^(\s*)\d+\.\s/.test(lines[i]) &&
-      !/^(\*{3,}|-{3,}|_{3,})\s*$/.test(lines[i])
+      !/^(\*{3,}|-{3,}|_{3,})\s*$/.test(lines[i]) &&
+      !lines[i].includes("\t")
     ) {
       paraLines.push(lines[i]);
       i++;
     }
     if (paraLines.length > 0) {
-      blocks.push({ kind: "paragraph", inline: parseInline(paraLines.join(" ")) });
+      blocks.push({
+        kind: "paragraph",
+        lines: paraLines.map((pl) => parseInline(pl)),
+      });
     }
   }
 
@@ -348,8 +378,15 @@ function InlineView({
                 </button>
               );
             }
-            // No matching citation data — render as muted plain text
-            return <span key={i} className="text-gray-500 text-[11px]">[{tok.num}]</span>;
+            // Render clean, distinct citation badge
+            return (
+              <span
+                key={i}
+                className="inline-flex items-center px-1.5 py-0.2 mx-0.5 rounded text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200/80 align-baseline cursor-default shadow-2xs"
+              >
+                [{tok.num}]
+              </span>
+            );
           }
           default:
             return null;
@@ -374,7 +411,16 @@ function BlockView({
     case "paragraph":
       return (
         <p className="my-2 leading-relaxed text-gray-900">
-          <InlineView tokens={block.inline} {...inlineProps} />
+          {block.lines ? (
+            block.lines.map((lineTokens, li) => (
+              <React.Fragment key={li}>
+                {li > 0 && <br />}
+                <InlineView tokens={lineTokens} {...inlineProps} />
+              </React.Fragment>
+            ))
+          ) : (
+            <InlineView tokens={block.inline || []} {...inlineProps} />
+          )}
         </p>
       );
 
@@ -449,27 +495,32 @@ function BlockView({
 
     case "table":
       return (
-        <div className="my-3 overflow-x-auto rounded-lg border border-gray-200">
-          <table className="min-w-full text-sm border-collapse">
-            <thead className="bg-gray-50">
+        <div className="my-4 overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-xs">
+          <table className="min-w-full text-xs border-collapse">
+            <thead className="bg-gray-50/90 border-b border-gray-200">
               <tr>
                 {block.header.map((cell, ci) => (
                   <th
                     key={ci}
-                    className="px-3 py-2 text-left text-xs font-semibold text-gray-700 border-b border-gray-200"
+                    className="px-4 py-3 text-left font-semibold text-gray-700 uppercase tracking-wider text-[11px] border-r border-gray-200/60 last:border-r-0"
                   >
                     <InlineView tokens={cell} {...inlineProps} />
                   </th>
                 ))}
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-gray-100">
               {block.rows.map((row, ri) => (
-                <tr key={ri} className={ri % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                <tr
+                  key={ri}
+                  className={`transition-colors hover:bg-blue-50/40 ${
+                    ri % 2 === 0 ? "bg-white" : "bg-gray-50/40"
+                  }`}
+                >
                   {row.map((cell, ci) => (
                     <td
                       key={ci}
-                      className="px-3 py-2 text-xs text-gray-800 border-b border-gray-100"
+                      className="px-4 py-2.5 text-gray-800 leading-normal border-r border-gray-100/60 last:border-r-0 align-top"
                     >
                       <InlineView tokens={cell} {...inlineProps} />
                     </td>

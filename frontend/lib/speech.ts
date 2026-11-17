@@ -32,8 +32,9 @@ export function cleanTextForSpeech(rawText: string): string {
   // 4. Remove standalone URLs
   cleaned = cleaned.replace(/https?:\/\/\S+/g, "");
 
-  // 5. Remove numbered citations like [1], [2], [1, 2]
+  // 5. Remove numbered citations like [1], [2], [1, 2] and full-width citations 【1】, 【4】
   cleaned = cleaned.replace(/\[\d+(?:,\s*\d+)*\]/g, "");
+  cleaned = cleaned.replace(/【\d+(?:,\s*\d+)*】/g, "");
 
   // 6. Remove markdown formatting characters (#, *, _, ~, >, |)
   cleaned = cleaned.replace(/^[#>\-\*\+]\s+/gm, "");
@@ -57,10 +58,12 @@ export function cleanTextForSpeech(rawText: string): string {
 export class BrowserSpeechRecognizer {
   private recognition: any = null;
   private isListening: boolean = false;
+  private shouldBeListening: boolean = false;
   private onResultCallback: ((transcript: string, isFinal: boolean) => void) | null = null;
   private onErrorCallback: ((error: string) => void) | null = null;
   private onStateCallback: ((isListening: boolean) => void) | null = null;
   private lang: string = "en-US";
+  private finalTranscriptBuffer: string = "";
 
   constructor(lang: string = "en-US") {
     this.lang = lang;
@@ -74,32 +77,49 @@ export class BrowserSpeechRecognizer {
         this.recognition.lang = this.lang;
 
         this.recognition.onresult = (event: any) => {
-          let interimTranscript = "";
-          let finalTranscript = "";
+          let currentInterim = "";
 
           for (let i = event.resultIndex; i < event.results.length; ++i) {
             const transcript = event.results[i][0].transcript;
             if (event.results[i].isFinal) {
-              finalTranscript += transcript;
+              this.finalTranscriptBuffer += (this.finalTranscriptBuffer ? " " : "") + transcript.trim();
             } else {
-              interimTranscript += transcript;
+              currentInterim += transcript;
             }
           }
 
+          const combined = (
+            this.finalTranscriptBuffer + (currentInterim ? " " + currentInterim : "")
+          ).trim();
+
           if (this.onResultCallback) {
-            const transcript = finalTranscript || interimTranscript;
-            this.onResultCallback(transcript, Boolean(finalTranscript));
+            this.onResultCallback(combined, Boolean(this.finalTranscriptBuffer && !currentInterim));
           }
         };
 
         this.recognition.onerror = (event: any) => {
-          if (this.onErrorCallback) {
-            this.onErrorCallback(event.error || "Speech recognition error");
+          const err = event.error || "Speech recognition error";
+          // Ignore harmless pauses in speech
+          if (err === "no-speech") {
+            return;
           }
-          this.setListening(false);
+          if (this.onErrorCallback) {
+            this.onErrorCallback(err);
+          }
+          if (err === "not-allowed" || err === "service-not-allowed" || err === "audio-capture") {
+            this.shouldBeListening = false;
+            this.setListening(false);
+          }
         };
 
         this.recognition.onend = () => {
+          // If we should still be listening (e.g. user paused speech), auto-restart recognition
+          if (this.shouldBeListening) {
+            try {
+              this.recognition.start();
+              return;
+            } catch (_) {}
+          }
           this.setListening(false);
         };
       }
@@ -131,13 +151,20 @@ export class BrowserSpeechRecognizer {
 
   public start(): boolean {
     if (!this.recognition) return false;
-    if (this.isListening) return true;
+    this.finalTranscriptBuffer = "";
+    this.shouldBeListening = true;
 
     try {
       this.recognition.start();
       this.setListening(true);
       return true;
     } catch (err: any) {
+      // If already started, mark listening
+      if (err.name === "InvalidStateError") {
+        this.setListening(true);
+        return true;
+      }
+      this.shouldBeListening = false;
       if (this.onErrorCallback) {
         this.onErrorCallback(err.message || "Failed to start microphone");
       }
@@ -146,7 +173,8 @@ export class BrowserSpeechRecognizer {
   }
 
   public stop() {
-    if (this.recognition && this.isListening) {
+    this.shouldBeListening = false;
+    if (this.recognition) {
       try {
         this.recognition.stop();
       } catch (_) {}
@@ -155,7 +183,8 @@ export class BrowserSpeechRecognizer {
   }
 
   public abort() {
-    if (this.recognition && this.isListening) {
+    this.shouldBeListening = false;
+    if (this.recognition) {
       try {
         this.recognition.abort();
       } catch (_) {}
@@ -177,6 +206,7 @@ export class BrowserSpeechRecognizer {
 export class BrowserSpeechSynthesizer {
   private voices: SpeechSynthesisVoice[] = [];
   private onSpeakingChangeCallback: ((speaking: boolean) => void) | null = null;
+  private resumeTimer: any = null;
 
   constructor() {
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
@@ -230,8 +260,13 @@ export class BrowserSpeechSynthesizer {
       return;
     }
 
-    // Cancel existing utterance
+    // Cancel existing utterance & clear heartbeat
     this.cancel();
+
+    // Ensure voices are up to date
+    if (this.voices.length === 0) {
+      this.loadVoices();
+    }
 
     const utterance = new SpeechSynthesisUtterance(clean);
     utterance.rate = options?.rate ?? 1.0;
@@ -247,16 +282,36 @@ export class BrowserSpeechSynthesizer {
       }
     }
 
+    const cleanupHeartbeat = () => {
+      if (this.resumeTimer) {
+        clearInterval(this.resumeTimer);
+        this.resumeTimer = null;
+      }
+    };
+
     utterance.onstart = () => {
       if (this.onSpeakingChangeCallback) this.onSpeakingChangeCallback(true);
+
+      // Chrome long-utterance keepalive workaround:
+      cleanupHeartbeat();
+      this.resumeTimer = setInterval(() => {
+        if (typeof window !== "undefined" && window.speechSynthesis && window.speechSynthesis.speaking) {
+          window.speechSynthesis.pause();
+          window.speechSynthesis.resume();
+        } else {
+          cleanupHeartbeat();
+        }
+      }, 10000);
     };
 
     utterance.onend = () => {
+      cleanupHeartbeat();
       if (this.onSpeakingChangeCallback) this.onSpeakingChangeCallback(false);
       if (options?.onEnd) options.onEnd();
     };
 
     utterance.onerror = (err) => {
+      cleanupHeartbeat();
       if (this.onSpeakingChangeCallback) this.onSpeakingChangeCallback(false);
       if (options?.onError) options.onError(err);
     };
@@ -277,6 +332,10 @@ export class BrowserSpeechSynthesizer {
   }
 
   public cancel() {
+    if (this.resumeTimer) {
+      clearInterval(this.resumeTimer);
+      this.resumeTimer = null;
+    }
     if (this.isSupported()) {
       window.speechSynthesis.cancel();
       if (this.onSpeakingChangeCallback) this.onSpeakingChangeCallback(false);

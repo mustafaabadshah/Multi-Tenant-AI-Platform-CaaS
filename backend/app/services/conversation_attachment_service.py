@@ -209,6 +209,7 @@ class ConversationAttachmentService:
         attachment_id: uuid.UUID,
         target_kb_id: uuid.UUID,
         actor_user_id: Optional[uuid.UUID],
+        title: Optional[str] = None,
     ) -> tuple[ConversationAttachment, Document]:
         """Promote a chat attachment into a permanent Knowledge Base document."""
         att = await self.get_attachment(conversation_id, attachment_id)
@@ -240,12 +241,13 @@ class ConversationAttachmentService:
 
         # 3. Create Document in target Knowledge Base
         doc_id = uuid.uuid4()
+        effective_filename = title.strip() if (title and title.strip()) else att.filename
         promoted_doc = Document(
             id=doc_id,
             tenant_id=self.tenant_id,
             knowledge_base_id=target_kb_id,
-            filename=att.filename,
-            safe_filename=sanitize_filename(att.filename),
+            filename=effective_filename,
+            safe_filename=sanitize_filename(effective_filename),
             file_path=att.file_path,
             file_size=att.file_size,
             mime_type=att.content_type,
