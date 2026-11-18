@@ -31,6 +31,14 @@ class UploadTooLargeError(ValueError):
     """Raised when a streamed upload exceeds the configured byte budget."""
 
 
+class UnsupportedFormatError(ValueError):
+    """Raised when an uploaded document has an unsupported or unrecognized format."""
+
+
+class UnparseableDocumentError(ValueError):
+    """Raised when an uploaded document contains no extractable or readable content."""
+
+
 class IngestionLimitExceededError(Exception):
     """A permanent, non-retryable ingestion resource-limit violation."""
 
@@ -45,7 +53,13 @@ class IngestionTimeoutError(Exception):
     """
 
 
-PERMANENT_INGESTION_ERRORS = (IngestionLimitExceededError, IngestionTimeoutError)
+PERMANENT_INGESTION_ERRORS = (
+    IngestionLimitExceededError,
+    IngestionTimeoutError,
+    UploadTooLargeError,
+    UnsupportedFormatError,
+    UnparseableDocumentError,
+)
 
 
 async def read_upload_bounded(

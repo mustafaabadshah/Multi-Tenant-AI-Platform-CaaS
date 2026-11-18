@@ -67,6 +67,15 @@ class ProviderUsageSummaryResponse(BaseModel):
     today_requests: int
     daily_request_limit: int
     by_provider: list[dict[str, Any]] = Field(default_factory=list)
+    by_traffic_type: list[dict[str, Any]] = Field(default_factory=list)
+    storage_bytes_used: int = 0
+    storage_bytes_limit: int = 10_737_418_240
+    document_count: int = 0
+    document_limit: int = 500
+    active_assistants: int = 0
+    max_assistants: int = 10
+    measurement_timestamp: Optional[str] = None
+    reset_timestamp: Optional[str] = None
 
 
 class URLIngestRequest(BaseModel):

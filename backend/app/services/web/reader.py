@@ -14,7 +14,11 @@ import httpx
 
 from app.core.config import settings
 from app.services.web.extractor import WebContentExtractor
-from app.services.web.ssrf import validate_web_url, SSRFSecurityError
+from app.services.web.ssrf import (
+    validate_web_url,
+    SSRFSecurityError,
+    SSRFSafeAsyncTransport,
+)
 
 
 # In-memory cache for conversation follow-ups: (tenant_id, canonical_url) -> (cache_timestamp, result_dict)
@@ -75,7 +79,7 @@ class WebFetchService:
             if now - ts < _CACHE_TTL_SECONDS:
                 return {**cached_result, "cached": True}
 
-        # 2. Bounded outbound fetch with manual redirect re-validation
+        # 2. Bounded outbound fetch with connection-level SSRF defense and manual redirect re-validation
         headers = {
             "User-Agent": self.USER_AGENT,
             "Accept": "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.5",
@@ -93,10 +97,83 @@ class WebFetchService:
         content_type = ""
         http_status = 200
 
-        async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
+        transport = SSRFSafeAsyncTransport(allow_http_for_testing=allow_http_for_testing)
+
+        async with httpx.AsyncClient(transport=transport, timeout=timeout, follow_redirects=False) as client:
             while True:
                 try:
-                    resp = await client.get(current_url, headers=headers)
+                    async with client.stream("GET", current_url, headers=headers) as resp:
+                        # Check for redirect (301, 302, 303, 307, 308)
+                        if resp.is_redirect:
+                            redirect_count += 1
+                            if redirect_count > self.MAX_REDIRECTS:
+                                raise SSRFSecurityError(f"Exceeded maximum allowed redirects ({self.MAX_REDIRECTS}).")
+
+                            location = resp.headers.get("Location")
+                            if not location:
+                                raise SSRFSecurityError("Redirect response missing Location header.")
+
+                            # Resolve relative redirect URLs against current URL
+                            next_url = urljoin(current_url, location)
+
+                            # CRITICAL: Re-validate redirect target against SSRF boundaries
+                            validated_next_url, _ = validate_web_url(
+                                next_url,
+                                allow_http_for_testing=allow_http_for_testing,
+                                allowed_domains=getattr(settings, "WEB_ALLOWED_DOMAINS", ""),
+                            )
+                            current_url = validated_next_url
+                            canonical_url = current_url
+                            domain = urlparse(canonical_url).netloc.lower()
+                            continue
+
+                        http_status = resp.status_code
+                        content_type = resp.headers.get("content-type", "").lower()
+
+                        # Guard against binary files / oversized media
+                        if resp.status_code >= 400:
+                            return self._make_error_result(
+                                canonical_url,
+                                domain,
+                                f"Remote server responded with HTTP {resp.status_code}",
+                                status=f"HTTP_{resp.status_code}",
+                            )
+
+                        # Check content length header if provided
+                        cl_header = resp.headers.get("content-length")
+                        if cl_header:
+                            try:
+                                if int(cl_header) > self.MAX_RESPONSE_BYTES:
+                                    raise SSRFSecurityError(f"Response size ({cl_header} bytes) exceeds maximum limit of 2 MB.")
+                            except ValueError:
+                                pass
+
+                        # Stream reading with strictly bounded running byte counter
+                        raw_chunks: list[bytes] = []
+                        total_bytes = 0
+                        async for chunk in resp.aiter_bytes(chunk_size=16384):
+                            total_bytes += len(chunk)
+                            if total_bytes > self.MAX_RESPONSE_BYTES:
+                                raise SSRFSecurityError(
+                                    f"Response body exceeds maximum allowed limit of {self.MAX_RESPONSE_BYTES} bytes."
+                                )
+                            raw_chunks.append(chunk)
+
+                        raw_bytes = b"".join(raw_chunks)
+                        encoding = resp.encoding or "utf-8"
+                        try:
+                            final_html = raw_bytes.decode(encoding, errors="replace")
+                        except Exception:
+                            final_html = raw_bytes.decode("utf-8", errors="replace")
+                        break
+
+                except SSRFSecurityError as ssrf_err:
+                    return self._make_error_result(
+                        canonical_url,
+                        domain,
+                        str(ssrf_err),
+                        status="BLOCKED_SSRF",
+                    )
                 except httpx.TimeoutException:
                     return self._make_error_result(
                         canonical_url,
@@ -111,64 +188,6 @@ class WebFetchService:
                         f"Network connection failed: {req_err}",
                         status="NETWORK_ERROR",
                     )
-
-                # Check for redirect (301, 302, 303, 307, 308)
-                if resp.is_redirect:
-                    redirect_count += 1
-                    if redirect_count > self.MAX_REDIRECTS:
-                        raise SSRFSecurityError(f"Exceeded maximum allowed redirects ({self.MAX_REDIRECTS}).")
-
-                    location = resp.headers.get("Location")
-                    if not location:
-                        raise SSRFSecurityError("Redirect response missing Location header.")
-
-                    # Resolve relative redirect URLs against current URL
-                    next_url = urljoin(current_url, location)
-
-                    # CRITICAL: Re-validate redirect target against SSRF boundaries
-                    validated_next_url, _ = validate_web_url(
-                        next_url,
-                        allow_http_for_testing=allow_http_for_testing,
-                        allowed_domains=getattr(settings, "WEB_ALLOWED_DOMAINS", ""),
-                    )
-                    current_url = validated_next_url
-                    canonical_url = current_url
-                    domain = urlparse(canonical_url).netloc.lower()
-                    continue
-
-                http_status = resp.status_code
-                content_type = resp.headers.get("content-type", "").lower()
-
-                # Guard against binary files / oversized media
-                if resp.status_code >= 400:
-                    return self._make_error_result(
-                        canonical_url,
-                        domain,
-                        f"Remote server responded with HTTP {resp.status_code}",
-                        status=f"HTTP_{resp.status_code}",
-                    )
-
-                # Check content length header if provided
-                cl_header = resp.headers.get("content-length")
-                if cl_header:
-                    try:
-                        if int(cl_header) > self.MAX_RESPONSE_BYTES:
-                            raise SSRFSecurityError(f"Response size ({cl_header} bytes) exceeds maximum limit of 2 MB.")
-                    except ValueError:
-                        pass
-
-                # Read body and enforce size cap
-                raw_bytes = resp.content
-                if len(raw_bytes) > self.MAX_RESPONSE_BYTES:
-                    raise SSRFSecurityError(f"Response body exceeds maximum limit of {self.MAX_RESPONSE_BYTES} bytes.")
-
-                # Decode text with fallback
-                encoding = resp.encoding or "utf-8"
-                try:
-                    final_html = raw_bytes.decode(encoding, errors="replace")
-                except Exception:
-                    final_html = raw_bytes.decode("utf-8", errors="replace")
-                break
 
         # 3. Extract content
         extracted = WebContentExtractor.extract(final_html, source_url=canonical_url)

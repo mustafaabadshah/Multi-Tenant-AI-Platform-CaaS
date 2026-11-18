@@ -29,8 +29,15 @@ class CSVParser(DocumentParser):
         return "python-csv_Parser"
 
     def validate(self, content: bytes, filename: str) -> bool:
-        """Validate if file is text/readable."""
-        return len(content) > 0 and not content.startswith(b"\x00")
+        """Validate if file is readable CSV/TSV."""
+        if not content or content.startswith(b"\x00"):
+            return False
+        ext = filename.lower() if filename else ""
+        if ext.endswith((".csv", ".tsv")):
+            return True
+        # For files without extension, sniff comma/tab delimiters in sample
+        sample = content[:512].decode("utf-8", errors="ignore")
+        return ("," in sample or "\t" in sample) and "<html" not in sample.lower()
 
     async def extract(self, content: bytes, filename: str, mime_type: str | None = None) -> ExtractedDocument:
         start_time = time.perf_counter()

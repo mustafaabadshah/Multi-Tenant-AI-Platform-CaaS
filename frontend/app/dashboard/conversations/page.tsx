@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState, useMemo } from "react";
+import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import {
   api,
@@ -53,6 +54,8 @@ import {
   FileUp,
   Globe,
   Activity,
+  ThumbsUp,
+  ThumbsDown,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
@@ -101,6 +104,22 @@ export default function ConversationsWorkspacePage() {
   const [saveWebMode, setSaveWebMode] = useState<"REFERENCE" | "FULL_CONTENT">("REFERENCE");
   const [saveWebNotes, setSaveWebNotes] = useState<string>("");
   const [isSavingWebSource, setIsSavingWebSource] = useState<boolean>(false);
+
+  // M28.1: Live Web Reading SSE Status
+  const [webReadingStatus, setWebReadingStatus] = useState<{
+    url: string;
+    status: "reading" | "completed" | "failed";
+    title?: string;
+    error?: string;
+  } | null>(null);
+
+  // M28: In-App Message Feedback State
+  const [feedbackMap, setFeedbackMap] = useState<Record<string, { rating: "THUMBS_UP" | "THUMBS_DOWN"; category?: string; comment?: string }>>({});
+  const [feedbackPopoverMsgId, setFeedbackPopoverMsgId] = useState<string | null>(null);
+  const [feedbackSubmittingMsgId, setFeedbackSubmittingMsgId] = useState<string | null>(null);
+  const [feedbackSuccessMsgId, setFeedbackSuccessMsgId] = useState<string | null>(null);
+  const [negativeCategory, setNegativeCategory] = useState<string>("ACCURACY");
+  const [negativeComment, setNegativeComment] = useState<string>("");
 
   // M23 & M24: Speech & Voice State
   const [voiceMode, setVoiceMode] = useState<VoiceMode>("TEXT");
@@ -523,6 +542,67 @@ export default function ConversationsWorkspacePage() {
     }
   };
 
+  // M28: Message Feedback Handlers
+  const handleThumbsUp = async (msgId: string) => {
+    if (!activeConversation || feedbackSubmittingMsgId) return;
+    setFeedbackSubmittingMsgId(msgId);
+    setFeedbackPopoverMsgId(null);
+    try {
+      await api.submitMessageFeedback(activeConversation.id, msgId, {
+        rating: "THUMBS_UP",
+      });
+      setFeedbackMap((prev) => ({
+        ...prev,
+        [msgId]: { rating: "THUMBS_UP" },
+      }));
+      setFeedbackSuccessMsgId(msgId);
+      setTimeout(() => setFeedbackSuccessMsgId((cur) => (cur === msgId ? null : cur)), 2500);
+    } catch (err: any) {
+      console.error("Failed to submit feedback", err);
+    } finally {
+      setFeedbackSubmittingMsgId(null);
+    }
+  };
+
+  const handleOpenThumbsDownPopover = (msgId: string) => {
+    setFeedbackPopoverMsgId((prev) => (prev === msgId ? null : msgId));
+    const existing = feedbackMap[msgId];
+    if (existing && existing.category) {
+      setNegativeCategory(existing.category);
+      setNegativeComment(existing.comment || "");
+    } else {
+      setNegativeCategory("ACCURACY");
+      setNegativeComment("");
+    }
+  };
+
+  const handleSubmitNegativeFeedback = async (msgId: string) => {
+    if (!activeConversation || feedbackSubmittingMsgId) return;
+    setFeedbackSubmittingMsgId(msgId);
+    try {
+      await api.submitMessageFeedback(activeConversation.id, msgId, {
+        rating: "THUMBS_DOWN",
+        category: negativeCategory,
+        comment: negativeComment.trim() || undefined,
+      });
+      setFeedbackMap((prev) => ({
+        ...prev,
+        [msgId]: {
+          rating: "THUMBS_DOWN",
+          category: negativeCategory,
+          comment: negativeComment.trim() || undefined,
+        },
+      }));
+      setFeedbackPopoverMsgId(null);
+      setFeedbackSuccessMsgId(msgId);
+      setTimeout(() => setFeedbackSuccessMsgId((cur) => (cur === msgId ? null : cur)), 2500);
+    } catch (err: any) {
+      console.error("Failed to submit negative feedback", err);
+    } finally {
+      setFeedbackSubmittingMsgId(null);
+    }
+  };
+
   // M23, M24 & M27.1: Change Voice Mode
   const handleVoiceModeChange = async (newMode: VoiceMode) => {
     setVoiceMode(newMode);
@@ -621,7 +701,7 @@ export default function ConversationsWorkspacePage() {
     let conv = activeConversation;
     if (!conv) {
       if (assistants.length === 0) {
-        alert("Please create an assistant first.");
+        setErrorMessage("Please create an assistant first before starting a conversation.");
         return;
       }
       try {
@@ -655,6 +735,7 @@ export default function ConversationsWorkspacePage() {
     setStreaming(true);
     setStreamingContent("");
     setStreamingCitations([]);
+    setWebReadingStatus(null);
     setErrorMessage(null);
 
     const abortController = new AbortController();
@@ -711,6 +792,12 @@ export default function ConversationsWorkspacePage() {
               if (eventType === "token") {
                 accumulatedText += data.delta ?? data.token ?? "";
                 setStreamingContent(accumulatedText);
+              } else if (eventType === "web_reading_started") {
+                setWebReadingStatus({ url: data.url, status: "reading" });
+              } else if (eventType === "web_reading_completed") {
+                setWebReadingStatus({ url: data.url, status: "completed", title: data.title });
+              } else if (eventType === "web_reading_failed") {
+                setWebReadingStatus({ url: data.url, status: "failed", error: data.error });
               } else if (eventType === "web_source_discovered") {
                 if (data.url) {
                   const webCit: MessageCitationItem = {
@@ -1245,18 +1332,45 @@ export default function ConversationsWorkspacePage() {
                   <Spinner size="md" />
                 </div>
               ) : messages.length === 0 && !streaming ? (
-                <div className="h-full flex flex-col items-center justify-center text-center p-8 text-gray-400 space-y-3">
+                <div className="h-full flex flex-col items-center justify-center text-center p-8 text-gray-400 space-y-4">
                   <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-500 flex items-center justify-center">
                     <Sparkles size={24} />
                   </div>
                   <div>
                     <h4 className="text-sm font-semibold text-gray-700">
-                      Start your conversation with {activeAssistant?.name}
+                      {activeAssistant ? `Chat with ${activeAssistant.name}` : "Start a Conversation"}
                     </h4>
                     <p className="text-xs text-gray-400 max-w-sm mt-1">
-                      Type a message, speak via microphone, or attach documents to ask grounded questions.
+                      {activeAssistant
+                        ? "Type a question, paste a webpage link, or attach documents for grounded answers."
+                        : "Select or create an assistant to start exploring grounded AI capabilities."}
                     </p>
                   </div>
+                  {activeAssistant && (
+                    <div className="flex flex-wrap gap-2 justify-center max-w-md pt-1">
+                      <button
+                        type="button"
+                        onClick={() => handleSendMessageWithText("What can you help me with?")}
+                        className="px-3 py-1.5 rounded-lg bg-gray-50 hover:bg-gray-100 border border-gray-200 text-xs text-gray-700 transition-colors cursor-pointer"
+                      >
+                        "What can you help me with?"
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSendMessageWithText("Summarize the key information from my documents.")}
+                        className="px-3 py-1.5 rounded-lg bg-gray-50 hover:bg-gray-100 border border-gray-200 text-xs text-gray-700 transition-colors cursor-pointer"
+                      >
+                        "Summarize key document info"
+                      </button>
+                    </div>
+                  )}
+                  {assistants.length === 0 && (
+                    <Link href="/dashboard/assistants" className="pt-2">
+                      <Button variant="primary" size="sm" icon={Plus}>
+                        Create your first assistant
+                      </Button>
+                    </Link>
+                  )}
                 </div>
               ) : (
                 messages.map((msg) => {
@@ -1339,14 +1453,129 @@ export default function ConversationsWorkspacePage() {
                                 <span className="truncate max-w-[130px]">
                                   {c.document_name || "Document"}
                                 </span>
-                                {!isWeb && (
+                                {!isWeb && c.page_number != null && (
                                   <span className="text-[10px] text-gray-400">
-                                    p.{c.page_number || 1}
+                                    p.{c.page_number}
                                   </span>
                                 )}
                               </button>
                             );
                           })}
+                        </div>
+                      )}
+
+                      {/* M28: In-App Message Feedback Controls */}
+                      {!isUser && !msg.id.startsWith("asst-") && (
+                        <div className="mt-1.5 flex flex-col items-start px-1">
+                          <div className="flex items-center gap-1.5 text-xs text-gray-400">
+                            {/* Thumbs Up Button */}
+                            <button
+                              type="button"
+                              onClick={() => handleThumbsUp(msg.id)}
+                              disabled={feedbackSubmittingMsgId === msg.id}
+                              aria-label="Thumbs up"
+                              title="Helpful response"
+                              className={`p-1 rounded-md transition-colors ${
+                                feedbackMap[msg.id]?.rating === "THUMBS_UP"
+                                  ? "text-emerald-600 bg-emerald-50 border border-emerald-200"
+                                  : "hover:text-gray-700 hover:bg-gray-100"
+                              }`}
+                            >
+                              <ThumbsUp size={12} className={feedbackMap[msg.id]?.rating === "THUMBS_UP" ? "fill-current" : ""} />
+                            </button>
+
+                            {/* Thumbs Down Button */}
+                            <button
+                              type="button"
+                              onClick={() => handleOpenThumbsDownPopover(msg.id)}
+                              disabled={feedbackSubmittingMsgId === msg.id}
+                              aria-label="Thumbs down"
+                              title="Unhelpful or inaccurate response"
+                              className={`p-1 rounded-md transition-colors ${
+                                feedbackMap[msg.id]?.rating === "THUMBS_DOWN"
+                                  ? "text-rose-600 bg-rose-50 border border-rose-200"
+                                  : "hover:text-gray-700 hover:bg-gray-100"
+                              }`}
+                            >
+                              <ThumbsDown size={12} className={feedbackMap[msg.id]?.rating === "THUMBS_DOWN" ? "fill-current" : ""} />
+                            </button>
+
+                            {/* Feedback Confirmation Pill */}
+                            {feedbackSuccessMsgId === msg.id && (
+                              <span className="text-[11px] text-emerald-600 flex items-center gap-1 font-medium ml-1 animate-fadeIn">
+                                <Check size={11} /> Feedback recorded
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Inline Negative Feedback Popover */}
+                          {feedbackPopoverMsgId === msg.id && (
+                            <div className="mt-2 p-3 bg-white border border-gray-200 rounded-xl shadow-md w-full max-w-sm text-xs space-y-2 animate-fadeIn z-10">
+                              <div className="flex items-center justify-between font-medium text-gray-700">
+                                <span>What went wrong?</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setFeedbackPopoverMsgId(null)}
+                                  className="text-gray-400 hover:text-gray-600"
+                                >
+                                  <X size={12} />
+                                </button>
+                              </div>
+
+                              {/* Category selection chips */}
+                              <div className="flex flex-wrap gap-1">
+                                {[
+                                  { id: "ACCURACY", label: "Inaccurate" },
+                                  { id: "HALLUCINATION", label: "Hallucination" },
+                                  { id: "HELPFULNESS", label: "Unhelpful" },
+                                  { id: "INCOMPLETE", label: "Incomplete" },
+                                  { id: "TONE", label: "Tone" },
+                                  { id: "OTHER", label: "Other" },
+                                ].map((cat) => (
+                                  <button
+                                    key={cat.id}
+                                    type="button"
+                                    onClick={() => setNegativeCategory(cat.id)}
+                                    className={`px-2 py-0.5 rounded-full text-[11px] border transition-colors ${
+                                      negativeCategory === cat.id
+                                        ? "bg-rose-50 border-rose-300 text-rose-700 font-medium"
+                                        : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
+                                    }`}
+                                  >
+                                    {cat.label}
+                                  </button>
+                                ))}
+                              </div>
+
+                              {/* Optional comment */}
+                              <input
+                                type="text"
+                                value={negativeComment}
+                                onChange={(e) => setNegativeComment(e.target.value)}
+                                placeholder="Additional details (optional)..."
+                                maxLength={500}
+                                className="w-full px-2.5 py-1.5 text-xs bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 text-gray-800"
+                              />
+
+                              <div className="flex justify-end gap-1.5 pt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setFeedbackPopoverMsgId(null)}
+                                  className="px-2.5 py-1 rounded-md text-gray-500 hover:bg-gray-100 text-[11px]"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={feedbackSubmittingMsgId === msg.id}
+                                  onClick={() => handleSubmitNegativeFeedback(msg.id)}
+                                  className="px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-md text-[11px] font-medium transition-colors disabled:opacity-50"
+                                >
+                                  {feedbackSubmittingMsgId === msg.id ? "Saving..." : "Submit Feedback"}
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -1367,13 +1596,29 @@ export default function ConversationsWorkspacePage() {
                   </div>
 
                   <div className="rounded-2xl rounded-tl-none px-4 py-3 text-sm bg-gray-50 border border-blue-200 text-gray-900 shadow-xs max-w-2xl">
+                    {webReadingStatus && (
+                      <div className={`mb-2.5 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border ${
+                        webReadingStatus.status === "reading"
+                          ? "bg-blue-50 border-blue-200 text-blue-700 animate-pulse"
+                          : webReadingStatus.status === "completed"
+                          ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                          : "bg-amber-50 border-amber-200 text-amber-800"
+                      }`}>
+                        <Globe size={13} className={webReadingStatus.status === "reading" ? "animate-spin text-blue-600" : ""} />
+                        <span>
+                          {webReadingStatus.status === "reading" && `Reading webpage: ${webReadingStatus.url}...`}
+                          {webReadingStatus.status === "completed" && `Webpage read: ${webReadingStatus.title || webReadingStatus.url}`}
+                          {webReadingStatus.status === "failed" && `Couldn't read webpage: ${webReadingStatus.error || "Blocked or unreachable"}`}
+                        </span>
+                      </div>
+                    )}
                     <MarkdownRenderer
                       content={streamingContent || ""}
                       citations={streamingCitations}
                       onCitationClick={(cit) => setInspectCitation(cit)}
                       className="text-sm"
                     />
-                    {!streamingContent && (
+                    {!streamingContent && !webReadingStatus && (
                       <span className="text-gray-400 italic text-xs">Thinking...</span>
                     )}
                     <span className="inline-block w-1.5 h-4 ml-1 bg-blue-600 animate-pulse align-middle" />
@@ -1892,7 +2137,7 @@ export default function ConversationsWorkspacePage() {
                     ref={fileInputRef}
                     type="file"
                     className="hidden"
-                    accept=".pdf,.docx,.txt,.csv"
+                    accept=".pdf,.docx,.txt,.csv,.html,.htm"
                     onChange={handleFileUpload}
                   />
 
@@ -1903,7 +2148,7 @@ export default function ConversationsWorkspacePage() {
                       onClick={() => fileInputRef.current?.click()}
                       disabled={uploadingAttachment || streaming}
                       className="p-1.5 rounded-lg text-gray-500 hover:text-blue-600 hover:bg-gray-100 transition-colors"
-                      title="Attach document (PDF, DOCX, TXT, CSV)"
+                      title="Attach document (PDF, DOCX, TXT, CSV, HTML)"
                     >
                       {uploadingAttachment ? (
                         <Spinner size="sm" />

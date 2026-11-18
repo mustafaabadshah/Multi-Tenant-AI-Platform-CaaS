@@ -286,7 +286,16 @@ class IngestionService:
         document cannot succeed, so the job/document become terminal FAILED and
         any partial chunks or embeddings for the failed version are purged.
         """
-        is_permanent = isinstance(exc, ingestion_limits.PERMANENT_INGESTION_ERRORS)
+        is_permanent = (
+            isinstance(exc, ingestion_limits.PERMANENT_INGESTION_ERRORS)
+            or (
+                isinstance(exc, ValueError)
+                and any(
+                    term in str(exc).lower()
+                    for term in ("unsupported", "format", "extractable", "unparseable", "no readable", "too large")
+                )
+            )
+        )
         if is_permanent:
             logger.warning("Ingestion limit failure for job %s (%s)", job_id, type(exc).__name__)
         else:

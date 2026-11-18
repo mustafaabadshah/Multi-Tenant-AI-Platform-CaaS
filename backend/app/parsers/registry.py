@@ -7,6 +7,7 @@ import filetype
 from app.parsers.base import DocumentParser
 from app.parsers.csv_parser import CSVParser
 from app.parsers.docx import DOCXParser
+from app.parsers.html import HTMLParser
 from app.parsers.json_parser import JSONParser
 from app.parsers.markdown import MarkdownParser
 from app.parsers.pdf import PDFParser
@@ -30,6 +31,7 @@ class ParserRegistry:
             SQLParser(),
             MarkdownParser(),
             TextParser(),
+            HTMLParser(),
         ]
 
     def get_supported_extensions(self) -> set[str]:
@@ -61,6 +63,8 @@ class ParserRegistry:
             ".text": "text/plain",
             ".md": "text/markdown",
             ".markdown": "text/markdown",
+            ".html": "text/html",
+            ".htm": "text/html",
         }
         return ext_to_mime.get(ext, "application/octet-stream")
 
@@ -92,7 +96,25 @@ class ParserRegistry:
             if detected_mime in parser.supported_mime_types:
                 return parser
 
-        raise ValueError(
+        # 4. Fallback: content sniffing for safe HTML if declared MIME is HTML or content contains HTML tags
+        header_sample = content[:2048].lower() if content else b""
+        if (
+            declared_mime in ("text/html", "application/xhtml+xml")
+            or b"<!doctype html" in header_sample
+            or b"<html" in header_sample
+        ):
+            for parser in self._parsers:
+                if isinstance(parser, HTMLParser) and parser.validate(content, filename):
+                    return parser
+
+        # 5. General parser validation fallback
+        if detected_mime == "application/octet-stream":
+            for parser in self._parsers:
+                if parser.validate(content, filename):
+                    return parser
+
+        from app.services.ingestion.limits import UnsupportedFormatError
+        raise UnsupportedFormatError(
             f"Unsupported document format: extension '{ext}', detected MIME '{detected_mime}'. "
             f"Supported extensions: {', '.join(sorted(self.get_supported_extensions()))}"
         )

@@ -27,7 +27,15 @@ from app.schemas.conversation_attachment import (
     AttachmentPromotionResponse,
     ConversationAttachmentResponse,
 )
+from app.schemas.feedback import (
+    FeedbackListItemResponse,
+    FeedbackStatusUpdateRequest,
+    FeedbackTelemetryResponse,
+    MessageFeedbackCreate,
+    MessageFeedbackResponse,
+)
 from app.services.conversation_attachment_service import ConversationAttachmentService
+from app.services.feedback_service import FeedbackService
 
 router = APIRouter(prefix="/conversations", tags=["Conversations & Chat"])
 
@@ -75,6 +83,75 @@ async def create_conversation(
     await db.commit()
     await db.refresh(conv)
     return ConversationResponse.model_validate(conv)
+
+
+@router.get("/feedback/stream", response_model=list[FeedbackListItemResponse])
+async def list_feedback_stream(
+    rating: str | None = None,
+    category: str | None = None,
+    assistant_id: uuid.UUID | None = None,
+    feedback_status: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    ctx: TenantContext = Depends(require_permission(PermissionName.AUDIT_READ.value)),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[FeedbackListItemResponse]:
+    """Admin endpoint to stream/list all message feedback items in this workspace."""
+    svc = FeedbackService(
+        session=db,
+        tenant_id=ctx.tenant.id,
+        user_id=current_user.id,
+        is_admin=ctx.is_admin or ctx.is_owner,
+    )
+    items = await svc.list_feedback(
+        rating=rating,
+        category=category,
+        assistant_id=assistant_id,
+        feedback_status=feedback_status,
+        limit=limit,
+        offset=offset,
+    )
+    return [FeedbackListItemResponse.model_validate(it) for it in items]
+
+
+@router.get("/feedback/telemetry", response_model=FeedbackTelemetryResponse)
+async def get_feedback_telemetry(
+    ctx: TenantContext = Depends(require_permission(PermissionName.ASSISTANT_READ.value)),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> FeedbackTelemetryResponse:
+    """Get aggregated quality feedback telemetry for the workspace."""
+    svc = FeedbackService(
+        session=db,
+        tenant_id=ctx.tenant.id,
+        user_id=current_user.id,
+        is_admin=ctx.is_admin or ctx.is_owner,
+    )
+    return await svc.get_feedback_telemetry()
+
+
+@router.patch("/feedback/{feedback_id}/status", response_model=MessageFeedbackResponse)
+async def update_feedback_status(
+    feedback_id: uuid.UUID,
+    payload: FeedbackStatusUpdateRequest,
+    ctx: TenantContext = Depends(require_permission(PermissionName.AUDIT_READ.value)),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> MessageFeedbackResponse:
+    """Update review status of a feedback record (admin only)."""
+    svc = FeedbackService(
+        session=db,
+        tenant_id=ctx.tenant.id,
+        user_id=current_user.id,
+        is_admin=ctx.is_admin or ctx.is_owner,
+    )
+    fb = await svc.update_feedback_status(
+        feedback_id=feedback_id,
+        new_status=payload.status.value,
+        admin_notes=payload.admin_notes,
+    )
+    return MessageFeedbackResponse.model_validate(fb)
 
 
 @router.get("/{conversation_id}", response_model=ConversationResponse)
@@ -452,4 +529,59 @@ async def promote_attachment(
         )
     except ValueError as v_err:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(v_err))
+
+
+@router.post(
+    "/{conversation_id}/messages/{message_id}/feedback",
+    response_model=MessageFeedbackResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def submit_message_feedback(
+    conversation_id: uuid.UUID,
+    message_id: uuid.UUID,
+    payload: MessageFeedbackCreate,
+    ctx: TenantContext = Depends(require_permission(PermissionName.ASSISTANT_READ.value)),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> MessageFeedbackResponse:
+    """Submit or update user rating and feedback on an assistant message."""
+    svc = FeedbackService(
+        session=db,
+        tenant_id=ctx.tenant.id,
+        user_id=current_user.id,
+        is_admin=ctx.is_admin or ctx.is_owner,
+    )
+    fb = await svc.submit_feedback(
+        conversation_id=conversation_id,
+        message_id=message_id,
+        payload=payload,
+    )
+    return MessageFeedbackResponse.model_validate(fb)
+
+
+@router.get(
+    "/{conversation_id}/messages/{message_id}/feedback",
+    response_model=MessageFeedbackResponse | None,
+)
+async def get_message_feedback(
+    conversation_id: uuid.UUID,
+    message_id: uuid.UUID,
+    ctx: TenantContext = Depends(require_permission(PermissionName.ASSISTANT_READ.value)),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> MessageFeedbackResponse | None:
+    """Retrieve the current user's feedback for a specific assistant message."""
+    svc = FeedbackService(
+        session=db,
+        tenant_id=ctx.tenant.id,
+        user_id=current_user.id,
+        is_admin=ctx.is_admin or ctx.is_owner,
+    )
+    fb = await svc.get_message_feedback(
+        conversation_id=conversation_id,
+        message_id=message_id,
+    )
+    if not fb:
+        return None
+    return MessageFeedbackResponse.model_validate(fb)
 

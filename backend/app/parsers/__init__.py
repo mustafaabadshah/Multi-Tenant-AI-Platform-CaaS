@@ -9,6 +9,7 @@ from app.parsers.base import (
 )
 from app.parsers.csv_parser import CSVParser
 from app.parsers.docx import DOCXParser
+from app.parsers.html import HTMLParser
 from app.parsers.json_parser import JSONParser
 from app.parsers.markdown import MarkdownParser
 from app.parsers.pdf import PDFParser
@@ -26,6 +27,7 @@ __all__ = [
     "ExtractedPage",
     "ExtractedSection",
     "ExtractedTable",
+    "HTMLParser",
     "JSONParser",
     "MarkdownParser",
     "PDFParser",

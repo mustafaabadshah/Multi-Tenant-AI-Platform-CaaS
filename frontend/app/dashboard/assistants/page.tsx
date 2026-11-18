@@ -934,7 +934,11 @@ export default function AssistantsChatPage() {
                     <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
                       <div className="text-[11px] font-bold text-gray-500 mb-2 flex items-center justify-between">
                         <span>SOURCE EXCERPT</span>
-                        <span className="font-mono text-blue-600">Page {activeCitation.page_number || 1}</span>
+                        {activeCitation.page_number != null ? (
+                          <span className="font-mono text-blue-600">Page {activeCitation.page_number}</span>
+                        ) : (
+                          <span className="font-mono text-gray-400">Web / Excerpt</span>
+                        )}
                       </div>
                       <div className="text-xs text-gray-900 leading-relaxed font-sans whitespace-pre-wrap select-text">
                         {activeCitation.citation_text || activeCitation.snippet}

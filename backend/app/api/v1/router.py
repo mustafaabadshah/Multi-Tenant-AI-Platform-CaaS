@@ -22,6 +22,7 @@ from app.api.v1.retrieval import router as retrieval_router
 from app.api.v1.roles import router as roles_router
 from app.api.v1.templates import router as templates_router
 from app.api.v1.approvals import router as approvals_router
+from app.api.v1.beta import router as beta_router
 from app.api.v1.mcp import router as mcp_router
 from app.api.v1.speech import router as speech_router
 from app.api.v1.tenants import router as tenants_router
@@ -59,6 +60,7 @@ api_v1_router.include_router(observability_router)
 api_v1_router.include_router(tools_router)
 api_v1_router.include_router(approvals_router)
 api_v1_router.include_router(mcp_router)
+api_v1_router.include_router(beta_router)
 
 
 

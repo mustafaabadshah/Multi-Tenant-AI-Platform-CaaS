@@ -10,6 +10,9 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.administration import QuotaReservation, TenantQuota
+from app.models.assistant import Assistant
+from app.models.conversation import ConversationAttachment
+from app.models.knowledge import Document
 from app.models.provider import ProviderUsageLog
 
 logger = logging.getLogger("mmaip.services.quota")
@@ -363,6 +366,41 @@ class QuotaService:
         daily_limit = getattr(quota, "daily_request_limit", DEFAULT_DAILY_REQUEST_LIMIT)
         pct_used = (month_total / quota.monthly_token_limit * 100) if quota.monthly_token_limit > 0 else 0
 
+        # Storage calculation (Knowledge Base documents + conversation attachments)
+        doc_stmt = select(
+            func.coalesce(func.sum(Document.file_size), 0),
+            func.count(Document.id),
+        ).where(
+            Document.tenant_id == self.tenant_id,
+            Document.status != "DELETED",
+        )
+        doc_res = await self.session.execute(doc_stmt)
+        doc_bytes, doc_count = doc_res.one()
+
+        att_stmt = select(
+            func.coalesce(func.sum(ConversationAttachment.file_size), 0),
+            func.count(ConversationAttachment.id),
+        ).where(ConversationAttachment.tenant_id == self.tenant_id)
+        att_res = await self.session.execute(att_stmt)
+        att_bytes, att_count = att_res.one()
+
+        total_storage_bytes = int(doc_bytes) + int(att_bytes)
+        total_documents = int(doc_count) + int(att_count)
+
+        # Active assistants count
+        asst_stmt = select(func.count(Assistant.id)).where(
+            Assistant.tenant_id == self.tenant_id,
+            Assistant.status != "DELETED",
+        )
+        asst_res = await self.session.execute(asst_stmt)
+        active_assistants = int(asst_res.scalar_one())
+
+        # Next month reset timestamp calculation
+        if now.month == 12:
+            next_month = datetime(now.year + 1, 1, 1, tzinfo=UTC)
+        else:
+            next_month = datetime(now.year, now.month + 1, 1, tzinfo=UTC)
+
         return {
             "monthly_tokens_used": int(month_total),
             "monthly_tokens_limit": quota.monthly_token_limit,
@@ -373,4 +411,12 @@ class QuotaService:
             "daily_request_limit": daily_limit,
             "by_provider": by_provider,
             "by_traffic_type": by_traffic_type,
+            "storage_bytes_used": total_storage_bytes,
+            "storage_bytes_limit": getattr(quota, "max_storage_bytes", 10_737_418_240),
+            "document_count": total_documents,
+            "document_limit": 500,
+            "active_assistants": active_assistants,
+            "max_assistants": getattr(quota, "max_assistants", 10),
+            "measurement_timestamp": now.isoformat(),
+            "reset_timestamp": next_month.isoformat(),
         }

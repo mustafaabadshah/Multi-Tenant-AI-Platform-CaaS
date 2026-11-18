@@ -28,6 +28,8 @@ import {
   ShieldCheck,
   Network,
   Wrench,
+  FlaskConical,
+  UserCheck,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import Spinner from "@/components/ui/Spinner";
@@ -84,42 +86,30 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const navGroups = [
     {
-      group: "Workspace",
+      group: "Main",
       items: [
         { label: "Overview", href: "/dashboard", icon: LayoutDashboard },
-        { label: "Assistants", href: "/dashboard/assistants", icon: Bot },
-        { label: "Knowledge", href: "/dashboard/knowledge", icon: Database },
-        { label: "Conversations", href: "/dashboard/conversations", icon: MessageSquare },
+        { label: "Chat Studio", href: "/dashboard/conversations", icon: MessageSquare },
+        { label: "AI Assistants", href: "/dashboard/assistants", icon: Bot },
+        { label: "Knowledge Bases", href: "/dashboard/knowledge", icon: Database },
       ],
     },
     {
-      group: "Integrations & Tools",
+      group: "Manage",
       items: [
-        { label: "MCP Connections", href: "/dashboard/integrations", icon: Network },
-        { label: "Custom Tools", href: "/dashboard/tools", icon: Wrench },
+        { label: "Team & Roles", href: "/dashboard/employees", icon: Users },
+        { label: "Usage & Quotas", href: "/dashboard/settings", icon: Settings },
       ],
     },
     {
-      group: "Operate",
+      group: "Advanced",
       items: [
+        { label: "Tools & MCP", href: "/dashboard/integrations", icon: Network },
+        { label: "Evaluations", href: "/dashboard/evaluations", icon: FlaskConical },
+        { label: "Beta Quality", href: "/dashboard/beta", icon: UserCheck },
         { label: "Observability", href: "/dashboard/observability", icon: Activity },
-      ],
-    },
-    {
-      group: "Organization",
-      items: [
-        { label: "Employees", href: "/dashboard/employees", icon: Users },
-        { label: "Departments", href: "/dashboard/departments", icon: Briefcase },
-        { label: "Groups", href: "/dashboard/groups", icon: Layers },
-        { label: "Organization", href: "/dashboard/workspace", icon: Building2 },
-      ],
-    },
-    {
-      group: "Settings",
-      items: [
         { label: "Providers & Keys", href: "/dashboard/providers", icon: Key },
         { label: "Audit Logs", href: "/dashboard/audit", icon: History },
-        { label: "Settings", href: "/dashboard/settings", icon: Settings },
       ],
     },
   ];

@@ -15,6 +15,7 @@ import {
   MessageSquare,
   Key,
   ChevronRight,
+  Sparkles,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -71,6 +72,27 @@ export default function DashboardOverviewPage() {
           workspace. Manage your knowledge bases, AI assistants, conversations, and organization.
         </p>
       </div>
+
+      {/* First-Time User Onboarding Guide (Phase 6.1) */}
+      {!loading && (assistantCount === 0 || assistantCount === null) && (
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200/80 rounded-xl p-5 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-fadeIn">
+          <div className="space-y-1">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
+              <Sparkles size={12} />
+              <span>Get Started</span>
+            </div>
+            <h3 className="text-sm font-semibold text-gray-900">Create your first AI Assistant</h3>
+            <p className="text-xs text-gray-600 max-w-xl">
+              Build an AI assistant grounded in your documents, connected to knowledge bases, or able to read web pages.
+            </p>
+          </div>
+          <Link href="/dashboard/assistants">
+            <Button variant="primary" size="sm" icon={Plus}>
+              Create Assistant
+            </Button>
+          </Link>
+        </div>
+      )}
 
       {/* Metrics Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

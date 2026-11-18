@@ -15,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.knowledge import Document, DocumentChunk, DocumentVersion, KnowledgeBase
-from app.services.conversation_attachment_service import sanitize_filename
+from app.storage import sanitize_filename
 
 
 class WebSaveMode(str, Enum):

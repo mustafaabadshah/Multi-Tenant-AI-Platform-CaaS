@@ -1714,6 +1714,16 @@ class ApiClient {
     });
   }
 
+  async executeEvalRun(payload: {
+    assistant_id: string;
+    dataset_id: string;
+    eval_type?: string;
+    judge_provider?: string;
+    judge_model?: string;
+  }): Promise<EvalRun> {
+    return this.triggerEvalRun(payload);
+  }
+
   async compareEvalRuns(runIdA: string, runIdB: string): Promise<EvalRunComparison> {
     return this.request<EvalRunComparison>(`/evaluations/runs/${runIdA}/compare/${runIdB}`);
   }
@@ -2037,6 +2047,84 @@ class ApiClient {
       body: JSON.stringify(payload),
     }, true);
   }
+
+  // Message Feedback (M28)
+  async submitMessageFeedback(
+    conversationId: string,
+    messageId: string,
+    payload: {
+      rating: "THUMBS_UP" | "THUMBS_DOWN";
+      category?: string;
+      comment?: string;
+    }
+  ): Promise<MessageFeedbackItem> {
+    return this.request<MessageFeedbackItem>(
+      `/conversations/${conversationId}/messages/${messageId}/feedback`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+      true
+    );
+  }
+
+  async getMessageFeedback(
+    conversationId: string,
+    messageId: string
+  ): Promise<MessageFeedbackItem | null> {
+    return this.request<MessageFeedbackItem | null>(
+      `/conversations/${conversationId}/messages/${messageId}/feedback`,
+      { method: "GET" },
+      true
+    );
+  }
+
+  async getFeedbackTelemetry(): Promise<FeedbackTelemetryItem> {
+    return this.request<FeedbackTelemetryItem>("/conversations/feedback/telemetry", { method: "GET" }, true);
+  }
+
+  async listFeedbackStream(params?: {
+    rating?: string;
+    category?: string;
+    assistant_id?: string;
+    feedback_status?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<FeedbackListItem[]> {
+    const q = new URLSearchParams();
+    if (params?.rating) q.set("rating", params.rating);
+    if (params?.category) q.set("category", params.category);
+    if (params?.assistant_id) q.set("assistant_id", params.assistant_id);
+    if (params?.feedback_status) q.set("feedback_status", params.feedback_status);
+    if (params?.limit) q.set("limit", params.limit.toString());
+    if (params?.offset) q.set("offset", params.offset.toString());
+    const qs = q.toString() ? `?${q.toString()}` : "";
+    return this.request<FeedbackListItem[]>(`/conversations/feedback/stream${qs}`, { method: "GET" }, true);
+  }
+
+  async updateFeedbackStatus(
+    feedbackId: string,
+    payload: { status: string; admin_notes?: string }
+  ): Promise<MessageFeedbackItem> {
+    return this.request<MessageFeedbackItem>(
+      `/conversations/feedback/${feedbackId}/status`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      },
+      true
+    );
+  }
+
+  // Beta Cohort Operations (M28)
+  async getBetaCohort(): Promise<BetaCohortResponseItem> {
+    return this.request<BetaCohortResponseItem>("/beta/cohort", { method: "GET" }, true);
+  }
+
+  // Tenant Quota & Usage Accounting (M28)
+  async getTenantUsageSummary(): Promise<TenantUsageSummaryItem> {
+    return this.request<TenantUsageSummaryItem>("/providers/usage/summary", { method: "GET" }, true);
+  }
 }
 
 export interface ConversationAttachmentItem {
@@ -2081,6 +2169,177 @@ export interface VoicePreferenceItem {
   speech_rate: number;
   auto_read: boolean;
   language: string;
+}
+
+// M28 Interfaces
+export interface MessageFeedbackItem {
+  id: string;
+  tenant_id: string;
+  conversation_id: string;
+  message_id: string;
+  assistant_id: string;
+  user_id: string;
+  rating: "THUMBS_UP" | "THUMBS_DOWN";
+  category?: string | null;
+  comment?: string | null;
+  status: "NEW" | "REVIEWED" | "ACTIONED" | "CLOSED";
+  admin_notes?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FeedbackListItem extends MessageFeedbackItem {
+  assistant_name?: string;
+  user_email?: string;
+  message_content_snippet?: string;
+}
+
+export interface FeedbackTelemetryItem {
+  total_feedback_count: number;
+  positive_count: number;
+  negative_count: number;
+  positive_percentage?: number | null;
+  category_breakdown: Record<string, number>;
+  is_sparse_sample: boolean;
+  status_breakdown: Record<string, number>;
+}
+
+export interface EvalDatasetItem {
+  id: string;
+  tenant_id: string;
+  name: string;
+  description?: string | null;
+  version: number;
+  is_system: boolean;
+  item_count: number;
+  created_by?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EvalDatasetQuestionItem {
+  id: string;
+  dataset_id: string;
+  question: string;
+  expected_answer?: string | null;
+  expected_chunk_ids: string[];
+  is_unanswerable: boolean;
+  is_adversarial: boolean;
+  item_metadata?: Record<string, any>;
+  created_at: string;
+}
+
+export interface EvalDatasetDetailItem extends EvalDatasetItem {
+  items: EvalDatasetQuestionItem[];
+}
+
+export interface EvalRunItem {
+  id: string;
+  tenant_id: string;
+  assistant_id: string;
+  assistant_name?: string | null;
+  dataset_id: string;
+  dataset_name?: string | null;
+  status: "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "CANCELLED";
+  eval_type: string;
+  judge_provider?: string | null;
+  judge_model?: string | null;
+  item_count: number;
+  completed_count: number;
+  metrics_summary: Record<string, any>;
+  error_message?: string | null;
+  created_by?: string | null;
+  created_at: string;
+  completed_at?: string | null;
+}
+
+export interface EvalRunResultItem {
+  id: string;
+  run_id: string;
+  item_id: string;
+  question: string;
+  expected_answer?: string | null;
+  generated_answer?: string | null;
+  retrieved_chunk_ids: string[];
+  metrics: Record<string, any>;
+  is_successful: boolean;
+  latency_ms: number;
+  token_usage: Record<string, any>;
+  created_at: string;
+}
+
+export interface EvalRunDetailItem extends EvalRunItem {
+  results: EvalRunResultItem[];
+}
+
+export interface EvalRunComparisonItem {
+  run_a: EvalRunDetailItem;
+  run_b: EvalRunDetailItem;
+  diff_metrics: Record<string, { a: number; b: number; diff: number }>;
+}
+
+export interface BetaInvitationItem {
+  id: string;
+  email: string;
+  role_name: string;
+  token_preview: string;
+  is_cancelled: boolean;
+  is_expired: boolean;
+  is_accepted: boolean;
+  created_at: string;
+  expires_at: string;
+  accepted_at?: string | null;
+}
+
+export interface BetaMemberItem {
+  user_id: string;
+  email: string;
+  full_name: string;
+  role_name: string;
+  status: string;
+  joined_at: string;
+  message_count: number;
+  feedback_count: number;
+}
+
+export interface BetaCohortSummaryItem {
+  total_invited: number;
+  pending_invitations: number;
+  accepted_invitations: number;
+  active_beta_members: number;
+  total_conversation_turns: number;
+  total_feedback_count: number;
+  positive_feedback_count: number;
+  negative_feedback_count: number;
+  satisfaction_rate?: number | null;
+  is_sparse_sample: boolean;
+}
+
+export interface BetaCohortResponseItem {
+  summary: BetaCohortSummaryItem;
+  invitations: BetaInvitationItem[];
+  members: BetaMemberItem[];
+}
+
+export interface TenantUsageSummaryItem {
+  monthly_tokens_used: number;
+  monthly_tokens_limit: number;
+  monthly_prompt_tokens: number;
+  monthly_completion_tokens: number;
+  percentage_used: number;
+  today_requests: number;
+  daily_request_limit: number;
+  by_provider: Array<{ provider: string; tokens: number; requests: number }>;
+  by_traffic_type: Array<{ traffic_type: string; tokens: number; requests: number }>;
+  storage_bytes_used: number;
+  storage_bytes_limit: number;
+  document_count: number;
+  document_limit: number;
+  active_assistants: number;
+  max_assistants: number;
+  measurement_timestamp?: string | null;
+  reset_timestamp?: string | null;
+  reset_date?: string | null;
 }
 
 export const api = new ApiClient();

@@ -20,6 +20,7 @@ from app.database.base import Base, TenantScopedMixin, TimestampMixin, UUIDPrima
 
 if TYPE_CHECKING:
     from app.models.assistant import Assistant
+    from app.models.user import User
 
 
 class Conversation(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin):
@@ -67,6 +68,9 @@ class Message(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin):
     )
     citations: Mapped[list["MessageCitation"]] = relationship(
         "MessageCitation", back_populates="message", cascade="all, delete-orphan"
+    )
+    feedback: Mapped[list["MessageFeedback"]] = relationship(
+        "MessageFeedback", back_populates="message", cascade="all, delete-orphan"
     )
 
 
@@ -196,5 +200,46 @@ class VoicePreference(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMix
     speech_rate: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
     preferred_voice: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     preferred_language: Mapped[str] = mapped_column(String(20), default="en-US", nullable=False)
+
+
+class MessageFeedback(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin):
+    """User rating and qualitative feedback on an assistant message."""
+
+    __tablename__ = "message_feedback"
+    __table_args__ = (
+        UniqueConstraint("message_id", "user_id", name="uq_message_feedback_user"),
+    )
+
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("conversations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    message_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("messages.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    assistant_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("assistants.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    rating: Mapped[str] = mapped_column(String(20), nullable=False, index=True)  # THUMBS_UP, THUMBS_DOWN
+    category: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, index=True)
+    comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="NEW", nullable=False, index=True)  # NEW, REVIEWED, ACTIONED, CLOSED
+    admin_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Relationships
+    conversation: Mapped["Conversation"] = relationship("Conversation")
+    message: Mapped["Message"] = relationship("Message", back_populates="feedback")
+    assistant: Mapped["Assistant"] = relationship("Assistant")
+    user: Mapped["User"] = relationship("User")
 
 

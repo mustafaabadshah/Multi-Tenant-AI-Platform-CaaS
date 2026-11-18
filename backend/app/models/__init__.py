@@ -19,6 +19,7 @@ from app.models.conversation import (
     Message,
     MessageAttachment,
     MessageCitation,
+    MessageFeedback,
     VoicePreference,
 )
 from app.models.department import Department
@@ -87,6 +88,7 @@ __all__ = [
     "Message",
     "MessageAttachment",
     "MessageCitation",
+    "MessageFeedback",
     "ObservabilityPolicy",
     "Organization",
     "Permission",

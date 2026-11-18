@@ -1,15 +1,59 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { API_BASE } from "@/lib/api";
-import { Server, Cpu, HardDrive, Key, Sliders, ExternalLink } from "lucide-react";
+import { api, TenantUsageSummaryItem } from "@/lib/api";
+import { Server, Cpu, HardDrive, Key, Sliders, ExternalLink, AlertTriangle, RefreshCw } from "lucide-react";
 import DeveloperApiKeysSection from "./DeveloperApiKeysSection";
 import Badge from "@/components/ui/Badge";
+import Spinner from "@/components/ui/Spinner";
+
+function formatBytes(bytes: number): string {
+  if (!bytes || bytes <= 0) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
+}
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://mmaip-backend.onrender.com";
 
 export default function SettingsPage() {
   const { activeWorkspace } = useAuth();
   const [activeTab, setActiveTab] = useState<"infrastructure" | "developer">("infrastructure");
+  const [usage, setUsage] = useState<TenantUsageSummaryItem | null>(null);
+  const [loadingUsage, setLoadingUsage] = useState<boolean>(true);
+
+  useEffect(() => {
+    async function loadUsage() {
+      try {
+        setLoadingUsage(true);
+        const data = await api.getTenantUsageSummary();
+        setUsage(data);
+      } catch (err) {
+        console.error("Failed to load quota usage", err);
+      } finally {
+        setLoadingUsage(false);
+      }
+    }
+    loadUsage();
+  }, [activeWorkspace?.tenant_id]);
+
+  const tokenPct = usage && usage.monthly_tokens_limit > 0
+    ? Math.min(100, Math.max(0, (usage.monthly_tokens_used / usage.monthly_tokens_limit) * 100))
+    : 0;
+
+  const requestPct = usage && usage.daily_request_limit > 0
+    ? Math.min(100, Math.max(0, (usage.today_requests / usage.daily_request_limit) * 100))
+    : 0;
+
+  const storagePct = usage && usage.storage_bytes_limit > 0
+    ? Math.min(100, Math.max(0, (usage.storage_bytes_used / usage.storage_bytes_limit) * 100))
+    : 0;
+
+  const docPct = usage && usage.document_limit > 0
+    ? Math.min(100, Math.max(0, (usage.document_count / usage.document_limit) * 100))
+    : 0;
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -61,34 +105,81 @@ export default function SettingsPage() {
             </h2>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-              <div className="p-4 rounded-lg bg-gray-50 border border-gray-200 space-y-1">
-                <span className="text-gray-500 font-medium">User Seats</span>
-                <div className="text-lg font-bold text-gray-900">
-                  {activeWorkspace?.tenant_type === "ORGANIZATION" ? "50 Seats" : "1 Seat"}
+              <div className="p-4 rounded-lg bg-gray-50 border border-gray-200 space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-500 font-medium">Monthly Tokens</span>
+                  <span className="font-mono text-gray-700 font-semibold">{tokenPct.toFixed(1)}%</span>
                 </div>
-                <span className="text-[11px] text-gray-400">Maximum members in active workspace</span>
-              </div>
-
-              <div className="p-4 rounded-lg bg-gray-50 border border-gray-200 space-y-1">
-                <span className="text-gray-500 font-medium">Assistant Capacity</span>
-                <div className="text-lg font-bold text-gray-900">
-                  {activeWorkspace?.tenant_type === "ORGANIZATION" ? "10 Assistants" : "3 Assistants"}
+                <div className="text-base font-bold text-gray-900">
+                  {loadingUsage ? "Loading..." : `${usage ? usage.monthly_tokens_used.toLocaleString() : 0} / ${usage && usage.monthly_tokens_limit > 0 ? usage.monthly_tokens_limit.toLocaleString() : "Unlimited"}`}
                 </div>
-                <span className="text-[11px] text-gray-400">Concurrent active AI personas</span>
+                <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                  <div
+                    className={`h-1.5 rounded-full ${tokenPct > 90 ? "bg-red-500" : tokenPct > 70 ? "bg-amber-500" : "bg-blue-600"}`}
+                    style={{ width: `${tokenPct}%` }}
+                  />
+                </div>
+                <span className="text-[11px] text-gray-400 block">OmniRoute LLM inference budget</span>
               </div>
 
-              <div className="p-4 rounded-lg bg-gray-50 border border-gray-200 space-y-1">
-                <span className="text-gray-500 font-medium">Storage Budget</span>
-                <div className="text-lg font-bold text-gray-900">10.0 GB</div>
-                <span className="text-[11px] text-gray-400">Document chunk & OCR raw file allocation</span>
+              <div className="p-4 rounded-lg bg-gray-50 border border-gray-200 space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-500 font-medium">Daily Requests</span>
+                  <span className="font-mono text-gray-700 font-semibold">{requestPct.toFixed(1)}%</span>
+                </div>
+                <div className="text-base font-bold text-gray-900">
+                  {loadingUsage ? "Loading..." : `${usage ? usage.today_requests.toLocaleString() : 0} / ${usage && usage.daily_request_limit > 0 ? usage.daily_request_limit.toLocaleString() : "Unlimited"}`}
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                  <div
+                    className={`h-1.5 rounded-full ${requestPct > 90 ? "bg-red-500" : requestPct > 70 ? "bg-amber-500" : "bg-emerald-600"}`}
+                    style={{ width: `${requestPct}%` }}
+                  />
+                </div>
+                <span className="text-[11px] text-gray-400 block">Daily API call consumption</span>
               </div>
 
-              <div className="p-4 rounded-lg bg-gray-50 border border-gray-200 space-y-1">
-                <span className="text-gray-500 font-medium">Monthly Token Quota</span>
-                <div className="text-lg font-bold text-gray-900">10,000,000 Tokens</div>
-                <span className="text-[11px] text-gray-400">OmniRoute LLM inference budget</span>
+              <div className="p-4 rounded-lg bg-gray-50 border border-gray-200 space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-500 font-medium">Storage Budget</span>
+                  <span className="font-mono text-gray-700 font-semibold">{storagePct.toFixed(1)}%</span>
+                </div>
+                <div className="text-base font-bold text-gray-900">
+                  {loadingUsage ? "Loading..." : `${usage ? formatBytes(usage.storage_bytes_used) : "0 B"} / ${usage && usage.storage_bytes_limit > 0 ? formatBytes(usage.storage_bytes_limit) : "Unlimited"}`}
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                  <div
+                    className={`h-1.5 rounded-full ${storagePct > 90 ? "bg-red-500" : storagePct > 70 ? "bg-amber-500" : "bg-purple-600"}`}
+                    style={{ width: `${storagePct}%` }}
+                  />
+                </div>
+                <span className="text-[11px] text-gray-400 block">Document chunk & OCR raw file allocation</span>
+              </div>
+
+              <div className="p-4 rounded-lg bg-gray-50 border border-gray-200 space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-500 font-medium">Knowledge Base Documents</span>
+                  <span className="font-mono text-gray-700 font-semibold">{docPct.toFixed(1)}%</span>
+                </div>
+                <div className="text-base font-bold text-gray-900">
+                  {loadingUsage ? "Loading..." : `${usage ? usage.document_count.toLocaleString() : 0} / ${usage && usage.document_limit > 0 ? usage.document_limit.toLocaleString() : "Unlimited"}`}
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                  <div
+                    className={`h-1.5 rounded-full ${docPct > 90 ? "bg-red-500" : docPct > 70 ? "bg-amber-500" : "bg-indigo-600"}`}
+                    style={{ width: `${docPct}%` }}
+                  />
+                </div>
+                <span className="text-[11px] text-gray-400 block">Processed corpus files in workspace</span>
               </div>
             </div>
+
+            {usage?.reset_date && (
+              <div className="text-xs text-gray-500 flex items-center justify-between pt-2 border-t border-gray-100">
+                <span>Billing Cycle Renewal:</span>
+                <span className="font-mono text-gray-700 font-medium">{new Date(usage.reset_date).toLocaleDateString()}</span>
+              </div>
+            )}
           </div>
 
           {/* AI Gateway Connection (OmniRoute) */}

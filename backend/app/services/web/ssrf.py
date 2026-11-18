@@ -24,6 +24,44 @@ FORBIDDEN_HOSTNAMES = frozenset({
 ALLOWED_PORTS = frozenset({80, 443})
 
 
+
+
+def verify_ip_address(ip_str: str, allow_http_for_testing: bool = False) -> None:
+    """Validate that an individual IP address is public, routable, and safe."""
+    try:
+        ip = ipaddress.ip_address(ip_str)
+    except ValueError as val_err:
+        raise SSRFSecurityError(f"Invalid IP address returned: '{ip_str}'") from val_err
+
+    # Check loopback
+    if ip.is_loopback:
+        raise SSRFSecurityError(f"Destination IP '{ip_str}' resolves to a forbidden loopback address.")
+
+    # Check private networks (RFC1918)
+    if ip.is_private and not allow_http_for_testing:
+        raise SSRFSecurityError(f"Destination IP '{ip_str}' resolves to a forbidden private network (RFC1918).")
+
+    # Check link-local addresses
+    if ip.is_link_local:
+        raise SSRFSecurityError(f"Destination IP '{ip_str}' resolves to a forbidden link-local address.")
+
+    # Check multicast
+    if ip.is_multicast:
+        raise SSRFSecurityError(f"Destination IP '{ip_str}' resolves to a forbidden multicast address.")
+
+    # Check reserved
+    if ip.is_reserved:
+        raise SSRFSecurityError(f"Destination IP '{ip_str}' resolves to a reserved address.")
+
+    # Cloud metadata endpoint check (169.254.169.254)
+    if str(ip) == "169.254.169.254":
+        raise SSRFSecurityError("Destination IP matches AWS/GCP/Azure cloud metadata service (169.254.169.254).")
+
+    # 0.0.0.0 / unspecified
+    if ip.is_unspecified:
+        raise SSRFSecurityError(f"Destination IP '{ip_str}' is an unspecified address.")
+
+
 def validate_web_url(
     url: str,
     allow_http_for_testing: bool = False,
@@ -38,7 +76,6 @@ def validate_web_url(
     4. Hostname: Cannot be loopback, metadata, or local name.
     5. Domain allowlist: If allowed_domains is configured, hostname must match.
     6. DNS Resolution: All IPv4 (A) and IPv6 (AAAA) records must be public and routable.
-       Blocks RFC1918, link-local, loopback, cloud metadata (169.254.169.254), CG-NAT, and multicast.
 
     Returns:
         tuple[normalized_url, list_of_resolved_public_ips]
@@ -109,37 +146,81 @@ def validate_web_url(
         raise SSRFSecurityError(f"Could not resolve any IP address for host '{hostname}'.")
 
     for ip_str in resolved_ips:
-        try:
-            ip = ipaddress.ip_address(ip_str)
-        except ValueError as val_err:
-            raise SSRFSecurityError(f"Invalid IP address returned: '{ip_str}'") from val_err
-
-        # Check loopback
-        if ip.is_loopback:
-            raise SSRFSecurityError(f"Destination IP '{ip_str}' resolves to a forbidden loopback address.")
-
-        # Check private networks (RFC1918)
-        if ip.is_private and not allow_http_for_testing:
-            raise SSRFSecurityError(f"Destination IP '{ip_str}' resolves to a forbidden private network (RFC1918).")
-
-        # Check link-local addresses
-        if ip.is_link_local:
-            raise SSRFSecurityError(f"Destination IP '{ip_str}' resolves to a forbidden link-local address.")
-
-        # Check multicast
-        if ip.is_multicast:
-            raise SSRFSecurityError(f"Destination IP '{ip_str}' resolves to a forbidden multicast address.")
-
-        # Check reserved
-        if ip.is_reserved:
-            raise SSRFSecurityError(f"Destination IP '{ip_str}' resolves to a reserved address.")
-
-        # Cloud metadata endpoint check (169.254.169.254)
-        if str(ip) == "169.254.169.254":
-            raise SSRFSecurityError("Destination IP matches AWS/GCP/Azure cloud metadata service (169.254.169.254).")
-
-        # 0.0.0.0 / unspecified
-        if ip.is_unspecified:
-            raise SSRFSecurityError(f"Destination IP '{ip_str}' is an unspecified address.")
+        verify_ip_address(ip_str, allow_http_for_testing)
 
     return cleaned_url, resolved_ips
+
+
+# ---------------------------------------------------------------------------
+# Connection-Level SSRF & DNS Rebinding Defense (M28.2)
+# ---------------------------------------------------------------------------
+
+import httpcore
+import httpx
+
+
+class SSRFSafeNetworkBackend(httpcore.AnyIOBackend):
+    """Network backend enforcing socket-level IP verification at connection time.
+
+    Eliminates DNS Time-of-Check / Time-of-Use (TOCTOU) and DNS rebinding attacks
+    by resolving and verifying all destination IPs immediately before socket creation,
+    and verifying the actual connected socket peer IP before TLS handshake or HTTP exchange.
+    """
+
+    def __init__(self, allow_http_for_testing: bool = False):
+        super().__init__()
+        self.allow_http_for_testing = allow_http_for_testing
+
+    async def connect_tcp(
+        self,
+        host: str,
+        port: int,
+        timeout: float | None = None,
+        local_address: str | None = None,
+        socket_options: httpcore.SOCKET_OPTION | None = None,
+    ) -> httpcore.AsyncNetworkStream:
+        # Pre-connect DNS verification of the destination host
+        try:
+            addr_info = socket.getaddrinfo(host, port)
+            for item in addr_info:
+                target_ip = item[4][0]
+                verify_ip_address(target_ip, self.allow_http_for_testing)
+        except socket.gaierror as gai_err:
+            raise SSRFSecurityError(f"DNS resolution failed for '{host}': {gai_err}") from gai_err
+
+        # Establish TCP connection
+        stream = await super().connect_tcp(
+            host=host,
+            port=port,
+            timeout=timeout,
+            local_address=local_address,
+            socket_options=socket_options,
+        )
+
+        # Inspect the actual connected peer address on the established socket
+        try:
+            peer = stream.get_extra_info("peername")
+            if peer and isinstance(peer, (tuple, list)) and len(peer) > 0:
+                peer_ip = str(peer[0])
+                verify_ip_address(peer_ip, self.allow_http_for_testing)
+        except Exception as peer_err:
+            await stream.aclose()
+            raise SSRFSecurityError(f"Connection-level SSRF verification failed for peer {host}: {peer_err}") from peer_err
+
+        return stream
+
+
+class SSRFSafeAsyncTransport(httpx.AsyncHTTPTransport):
+    """Custom httpx transport backed by SSRFSafeNetworkBackend and single-hop connection pool."""
+
+    def __init__(self, allow_http_for_testing: bool = False, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.backend = SSRFSafeNetworkBackend(allow_http_for_testing=allow_http_for_testing)
+        self._pool = httpcore.AsyncConnectionPool(
+            ssl_context=self._pool._ssl_context,
+            network_backend=self.backend,
+            http1=True,
+            http2=False,
+            retries=0,
+            socket_options=kwargs.get("socket_options"),
+        )

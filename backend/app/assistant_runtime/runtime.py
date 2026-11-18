@@ -174,7 +174,103 @@ class AssistantRuntime:
 
         retrieved_results: list[VectorSearchResult] = []
         citations_data: list[dict[str, Any]] = []
+        explicit_web_chunks: list[VectorSearchResult] = []
+        web_preflight_triggered = False
+        web_preflight_notice: str | None = None
 
+        # 4a. Deterministic Explicit Web URL Preflight (M28.1 & M28.2)
+        # If user explicitly asks to read or query a public URL, fetch it immediately to guarantee grounded context.
+        # Strips code blocks and blockquotes so URLs in code snippets or quotes never trigger unwanted egress.
+        if not is_public:
+            clean_msg_for_url = re.sub(r"```[\s\S]*?```", "", user_message)
+            clean_msg_for_url = re.sub(r"`[^`]*`", "", clean_msg_for_url)
+            clean_msg_for_url = re.sub(r"^>.*$", "", clean_msg_for_url, flags=re.MULTILINE)
+            url_matches = re.findall(r"https?://[^\s<>'\"{}|\\^`]+", clean_msg_for_url)
+            if url_matches:
+                target_url = url_matches[0].rstrip(".,;!?)]}")
+                lower_msg = user_message.lower()
+                read_keywords = (
+                    "read", "explain", "summarize", "what is", "check", "browse",
+                    "analyze", "content", "page", "knowledge", "using tool", "tool",
+                    "look at", "visit", "tell me about", "from this url", "fetch",
+                )
+                is_explicit_read = (
+                    any(kw in lower_msg for kw in read_keywords)
+                    or len(user_message.strip()) <= len(target_url) + 12
+                )
+                if is_explicit_read:
+                    web_preflight_triggered = True
+                    yield format_sse("web_reading_started", {"url": target_url})
+                    try:
+                        from app.services.web.reader import get_web_fetch_service
+                        from app.services.web.context_store import get_web_context_store, WebPageContext
+                        from datetime import datetime, timezone
+
+                        web_svc = get_web_fetch_service(tenant_id=self.tenant_id)
+                        fetch_res = await web_svc.read_webpage(target_url, tenant_id=self.tenant_id)
+
+                        if fetch_res.get("status") in ("SUCCESS", "FALLBACK_PARSED") and fetch_res.get("extracted_text"):
+                            canonical_url = fetch_res.get("canonical_url") or target_url
+                            page_title = fetch_res.get("title") or fetch_res.get("domain") or canonical_url
+                            domain = fetch_res.get("domain") or ""
+
+                            web_store = get_web_context_store()
+                            web_store.store_page(
+                                conversation_id=conversation_id,
+                                page=WebPageContext(
+                                    canonical_url=canonical_url,
+                                    original_url=target_url,
+                                    title=page_title,
+                                    extracted_text=fetch_res.get("extracted_text", ""),
+                                    hostname=domain,
+                                    content_type=fetch_res.get("content_type", "text/html"),
+                                    retrieved_at=datetime.now(timezone.utc),
+                                ),
+                            )
+                            yield format_sse("web_source_discovered", {
+                                "url": canonical_url,
+                                "title": page_title,
+                                "domain": domain,
+                                "status": "SUCCESS",
+                            })
+                            yield format_sse("web_reading_completed", {
+                                "url": canonical_url,
+                                "title": page_title,
+                            })
+
+                            web_chunk = VectorSearchResult(
+                                chunk_id=str(uuid.uuid5(uuid.NAMESPACE_URL, canonical_url)),
+                                document_id=str(canonical_url),
+                                document_title=page_title,
+                                knowledge_base_id=None,
+                                content=fetch_res.get("extracted_text", "")[:4000],
+                                score=0.99,
+                                metadata={
+                                    "source_type": "web",
+                                    "source_url": canonical_url,
+                                    "domain": domain,
+                                    "title": page_title,
+                                    "retrieved_at": datetime.now(timezone.utc).isoformat(),
+                                },
+                            )
+                            explicit_web_chunks.append(web_chunk)
+                        else:
+                            error_reason = fetch_res.get("description") or fetch_res.get("status") or "Page unreachable"
+                            yield format_sse("web_reading_failed", {
+                                "url": target_url,
+                                "error": error_reason,
+                            })
+                            web_preflight_notice = (
+                                f"WEB NOTICE: The requested webpage ({target_url}) could not be retrieved "
+                                f"due to: {error_reason}. Inform the user clearly that this specific webpage could not be accessed, "
+                                f"explain the reason, and do not make up facts or cite unrelated documents."
+                            )
+                    except Exception as pre_err:
+                        logger.warning(f"Error in web URL preflight: {pre_err}")
+                        yield format_sse("web_reading_failed", {
+                            "url": target_url,
+                            "error": str(pre_err),
+                        })
 
         if candidate_kb_ids:
             yield format_sse(
@@ -274,6 +370,33 @@ class AssistantRuntime:
             except Exception as web_err:
                 logger.warning(f"Error loading conversation web context: {web_err}")
 
+        # 4d. Source-Aware Grounding & Citation Filtering (M28.1 & M28.2)
+        # For explicit webpage requests, requested web content is the primary context.
+        # Only retain KB documents if user explicitly requested comparison or document retrieval.
+        if explicit_web_chunks:
+            lower_user_msg = user_message.lower()
+            wants_comparison = any(
+                w in lower_user_msg
+                for w in ("document", "file", "kb", "knowledge base", "compare", "pdf", "attachment", "both")
+            )
+            if wants_comparison:
+                retrieved_results = explicit_web_chunks + [
+                    r for r in retrieved_results
+                    if (r.score is not None and r.score >= 0.70)
+                ]
+            else:
+                retrieved_results = explicit_web_chunks
+        elif web_preflight_triggered and web_preflight_notice:
+            # When explicit URL failed to fetch, discard unrelated KB matches unless comparison was asked
+            lower_user_msg = user_message.lower()
+            if not any(w in lower_user_msg for w in ("document", "file", "kb", "knowledge base", "compare")):
+                retrieved_results = []
+            else:
+                retrieved_results = [
+                    r for r in retrieved_results
+                    if (r.score is not None and r.score >= 0.75)
+                ]
+
         # 5. Assemble Context & Citations with 4-Tier Trust Hierarchy
         ctx_span = trace.start_span("context_assembly")
         messages, citations_data = build_rag_context(
@@ -286,6 +409,7 @@ class AssistantRuntime:
             response_style=getattr(asst, "response_style", "balanced"),
             uncertainty_behavior=getattr(asst, "uncertainty_behavior", "admit"),
             citation_style=getattr(asst, "citation_style", "strict"),
+            web_notice=web_preflight_notice,
         )
         ctx_span.set_attribute("citations", len(citations_data))
         ctx_span.finish()
