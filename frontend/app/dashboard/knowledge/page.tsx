@@ -274,15 +274,20 @@ export default function KnowledgePage() {
   };
 
   // Reprocess Document
-  const handleReprocessDoc = async (docId: string) => {
+  const handleReprocessDoc = async (docId: string, filename?: string) => {
     try {
+      const isHtml = (filename || inspectedDoc?.filename || "").toLowerCase().endsWith(".html") || inspectedDoc?.mime_type === "text/html";
+      const message = isHtml
+        ? "Reprocessing this document using the HTML extractor."
+        : "Reprocessing document ingestion pipeline...";
+      console.info(message);
       await api.reprocessDocument(docId);
       if (selectedKB) await loadDocuments(selectedKB.id);
       if (inspectedDoc && inspectedDoc.id === docId) {
-        await handleInspectDoc(inspectedDoc);
+        await handleInspectDoc({ ...inspectedDoc, status: "QUEUED" });
       }
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to trigger reprocessing.");
+      alert(err instanceof Error ? err.message : "Unable to extract text from this document. Please check the file format.");
     }
   };
 
@@ -331,11 +336,12 @@ export default function KnowledgePage() {
   // Helper for status badge
   const getStatusBadge = (status: string) => {
     switch (status) {
+      case "READY":
       case "COMPLETED":
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
             <CheckCircle2 className="w-3 h-3" />
-            COMPLETED
+            READY
           </span>
         );
       case "PROCESSING":
@@ -607,7 +613,7 @@ export default function KnowledgePage() {
                   ref={fileInputRef}
                   multiple
                   onChange={handleFileChange}
-                  accept=".pdf,.docx,.xlsx,.xlsm,.pptx,.csv,.tsv,.json,.jsonl,.sql,.ddl,.txt,.md"
+                  accept=".pdf,.docx,.xlsx,.xlsm,.pptx,.csv,.tsv,.json,.jsonl,.sql,.ddl,.txt,.md,.html,.htm,.png,.jpg,.jpeg,.webp"
                   className="hidden"
                 />
                 <div className="w-12 h-12 rounded-2xl bg-amber-100/60 text-amber-600 flex items-center justify-center mx-auto mb-3 shadow-inner">
@@ -624,7 +630,7 @@ export default function KnowledgePage() {
                   </button>
                 </h3>
                 <p className="text-xs text-gray-500 mt-1">
-                  Supports PDF, DOCX, XLSX, PPTX, CSV, JSON, SQL, TXT, and Markdown (max 50 MB per file)
+                  Supports PDF, DOCX, XLSX, PPTX, CSV, JSON, SQL, TXT, Markdown, HTML, and Images (max 50 MB per file)
                 </p>
 
                 {uploadFiles.length > 0 && (
@@ -761,7 +767,7 @@ export default function KnowledgePage() {
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => handleReprocessDoc(doc.id)}
+                                  onClick={() => handleReprocessDoc(doc.id, doc.filename)}
                                   className="p-1 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-900 transition cursor-pointer"
                                   title="Reprocess Document"
                                 >
@@ -902,10 +908,17 @@ export default function KnowledgePage() {
                   {/* Tab 1: Overview */}
                   {docDetailTab === "overview" && (
                     <div className="space-y-4">
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                         <div className="p-3 rounded-xl bg-gray-50 border border-gray-200">
-                          <span className="text-[11px] text-gray-500 block">MIME Type</span>
-                          <span className="font-mono text-gray-900 text-xs font-semibold">{inspectedDoc.mime_type}</span>
+                          <span className="text-[11px] text-gray-500 block">Uploaded MIME</span>
+                          <span className="font-mono text-gray-900 text-xs font-semibold truncate block" title={inspectedDoc.mime_type}>{inspectedDoc.mime_type}</span>
+                        </div>
+                        <div className="p-3 rounded-xl bg-gray-50 border border-gray-200">
+                          <span className="text-[11px] text-gray-500 block">Detected Format</span>
+                          <span className="font-mono text-amber-700 text-xs font-semibold block">
+                            {inspectedDoc.metadata_json?.detected_format ||
+                              (inspectedDoc.filename.toLowerCase().endsWith(".html") || inspectedDoc.filename.toLowerCase().endsWith(".htm") ? "HTML" : inspectedDoc.mime_type)}
+                          </span>
                         </div>
                         <div className="p-3 rounded-xl bg-gray-50 border border-gray-200">
                           <span className="text-[11px] text-gray-500 block">Pages / Sheets</span>
@@ -938,7 +951,7 @@ export default function KnowledgePage() {
                       <div className="flex justify-end gap-2 pt-2">
                         <button
                           type="button"
-                          onClick={() => handleReprocessDoc(inspectedDoc.id)}
+                          onClick={() => handleReprocessDoc(inspectedDoc.id, inspectedDoc.filename)}
                           className="px-4 py-2 rounded-xl bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 font-medium transition cursor-pointer flex items-center gap-1.5 shadow-xs"
                         >
                           <RefreshCw className="w-3.5 h-3.5" />

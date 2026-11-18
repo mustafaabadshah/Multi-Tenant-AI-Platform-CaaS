@@ -286,7 +286,8 @@ class IngestionService:
         document cannot succeed, so the job/document become terminal FAILED and
         any partial chunks or embeddings for the failed version are purged.
         """
-        is_permanent = (
+        is_transient = isinstance(exc, ingestion_limits.TRANSIENT_INGESTION_ERRORS)
+        is_permanent = not is_transient and (
             isinstance(exc, ingestion_limits.PERMANENT_INGESTION_ERRORS)
             or (
                 isinstance(exc, ValueError)
@@ -809,6 +810,15 @@ class IngestionService:
             doc.status = "COMPLETED"
             doc.total_pages = len(extracted_doc.pages)
             doc.total_chunks = len(saved_chunks)
+            detected_fmt = "HTML" if parser.parser_name == "deterministic_html_parser" else parser.parser_name
+            curr_meta = dict(doc.metadata_json) if doc.metadata_json else {}
+            curr_meta.update({
+                "detected_format": detected_fmt,
+                "detected_mime": self.parser_registry.detect_mime_type(content, doc.filename),
+                "parser_name": parser.parser_name,
+                "parser_version": parser.parser_version,
+            })
+            doc.metadata_json = curr_meta
 
             await self.job_repo.record_event(
                 job_id=job_uuid,

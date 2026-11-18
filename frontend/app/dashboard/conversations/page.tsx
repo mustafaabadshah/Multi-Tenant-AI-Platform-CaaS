@@ -101,7 +101,7 @@ export default function ConversationsWorkspacePage() {
   const [saveWebCitation, setSaveWebCitation] = useState<MessageCitationItem | null>(null);
   const [saveWebKbId, setSaveWebKbId] = useState<string>("");
   const [saveWebTitle, setSaveWebTitle] = useState<string>("");
-  const [saveWebMode, setSaveWebMode] = useState<"REFERENCE" | "FULL_CONTENT">("REFERENCE");
+  const [saveWebMode, setSaveWebMode] = useState<"REFERENCE" | "NOTES" | "FULL_CONTENT" | "SEARCHABLE_CONTENT">("REFERENCE");
   const [saveWebNotes, setSaveWebNotes] = useState<string>("");
   const [isSavingWebSource, setIsSavingWebSource] = useState<boolean>(false);
 
@@ -2404,7 +2404,7 @@ export default function ConversationsWorkspacePage() {
               <label className="block text-xs font-medium text-gray-700">
                 Storage Mode
               </label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
                   onClick={() => setSaveWebMode("REFERENCE")}
@@ -2416,28 +2416,46 @@ export default function ConversationsWorkspacePage() {
                 >
                   <div className="font-semibold text-xs flex items-center gap-1.5">
                     <Bookmark size={12} className="text-blue-600" />
-                    <span>Bookmark Reference</span>
+                    <span>Reference</span>
                   </div>
                   <p className="text-[10px] text-gray-500 mt-0.5">
-                    Store URL, title, and citation. Safe and lightweight.
+                    Bookmark URL & metadata. Safe and lightweight.
                   </p>
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => setSaveWebMode("FULL_CONTENT")}
+                  onClick={() => setSaveWebMode("NOTES")}
                   className={`p-2.5 rounded-lg border text-left transition-colors ${
-                    saveWebMode === "FULL_CONTENT"
+                    saveWebMode === "NOTES"
                       ? "border-blue-500 bg-blue-50/50 text-blue-900"
                       : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
                   }`}
                 >
                   <div className="font-semibold text-xs flex items-center gap-1.5">
                     <FileText size={12} className="text-blue-600" />
-                    <span>Full Content</span>
+                    <span>Notes</span>
                   </div>
                   <p className="text-[10px] text-gray-500 mt-0.5">
-                    Extract and index text chunks for hybrid RAG search.
+                    Index your notes linked to the source.
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSaveWebMode("SEARCHABLE_CONTENT")}
+                  className={`p-2.5 rounded-lg border text-left transition-colors ${
+                    saveWebMode === "SEARCHABLE_CONTENT" || saveWebMode === "FULL_CONTENT"
+                      ? "border-blue-500 bg-blue-50/50 text-blue-900"
+                      : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+                  }`}
+                >
+                  <div className="font-semibold text-xs flex items-center gap-1.5">
+                    <FileText size={12} className="text-blue-600" />
+                    <span>Searchable</span>
+                  </div>
+                  <p className="text-[10px] text-gray-500 mt-0.5">
+                    Index full text for RAG (requires rights).
                   </p>
                 </button>
               </div>

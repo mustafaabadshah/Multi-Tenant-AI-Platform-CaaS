@@ -95,27 +95,30 @@ def build_rag_context(
 
         heading = item.heading_path or (item.metadata.get("heading_path") if item.metadata else None)
         meta = item.metadata if isinstance(item.metadata, dict) else {}
-        is_web = meta.get("source_type") == "web" or (meta.get("mime_type") in ("text/html", "application/x-web-source"))
+        is_web = str(meta.get("source_type", "")).startswith("web") or (meta.get("mime_type") in ("text/html", "application/x-web-source"))
         source_url = meta.get("source_url") or meta.get("url") or (item.document_id if is_web and str(item.document_id).startswith("http") else None)
         domain = meta.get("domain") or meta.get("hostname")
+        is_ocr = bool(meta.get("ocr_derived") or meta.get("is_ocr"))
 
-        page_info = "" if is_web else (f" (Page {item.page_number})" if item.page_number else "")
-        source_label = f"Web Source ({domain or source_url})" if is_web else "Source"
+        actual_page_num = item.page_number if (item.page_number is not None and not is_web) else None
+        page_info = f" (Page {actual_page_num})" if actual_page_num else (" [OCR Derived]" if is_ocr else "")
+        source_label = f"Web Source ({domain or source_url})" if is_web else ("Image Source" if is_ocr else "Source")
 
         citations.append({
             "id": str(item.chunk_id),
             "citation_num": idx,
             "chunk_id": str(item.chunk_id),
             "document_name": safe_title,
-            "page_number": None if is_web else (item.page_number or 1),
+            "page_number": actual_page_num,
             "heading_path": heading,
             "snippet": safe_content[:300],
             "citation_text": safe_content[:300],
             "score": round(float(item.score), 4) if item.score is not None else None,
             "bounding_box": None if is_web else bbox,
-            "source_type": "web" if is_web else "document",
+            "source_type": meta.get("source_type") or ("web" if is_web else "document"),
             "source_url": source_url,
             "domain": domain,
+            "ocr_derived": is_ocr,
         })
         knowledge_blocks.append(
             f"[{idx}] {source_label}: {safe_title}{page_info}\n{safe_content}"

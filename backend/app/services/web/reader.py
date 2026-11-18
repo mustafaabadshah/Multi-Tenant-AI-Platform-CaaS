@@ -189,24 +189,87 @@ class WebFetchService:
                         status="NETWORK_ERROR",
                     )
 
-        # 3. Extract content
-        extracted = WebContentExtractor.extract(final_html, source_url=canonical_url)
+        # 3. Multi-format content extraction dispatcher
+        source_type = "web_html"
+        extracted_text = ""
+        extracted_status = "SUCCESS"
+        title = ""
+        description = ""
+        ocr_derived = False
+        warnings: list[str] = []
+        code_blocks: list[Any] = []
+        tables: list[Any] = []
 
-        content_hash = hashlib.sha256(extracted["content"].encode("utf-8")).hexdigest()
+        is_pdf = (
+            "application/pdf" in content_type
+            or raw_bytes.startswith(b"%PDF-")
+            or canonical_url.lower().endswith(".pdf")
+        )
+        is_image = (
+            any(t in content_type for t in ("image/png", "image/jpeg", "image/jpg", "image/webp"))
+            or raw_bytes.startswith(b"\x89PNG")
+            or raw_bytes.startswith(b"\xff\xd8\xff")
+            or (raw_bytes.startswith(b"RIFF") and b"WEBP" in raw_bytes[:16])
+            or any(canonical_url.lower().endswith(ext) for ext in (".png", ".jpg", ".jpeg", ".webp"))
+        )
+
+        if is_pdf:
+            source_type = "web_pdf"
+            from app.parsers.pdf import PDFParser
+            pdf_parser = PDFParser()
+            filename = urlparse(canonical_url).path.split("/")[-1] or "document.pdf"
+            pdf_doc = await pdf_parser.extract(raw_bytes, filename=filename, mime_type="application/pdf")
+            extracted_text = pdf_doc.text
+            title = pdf_doc.title or filename
+            description = (extracted_text[:200] + "...") if extracted_text else ""
+            extracted_status = "SUCCESS" if extracted_text else "EMPTY_PDF"
+            warnings.extend(pdf_doc.warnings)
+            ocr_derived = any(p.metadata.get("ocr_derived") for p in pdf_doc.pages)
+        elif is_image:
+            source_type = "web_image"
+            from app.parsers.image import ImageParser
+            img_parser = ImageParser()
+            filename = urlparse(canonical_url).path.split("/")[-1] or "image.png"
+            img_doc = await img_parser.extract(raw_bytes, filename=filename, mime_type=content_type)
+            extracted_text = img_doc.text
+            title = img_doc.title or filename
+            description = (extracted_text[:200] + "...") if extracted_text else ""
+            extracted_status = "SUCCESS" if extracted_text else "IMAGE_UNPROCESSED"
+            warnings.extend(img_doc.warnings)
+            ocr_derived = img_doc.metadata.get("ocr_derived", False)
+        elif "text/plain" in content_type or canonical_url.lower().endswith(".txt"):
+            source_type = "web_text"
+            extracted_text = final_html.strip()
+            title = f"Document from {domain}"
+            description = (extracted_text[:200] + "...") if extracted_text else ""
+            extracted_status = "SUCCESS" if extracted_text else "EMPTY_TEXT"
+        else:
+            # HTML extraction
+            source_type = "web_html"
+            extracted = WebContentExtractor.extract(final_html, source_url=canonical_url)
+            extracted_text = extracted.get("content", "")
+            title = extracted.get("title") or f"Page from {domain}"
+            description = extracted.get("description") or ""
+            extracted_status = extracted.get("status", "SUCCESS")
+            code_blocks = extracted.get("code_blocks", [])
+            tables = extracted.get("tables", [])
+
+        if max_text_length and len(extracted_text) > max_text_length:
+            extracted_text = extracted_text[:max_text_length]
+
+        content_hash = hashlib.sha256(extracted_text.encode("utf-8")).hexdigest()
         retrieved_at = datetime.now(timezone.utc).isoformat()
-
-        title = extracted["title"] or f"Page from {domain}"
-        description = extracted["description"] or ""
 
         # Citation object format matching platform RAG conventions
         citation = {
-            "source_type": "web",
+            "source_type": source_type,
             "source_url": canonical_url,
             "document_name": title,
             "domain": domain,
-            "snippet": (description or extracted["content"])[:300],
+            "snippet": (description or extracted_text)[:300],
             "retrieved_at": retrieved_at,
-            "page_number": 1,
+            "page_number": None,
+            "ocr_derived": ocr_derived,
         }
 
         result = {
@@ -214,27 +277,32 @@ class WebFetchService:
             "domain": domain,
             "title": title,
             "description": description,
-            "content": extracted["content"],
-            "status": extracted["status"],
+            "content": extracted_text,
+            "status": extracted_status,
             "http_status": http_status,
             "content_type": content_type,
+            "source_type": source_type,
             "content_hash": content_hash,
-            "char_count": extracted["char_count"],
+            "char_count": len(extracted_text),
             "retrieved_at": retrieved_at,
             "citation": citation,
+            "ocr_derived": ocr_derived,
+            "warnings": warnings,
+            "code_blocks": code_blocks,
+            "tables": tables,
             "cached": False,
         }
 
         # Cache successful results
-        if extracted["status"] in ("SUCCESS", "FALLBACK_PARSED"):
+        if extracted_status in ("SUCCESS", "FALLBACK_PARSED"):
             _WEB_CACHE[cache_key] = (now, result)
 
         return WebFetchResult({
             **result,
             "url": canonical_url,
             "hostname": domain,
-            "extracted_text": result.get("content", ""),
-            "text": result.get("content", ""),
+            "extracted_text": extracted_text,
+            "text": extracted_text,
         })
 
     def _make_error_result(self, url: str, domain: str, error_msg: str, status: str) -> dict[str, Any]:

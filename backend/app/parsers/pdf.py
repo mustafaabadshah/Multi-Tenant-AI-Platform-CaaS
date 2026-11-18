@@ -67,6 +67,10 @@ class PDFParser(DocumentParser):
 
             has_scanned_pages = False
             total_images = 0
+            MAX_OCR_PAGES_PER_DOC = 5
+            ocr_pages_processed = 0
+            from app.services.ocr_service import get_ocr_service
+            ocr_service = get_ocr_service()
 
             for page_idx in range(len(doc)):
                 page = doc[page_idx]
@@ -78,8 +82,26 @@ class PDFParser(DocumentParser):
 
                 # Scanned page heuristic: has images but very little extractable text
                 is_scanned = images_count > 0 and len(page_text) < 40
+                ocr_derived = False
+
                 if is_scanned:
                     has_scanned_pages = True
+                    if ocr_pages_processed < MAX_OCR_PAGES_PER_DOC:
+                        try:
+                            pix = page.get_pixmap(dpi=150)
+                            img_bytes = pix.tobytes("png")
+                            ocr_res = await ocr_service.extract_text_from_image_bytes(
+                                img_bytes,
+                                filename=f"{filename}_page_{page_num}.png",
+                            )
+                            if ocr_res.text:
+                                page_text = ocr_res.text.strip()
+                                ocr_derived = True
+                                ocr_pages_processed += 1
+                            if ocr_res.warnings:
+                                warnings.extend(ocr_res.warnings)
+                        except Exception as ocr_err:
+                            warnings.append(f"Selective OCR failed for page {page_num}: {ocr_err}")
 
                 pages.append(
                     ExtractedPage(
@@ -87,16 +109,18 @@ class PDFParser(DocumentParser):
                         text=page_text,
                         is_scanned=is_scanned,
                         images_count=images_count,
+                        metadata={"ocr_derived": ocr_derived},
                     )
                 )
 
                 if page_text:
-                    all_text_parts.append(f"--- Page {page_num} ---\n{page_text}")
+                    prefix = f"--- Page {page_num} [OCR Derived] ---\n" if ocr_derived else f"--- Page {page_num} ---\n"
+                    all_text_parts.append(f"{prefix}{page_text}")
                 elif is_scanned:
                     all_text_parts.append(f"--- Page {page_num} [Scanned/Image Page] ---")
 
-            if has_scanned_pages:
-                warnings.append("Document contains scanned or image-based pages requiring OCR.")
+            if has_scanned_pages and ocr_pages_processed == 0:
+                warnings.append("Document contains scanned or image-based pages. Install Tesseract OCR to enable text extraction from images.")
 
             full_text = "\n\n".join(all_text_parts)
             duration_ms = int((time.perf_counter() - start_time) * 1000)

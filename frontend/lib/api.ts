@@ -318,6 +318,7 @@ export interface DocumentItem {
   current_version_num: number;
   total_pages: number;
   total_chunks: number;
+  metadata_json?: Record<string, any>;
   created_at: string;
   updated_at: string;
 }
@@ -2015,7 +2016,7 @@ class ApiClient {
     url: string,
     knowledgeBaseId: string,
     title?: string,
-    storageMode: "REFERENCE" | "FULL_CONTENT" = "REFERENCE",
+    storageMode: "REFERENCE" | "NOTES" | "FULL_CONTENT" | "SEARCHABLE_CONTENT" = "REFERENCE",
     notes?: string
   ): Promise<{ document_id: string; title: string; storage_mode: string; status: string }> {
     return this.request<{ document_id: string; title: string; storage_mode: string; status: string }>(

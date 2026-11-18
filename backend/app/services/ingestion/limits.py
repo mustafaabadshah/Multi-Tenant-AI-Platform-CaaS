@@ -53,12 +53,34 @@ class IngestionTimeoutError(Exception):
     """
 
 
+ProcessingTimeoutError = IngestionTimeoutError
+
+
+class TemporaryStorageError(Exception):
+    """Transient storage failure (e.g. storage network timeout or rate limit)."""
+
+
+class TemporaryDatabaseError(Exception):
+    """Transient database error (e.g. connection pool exhaustion or lock timeout)."""
+
+
+class IndexingError(Exception):
+    """Failure during chunk embedding or vector store indexing."""
+
+
 PERMANENT_INGESTION_ERRORS = (
     IngestionLimitExceededError,
     IngestionTimeoutError,
     UploadTooLargeError,
     UnsupportedFormatError,
     UnparseableDocumentError,
+)
+
+TRANSIENT_INGESTION_ERRORS = (
+    TemporaryStorageError,
+    TemporaryDatabaseError,
+    ConnectionError,
+    TimeoutError,
 )
 
 

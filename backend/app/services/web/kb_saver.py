@@ -21,7 +21,9 @@ from app.storage import sanitize_filename
 class WebSaveMode(str, Enum):
     """Storage mode for saving web sources to a Knowledge Base."""
     REFERENCE = "REFERENCE"
+    NOTES = "NOTES"
     FULL_CONTENT = "FULL_CONTENT"
+    SEARCHABLE_CONTENT = "SEARCHABLE_CONTENT"
 
 
 class WebKBSaveService:
@@ -48,7 +50,7 @@ class WebKBSaveService:
 
         raw_mode = storage_mode.value if isinstance(storage_mode, WebSaveMode) else (storage_mode or mode)
         normalized_mode = str(raw_mode).upper()
-        if normalized_mode not in ("REFERENCE", "FULL_CONTENT"):
+        if normalized_mode not in ("FULL_CONTENT", "SEARCHABLE_CONTENT", "NOTES", "REFERENCE"):
             normalized_mode = "REFERENCE"
 
         # 1. Authorize destination Knowledge Base
@@ -119,9 +121,14 @@ class WebKBSaveService:
 
         # 4. Handle Chunks and Versioning based on mode
         chunks_to_create: list[str] = []
-        if normalized_mode == "FULL_CONTENT" and extracted_text and extracted_text.strip():
-            # Chunking extracted text into safe bounded paragraphs (~1000 chars)
-            paragraphs = [p.strip() for p in extracted_text.split("\n\n") if p.strip()]
+        text_to_chunk = ""
+        if normalized_mode in ("FULL_CONTENT", "SEARCHABLE_CONTENT") and extracted_text and extracted_text.strip():
+            text_to_chunk = extracted_text
+        elif normalized_mode == "NOTES" and notes and notes.strip():
+            text_to_chunk = notes
+
+        if text_to_chunk:
+            paragraphs = [p.strip() for p in text_to_chunk.split("\n\n") if p.strip()]
             cur_chunk = ""
             for p in paragraphs:
                 if len(cur_chunk) + len(p) < 1000:
@@ -135,7 +142,7 @@ class WebKBSaveService:
 
         doc.total_chunks = len(chunks_to_create)
 
-        stored_text = extracted_text if normalized_mode == "FULL_CONTENT" else (notes or "")
+        stored_text = extracted_text if normalized_mode == "SEARCHABLE_CONTENT" else (notes or "")
         content_bytes = (stored_text or canonical_url).encode("utf-8")
         file_hash = hashlib.sha256(content_bytes).hexdigest()
 
@@ -165,13 +172,14 @@ class WebKBSaveService:
                 content=chunk_content,
                 character_count=len(chunk_content),
                 token_count=max(1, len(chunk_content) // 4),
-                page_number=1,
+                page_number=None,
                 chunking_strategy="web_source",
                 metadata_json={
                     "source_type": "web",
                     "source_url": canonical_url,
                     "domain": domain,
                     "title": clean_title,
+                    "storage_mode": normalized_mode,
                 },
             )
             self.session.add(doc_chunk)

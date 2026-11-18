@@ -246,11 +246,12 @@ class AssistantRuntime:
                                 content=fetch_res.get("extracted_text", "")[:4000],
                                 score=0.99,
                                 metadata={
-                                    "source_type": "web",
+                                    "source_type": fetch_res.get("source_type", "web"),
                                     "source_url": canonical_url,
                                     "domain": domain,
                                     "title": page_title,
                                     "retrieved_at": datetime.now(timezone.utc).isoformat(),
+                                    "ocr_derived": fetch_res.get("ocr_derived", False),
                                 },
                             )
                             explicit_web_chunks.append(web_chunk)

@@ -41,16 +41,31 @@ class HTMLParser(DocumentParser):
         if not content or len(content) == 0:
             return False
 
-        # Must not contain null bytes (binary files)
-        if content.startswith(b"\x00") or b"\x00" in content[:1024]:
+        # Reject common binary and executable signatures (prevent deceptive payloads)
+        deceptive_binary_signatures = (
+            b"%PDF-",
+            b"PK\x03\x04",
+            b"\x89PNG\r\n\x1a\n",
+            b"\xff\xd8\xff",
+            b"GIF87a",
+            b"GIF89a",
+            b"RIFF",
+            b"\x1f\x8b\x08",
+            b"7z\xbc\xaf\x27\x1c",
+            b"MZ",
+            b"\x7fELF",
+        )
+        if any(content.startswith(sig) for sig in deceptive_binary_signatures):
             return False
 
-        ext = filename.lower() if filename else ""
-        if ext.endswith((".html", ".htm")):
-            return True
+        # Must not contain null bytes (binary files)
+        if content.startswith(b"\x00") or b"\x00" in content[:2048]:
+            return False
 
-        # Sniff HTML opening tags in first 2048 bytes
-        header_sample = content[:2048].lower()
+        # Strip BOM and leading whitespace
+        sample = content[:4096].lstrip(b"\xef\xbb\xbf\xff\xfe\xfe\xff \t\r\n")
+        sample_lower = sample.lower()
+
         html_signatures = (
             b"<!doctype html",
             b"<html",
@@ -58,8 +73,25 @@ class HTMLParser(DocumentParser):
             b"<body",
             b"<title",
             b"<?xml",
+            b"<!--",
         )
-        return any(sig in header_sample for sig in html_signatures)
+        has_html_sig = any(sig in sample_lower for sig in html_signatures)
+
+        ext = filename.lower() if filename else ""
+        if ext.endswith((".html", ".htm")):
+            # If filename is .html/.htm, ensure it has HTML tags and is not empty or raw binary
+            return has_html_sig or (b"<" in sample and b">" in sample)
+
+        # For files without .html extension (e.g. octet-stream blobs), require HTML signature
+        if has_html_sig:
+            return True
+
+        # Check for closing tags in tail if sample was long comments
+        tail_sample = content[-2048:].lower() if len(content) > 2048 else sample_lower
+        if b"</html>" in tail_sample or b"</body>" in tail_sample:
+            return True
+
+        return False
 
     async def extract(
         self,

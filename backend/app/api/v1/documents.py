@@ -188,19 +188,60 @@ async def reprocess_document(
         )
     _check_document_acl(doc, ctx)
 
+    # 1. Prevent duplicate in-flight jobs
+    from app.models.knowledge import IngestionJob
+    active_stmt = select(IngestionJob).where(
+        IngestionJob.document_id == document_id,
+        IngestionJob.tenant_id == ctx.tenant.id,
+        IngestionJob.status.in_(("QUEUED", "PROCESSING")),
+    )
+    active_job = (await db.execute(active_stmt)).scalars().first()
+    if active_job:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An ingestion job is already in progress for this document.",
+        )
+
+    # 2. Verify document version exists
+    latest_version = await repo.get_latest_version(document_id)
+    if not latest_version:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Document has no versions to reprocess.",
+        )
+
+    # 3. Verify underlying file exists in storage
+    storage = get_storage_provider()
+    file_exists = await storage.exists(str(ctx.tenant.id), doc.file_path)
+    if not file_exists:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Original document file '{doc.filename}' not found in storage.",
+        )
+
+    # 4. Clean up any stale partial artifacts for this failed version
+    from app.services.ingestion.job_queue import purge_failed_version_artifacts
+    await purge_failed_version_artifacts(db, ctx.tenant.id, doc.id, latest_version.id)
+
+    # 5. Create queued ingestion job with document_version_id linked
     job_repo = IngestionJobRepository(db, ctx.tenant.id)
     job = await job_repo.create(
         knowledge_base_id=doc.knowledge_base_id,
         document_id=doc.id,
+        document_version_id=latest_version.id,
         status="QUEUED",
         stage="QUEUED",
         progress_pct=10,
-        job_metadata={"reprocessed_by": str(current_user.id)},
+        job_metadata={
+            "reprocessed_by": str(current_user.id),
+            "version_num": latest_version.version_num,
+            "reprocess_attempt": True,
+        },
     )
     doc.status = "QUEUED"
     await db.commit()
 
-    # Launch background ingestion
+    # 6. Launch background ingestion
     asyncio.create_task(run_ingestion_in_background(ctx.tenant.id, job.id))
 
     audit_repo = AuditLogRepository(db, ctx.tenant.id)
@@ -209,7 +250,7 @@ async def reprocess_document(
         resource_type="document",
         resource_id=document_id,
         actor_id=current_user.id,
-        details={"job_id": str(job.id)},
+        details={"job_id": str(job.id), "version_id": str(latest_version.id)},
     )
 
     return IngestionJobResponse.model_validate(job)
