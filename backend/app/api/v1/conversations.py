@@ -13,6 +13,7 @@ from app.assistant_runtime.runtime import AssistantRuntime
 from app.core.constants import PermissionName
 from app.database.session import get_db
 from app.models.conversation import Conversation, Message
+from app.models.knowledge import DocumentChunk
 from app.models.user import User
 from app.schemas.assistant import (
     ConversationCreateRequest,
@@ -245,16 +246,43 @@ async def list_messages(
     res = await db.execute(msg_stmt)
     messages = res.scalars().all()
 
+    # Collect chunk IDs for real provenance lookup (page_number, genuine bounding_box)
+    all_chunk_ids = [c.chunk_id for m in messages for c in m.citations if c.chunk_id]
+    chunk_map: dict[uuid.UUID, DocumentChunk] = {}
+    if all_chunk_ids:
+        chunk_res = await db.execute(
+            select(DocumentChunk).where(
+                DocumentChunk.id.in_(all_chunk_ids),
+                DocumentChunk.tenant_id == ctx.tenant.id,
+            )
+        )
+        chunk_map = {chk.id: chk for chk in chunk_res.scalars().all()}
+
     output = []
     for m in messages:
         c_list = []
         for c in m.citations:
-            is_web = c.document_name.startswith("http://") or c.document_name.startswith("https://") or "http" in c.document_name
-            web_url = c.document_name if (c.document_name.startswith("http://") or c.document_name.startswith("https://")) else None
+            has_http_prefix = c.document_name.startswith("http://") or c.document_name.startswith("https://")
+            is_web = (c.chunk_id is None) and has_http_prefix
+            web_url = c.document_name if has_http_prefix else None
             domain_name = None
             if web_url:
                 from urllib.parse import urlparse
                 domain_name = urlparse(web_url).hostname
+
+            chk = chunk_map.get(c.chunk_id) if c.chunk_id else None
+            actual_page = chk.page_number if (chk and chk.page_number is not None and not is_web) else None
+            bbox = None
+            if chk and chk.metadata_json and isinstance(chk.metadata_json, dict) and not is_web:
+                raw_bbox = chk.metadata_json.get("bounding_box")
+                if isinstance(raw_bbox, dict) and all(k in raw_bbox for k in ("page", "x", "y", "width", "height")):
+                    bbox = {
+                        "page": int(raw_bbox["page"]),
+                        "x": float(raw_bbox["x"]),
+                        "y": float(raw_bbox["y"]),
+                        "width": float(raw_bbox["width"]),
+                        "height": float(raw_bbox["height"]),
+                    }
 
             c_list.append(
                 MessageCitationResponse(
@@ -264,14 +292,8 @@ async def list_messages(
                     document_name=c.document_name,
                     citation_text=c.citation_text,
                     snippet=c.citation_text,
-                    page_number=None if is_web else 1,
-                    bounding_box=None if is_web else {
-                        "page": 1,
-                        "x": 72.0,
-                        "y": 90.0 + (((c.citation_num - 1) % 7) * 85.0),
-                        "width": 468.0,
-                        "height": 65.0,
-                    },
+                    page_number=actual_page,
+                    bounding_box=bbox,
                     source_type="web" if is_web else "document",
                     source_url=web_url,
                     domain=domain_name,

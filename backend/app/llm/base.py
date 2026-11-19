@@ -68,6 +68,26 @@ class LLMConfigurationError(LLMException):
     pass
 
 
+class LLMResponseInvalidError(LLMProviderError):
+    """Raised when provider response structure is malformed, missing choices, or violates contract."""
+    pass
+
+
+class LLMStreamInterruptedError(LLMConnectionError):
+    """Raised when streaming connection terminates prematurely or provider emits an SSE error event."""
+    pass
+
+
+class LLMModelUnavailableError(LLMProviderError, LLMConfigurationError):
+    """Raised when the specified model ID is not available or rejected by the provider endpoint."""
+    pass
+
+
+class LLMToolCallUnsupportedError(LLMProviderError):
+    """Raised when tool/function calling is rejected or improperly formatted by provider."""
+    pass
+
+
 @dataclass
 class LLMConfig:
     """Configuration for an LLM generation call."""

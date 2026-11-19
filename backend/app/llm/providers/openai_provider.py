@@ -11,12 +11,16 @@ from app.llm.base import (
     LLMConfig,
     LLMConnectionError,
     LLMMessage,
+    LLMModelUnavailableError,
     LLMProvider,
     LLMProviderError,
     LLMRateLimitError,
     LLMResponse,
+    LLMResponseInvalidError,
     LLMStreamChunk,
+    LLMStreamInterruptedError,
     LLMTimeoutError,
+    LLMToolCallUnsupportedError,
 )
 from app.llm.endpoint_validation import (
     validate_custom_provider_endpoint,
@@ -118,17 +122,47 @@ class OpenAICompatibleLLMProvider(LLMProvider):
                 if resp.status_code != 200:
                     self._handle_http_error(resp.status_code, resp.text)
 
-                data = resp.json()
-                choice = data["choices"][0]
-                content = choice["message"].get("content") or ""
-                usage = data.get("usage", {})
+                try:
+                    data = resp.json()
+                except Exception as json_err:
+                    raise LLMResponseInvalidError(
+                        f"Provider '{self._name}' returned invalid non-JSON body: {resp.text[:200]}"
+                    ) from json_err
+
+                if not isinstance(data, dict):
+                    raise LLMResponseInvalidError(
+                        f"Provider '{self._name}' returned non-object JSON payload: {type(data).__name__}"
+                    )
+
+                if "error" in data:
+                    err_obj = data["error"]
+                    err_msg = err_obj.get("message") if isinstance(err_obj, dict) else str(err_obj)
+                    raise LLMResponseInvalidError(f"Provider '{self._name}' returned error payload: {err_msg}")
+
+                choices = data.get("choices")
+                if not isinstance(choices, list) or len(choices) == 0:
+                    raise LLMResponseInvalidError(
+                        f"Provider '{self._name}' response missing or empty 'choices' list"
+                    )
+
+                choice = choices[0]
+                if not isinstance(choice, dict):
+                    raise LLMResponseInvalidError(
+                        f"Provider '{self._name}' returned malformed choice element"
+                    )
+
+                message = choice.get("message") or {}
+                content = message.get("content") or ""
+                usage = data.get("usage") or {}
 
                 tool_calls = None
-                raw_tc = choice["message"].get("tool_calls")
-                if raw_tc:
+                raw_tc = message.get("tool_calls")
+                if raw_tc and isinstance(raw_tc, list):
                     tool_calls = []
                     for t in raw_tc:
-                        fn = t.get("function", {})
+                        if not isinstance(t, dict):
+                            continue
+                        fn = t.get("function") or {}
                         try:
                             args = json.loads(fn.get("arguments", "{}"))
                         except Exception:
@@ -143,11 +177,11 @@ class OpenAICompatibleLLMProvider(LLMProvider):
                     content=content,
                     model=data.get("model", config.model),
                     tokens_used={
-                        "prompt_tokens": usage.get("prompt_tokens", 0),
-                        "completion_tokens": usage.get("completion_tokens", 0),
-                        "total_tokens": usage.get("total_tokens", 0),
+                        "prompt_tokens": usage.get("prompt_tokens", 0) if isinstance(usage, dict) else 0,
+                        "completion_tokens": usage.get("completion_tokens", 0) if isinstance(usage, dict) else 0,
+                        "total_tokens": usage.get("total_tokens", 0) if isinstance(usage, dict) else 0,
                     },
-                    finish_reason=choice.get("finish_reason", "stop"),
+                    finish_reason=choice.get("finish_reason", "stop") or "stop",
                     raw_response=data,
                     tool_calls=tool_calls,
                 )
@@ -207,61 +241,85 @@ class OpenAICompatibleLLMProvider(LLMProvider):
                         line = line.strip()
                         if not line:
                             continue
-                        if line.startswith("data: "):
-                            data_str = line[6:]
+                        if line.startswith("data:"):
+                            data_str = line[5:].strip()
                             if data_str == "[DONE]":
                                 break
                             try:
                                 chunk_data = json.loads(data_str)
-                                choice = chunk_data["choices"][0]
-                                delta = choice.get("delta", {})
-                                content_delta = delta.get("content", "")
-
-                                raw_tool_calls = delta.get("tool_calls")
-                                if raw_tool_calls:
-                                    for tc_chunk in raw_tool_calls:
-                                        idx = tc_chunk.get("index", 0)
-                                        if idx not in accumulated_tool_calls:
-                                            accumulated_tool_calls[idx] = {
-                                                "id": tc_chunk.get("id", f"call_{idx}"),
-                                                "name": tc_chunk.get("function", {}).get("name", ""),
-                                                "arguments_str": "",
-                                            }
-                                        fn = tc_chunk.get("function", {})
-                                        if fn.get("name"):
-                                            accumulated_tool_calls[idx]["name"] = fn["name"]
-                                        if fn.get("arguments"):
-                                            accumulated_tool_calls[idx]["arguments_str"] += fn["arguments"]
-
-                                finish_reason = choice.get("finish_reason")
-                                parsed_tool_calls = None
-                                if finish_reason == "tool_calls" or (finish_reason and accumulated_tool_calls):
-                                    parsed_tool_calls = []
-                                    for idx, tc in sorted(accumulated_tool_calls.items()):
-                                        try:
-                                            parsed_args = json.loads(tc["arguments_str"]) if tc["arguments_str"] else {}
-                                        except json.JSONDecodeError:
-                                            parsed_args = {"raw": tc["arguments_str"]}
-                                        parsed_tool_calls.append({
-                                            "id": tc["id"],
-                                            "name": tc["name"],
-                                            "arguments": parsed_args,
-                                        })
-
-                                if content_delta or finish_reason or parsed_tool_calls:
-                                    yield LLMStreamChunk(
-                                        content_delta=content_delta,
-                                        finish_reason=finish_reason,
-                                        tool_calls=parsed_tool_calls,
-                                    )
                             except json.JSONDecodeError:
                                 continue
+
+                            if not isinstance(chunk_data, dict):
+                                continue
+
+                            # Detect mid-stream error events emitted by provider
+                            if "error" in chunk_data:
+                                err_obj = chunk_data["error"]
+                                err_msg = err_obj.get("message") if isinstance(err_obj, dict) else str(err_obj)
+                                raise LLMStreamInterruptedError(
+                                    f"Provider '{self._name}' stream error: {err_msg}"
+                                )
+
+                            choices = chunk_data.get("choices")
+                            if not choices or not isinstance(choices, list) or len(choices) == 0:
+                                # Safe metadata/ping/usage frame; skip without failing
+                                continue
+
+                            choice = choices[0]
+                            if not isinstance(choice, dict):
+                                continue
+
+                            delta = choice.get("delta") or {}
+                            content_delta = delta.get("content") or ""
+
+                            raw_tool_calls = delta.get("tool_calls")
+                            if raw_tool_calls and isinstance(raw_tool_calls, list):
+                                for tc_chunk in raw_tool_calls:
+                                    if not isinstance(tc_chunk, dict):
+                                        continue
+                                    idx = tc_chunk.get("index", 0)
+                                    if idx not in accumulated_tool_calls:
+                                        accumulated_tool_calls[idx] = {
+                                            "id": tc_chunk.get("id", f"call_{idx}"),
+                                            "name": tc_chunk.get("function", {}).get("name", ""),
+                                            "arguments_str": "",
+                                        }
+                                    fn = tc_chunk.get("function", {})
+                                    if fn.get("name"):
+                                        accumulated_tool_calls[idx]["name"] = fn["name"]
+                                    if fn.get("arguments"):
+                                        accumulated_tool_calls[idx]["arguments_str"] += fn["arguments"]
+
+                            finish_reason = choice.get("finish_reason")
+                            parsed_tool_calls = None
+                            if finish_reason == "tool_calls" or (finish_reason and accumulated_tool_calls):
+                                parsed_tool_calls = []
+                                for idx, tc in sorted(accumulated_tool_calls.items()):
+                                    try:
+                                        parsed_args = json.loads(tc["arguments_str"]) if tc["arguments_str"] else {}
+                                    except json.JSONDecodeError:
+                                        parsed_args = {"raw": tc["arguments_str"]}
+                                    parsed_tool_calls.append({
+                                        "id": tc["id"],
+                                        "name": tc["name"],
+                                        "arguments": parsed_args,
+                                    })
+
+                            if content_delta or finish_reason or parsed_tool_calls:
+                                yield LLMStreamChunk(
+                                    content_delta=content_delta,
+                                    finish_reason=finish_reason,
+                                    tool_calls=parsed_tool_calls,
+                                )
         except httpx.ConnectTimeout as e:
             raise LLMTimeoutError(f"Connection to provider '{self._name}' timed out") from e
         except httpx.ReadTimeout as e:
             raise LLMTimeoutError(f"Read from provider '{self._name}' timed out after {config.timeout_seconds}s") from e
         except httpx.ConnectError as e:
             raise LLMConnectionError(f"Failed to connect to provider '{self._name}' at endpoint") from e
+        except (httpx.RemoteProtocolError, httpx.StreamError) as e:
+            raise LLMStreamInterruptedError(f"Connection to provider '{self._name}' was interrupted mid-stream: {e}") from e
 
     def _handle_http_error(self, status_code: int, err_text: str):
         """Map HTTP error status codes to normalized LLM exceptions."""
@@ -281,10 +339,15 @@ class OpenAICompatibleLLMProvider(LLMProvider):
                 detail = f": {err_text[:200]}"
 
         logger.error(f"Provider '{self._name}' returned HTTP {status_code}{detail}")
+        d_lower = detail.lower()
         if status_code in (401, 403):
             raise LLMAuthenticationError(f"Authentication failed with provider '{self._name}' (HTTP {status_code}){detail}")
         if status_code == 429:
             raise LLMRateLimitError(f"Rate limit exceeded on provider '{self._name}' (HTTP 429){detail}")
+        if "model" in d_lower and ("not found" in d_lower or "does not exist" in d_lower or "unsupported" in d_lower or "invalid" in d_lower):
+            raise LLMModelUnavailableError(f"Model unavailable on provider '{self._name}' (HTTP {status_code}){detail}")
+        if "tool" in d_lower and ("not supported" in d_lower or "unsupported" in d_lower or "function" in d_lower):
+            raise LLMToolCallUnsupportedError(f"Tools unsupported on provider '{self._name}' (HTTP {status_code}){detail}")
         if status_code == 404:
             raise LLMProviderError(f"Provider '{self._name}' error (HTTP 404){detail or ' endpoint or model not found'}")
         raise LLMProviderError(f"Provider '{self._name}' server error (HTTP {status_code}){detail}")

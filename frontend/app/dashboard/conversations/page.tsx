@@ -15,7 +15,7 @@ import {
   KnowledgeBaseItem,
   VoicePreferenceItem,
 } from "@/lib/api";
-import { dedupeCitations } from "@/lib/citations";
+import { dedupeCitations, groupCitationsBySource } from "@/lib/citations";
 import {
   BrowserSpeechRecognizer,
   BrowserSpeechSynthesizer,
@@ -892,6 +892,8 @@ function ConversationsContent() {
                 // Completed
               } else if (eventType === "message_error") {
                 setErrorMessage(data.error || "Generation error");
+                accumulatedCitations = [];
+                setStreamingCitations([]);
               }
             } catch {
               // Non-JSON SSE payload
@@ -1479,30 +1481,33 @@ function ConversationsContent() {
                           <span className="text-[10px] uppercase font-semibold text-gray-400 mr-1">
                             Sources:
                           </span>
-                          {msg.citations.map((c) => {
-                            const isWeb = c.source_type === "web" || !!c.source_url;
+                          {groupCitationsBySource(msg.citations).map((g) => {
+                            const isWeb = g.source_type === "web" || !!g.source_url;
+                            const citNumbers = g.citation_nums.length > 0 ? `[${g.citation_nums.join(", ")}] ` : "";
+                            const pageLabel = !isWeb && g.pages.length > 0 ? ` p.${g.pages.join(", ")}` : "";
                             return (
                               <button
-                                key={c.id || c.citation_num}
+                                key={g.key}
                                 type="button"
-                                onClick={() => setInspectCitation(c)}
+                                onClick={() => setInspectCitation(g.primary_citation)}
                                 className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
                                   isWeb
                                     ? "bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200/60"
                                     : "bg-gray-100 hover:bg-gray-200 text-gray-700"
                                 }`}
+                                title={isWeb ? (g.source_url || g.document_name) : `${g.document_name}${pageLabel}`}
                               >
                                 {isWeb ? (
                                   <Globe size={11} className="text-emerald-600" />
                                 ) : (
                                   <FileText size={11} className="text-gray-500" />
                                 )}
-                                <span className="truncate max-w-[130px]">
-                                  {c.document_name || "Document"}
+                                <span className="truncate max-w-[150px]">
+                                  {citNumbers}{g.document_name}
                                 </span>
-                                {!isWeb && c.page_number != null && (
+                                {pageLabel && (
                                   <span className="text-[10px] text-gray-400">
-                                    p.{c.page_number}
+                                    {pageLabel}
                                   </span>
                                 )}
                               </button>
@@ -1676,13 +1681,13 @@ function ConversationsContent() {
                       <span className="text-[10px] uppercase font-semibold text-gray-400 mr-1">
                         Discovered Sources:
                       </span>
-                      {streamingCitations.map((c, i) => (
+                      {groupCitationsBySource(streamingCitations).map((g) => (
                         <span
-                          key={i}
+                          key={g.key}
                           className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 text-xs"
                         >
                           <FileText size={11} />
-                          <span>{c.document_name}</span>
+                          <span className="truncate max-w-[150px]">{g.document_name}</span>
                         </span>
                       ))}
                     </div>

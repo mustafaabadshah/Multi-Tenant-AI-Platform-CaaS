@@ -37,12 +37,124 @@ def format_sse(event: str, data: dict[str, Any]) -> str:
 
 
 def sanitize_error_message(err_msg: str) -> str:
-    """Redact sensitive credentials, API keys, and secret tokens from user-facing error messages."""
+    """Redact sensitive credentials, API keys, and secret tokens from error messages."""
     sanitized = re.sub(r"(sk-[a-zA-Z0-9_\-]{8,})", "[REDACTED_API_KEY]", err_msg)
     sanitized = re.sub(r"(Bearer\s+)[a-zA-Z0-9_\-\.]{8,}", r"\1[REDACTED_TOKEN]", sanitized, flags=re.IGNORECASE)
     sanitized = re.sub(r"TEST_SECRET_[A-Z0-9_]+", "[REDACTED_SECRET]", sanitized)
     sanitized = re.sub(r"(password|pwd|secret|api_key|token)\s*=\s*['\"]?[^'\"\s]+['\"]?", r"\1=[REDACTED]", sanitized, flags=re.IGNORECASE)
     return sanitized
+
+
+def format_user_facing_error(e: Exception, sanitized_diag: str = "") -> str:
+    """Format exceptions into actionable, nontechnical user-facing messages."""
+    from app.llm.base import (
+        LLMAuthenticationError,
+        LLMConnectionError,
+        LLMModelUnavailableError,
+        LLMRateLimitError,
+        LLMResponseInvalidError,
+        LLMStreamInterruptedError,
+        LLMTimeoutError,
+        LLMToolCallUnsupportedError,
+    )
+    if isinstance(e, LLMResponseInvalidError):
+        return "Couldn't generate a response because the AI provider returned an invalid response. Please retry or check the configured model."
+    if isinstance(e, LLMStreamInterruptedError):
+        return "The response stream was interrupted by the AI provider. Please retry."
+    if isinstance(e, LLMAuthenticationError):
+        diag = f" ({sanitized_diag})" if sanitized_diag else ""
+        return f"AI provider authentication failed{diag}. Please verify provider credentials or API key in settings."
+    if isinstance(e, LLMRateLimitError):
+        return "AI provider rate limit reached. Please wait a moment before retrying."
+    if isinstance(e, LLMTimeoutError):
+        return "The request to the AI provider timed out. Please retry."
+    if isinstance(e, LLMConnectionError):
+        diag = f" ({sanitized_diag})" if sanitized_diag else ""
+        return f"Could not connect to the AI provider{diag}. Please verify network connectivity or gateway status."
+    if isinstance(e, LLMModelUnavailableError):
+        return "The requested AI model is unavailable or unsupported by the provider."
+    if isinstance(e, LLMToolCallUnsupportedError):
+        return "The configured model does not support tool/function calling."
+
+    err_str = str(e)
+    if "choices" in err_str or isinstance(e, KeyError):
+        return "Couldn't generate a response because the AI provider returned an invalid response format. Please retry or check the configured model."
+
+    return "Couldn't generate a response due to an AI provider error. Please retry."
+
+
+def filter_substantive_relevance(user_query: str, results: list[VectorSearchResult]) -> list[VectorSearchResult]:
+    """Filter retrieved candidates so unrelated documents do not contaminate the response.
+
+    1. If the user asks a general capability or conversational query (e.g. 'Do you have knowledge of C++?'),
+       candidates from completely unrelated domains (e.g. solar irradiance forecasting) are discarded.
+    2. Candidate chunks must have either significant semantic similarity (>= 0.65) or lexical term overlap with
+       salient query keywords (including common research synonyms and acronyms).
+    3. Conversational queries lacking salient search terms discard unverified background chunks.
+    """
+    if not results:
+        return []
+
+    q_lower = user_query.lower()
+    stopwords = {
+        "what", "have", "you", "does", "this", "about", "with", "from", "help",
+        "know", "knowledge", "tell", "explain", "model", "using", "used", "use",
+        "next", "which", "should", "would", "could", "there", "their", "where",
+        "when", "that", "this", "some", "many", "more", "most", "been", "being",
+        "were", "will", "your", "mine", "read", "tool", "show", "give", "please",
+        "like", "need", "for", "in", "on", "at", "to", "of", "by", "an", "the",
+        "and", "or", "is", "are", "was", "be", "do", "did", "further", "can",
+        "hello", "hi", "hey", "good", "morning", "afternoon", "evening", "thanks",
+    }
+    raw_tokens = re.findall(r"[a-zA-Z0-9\+#]{2,}", q_lower)
+    salient_keywords = [t for t in raw_tokens if t not in stopwords]
+
+    # Expand salient keywords with domain acronyms/synonyms
+    synonym_map = {
+        "bilstm": ["bidirectional lstm", "bi-lstm"],
+        "bi-lstm": ["bidirectional lstm", "bilstm"],
+        "ghi": ["global horizontal irradiance", "solar irradiance", "irradiance"],
+        "rmse": ["root mean squared error", "root mean square"],
+        "mae": ["mean absolute error"],
+        "tcn": ["temporal convolutional network"],
+        "rag": ["retrieval augmented generation", "retrieval-augmented"],
+    }
+    expanded_search_terms = set(salient_keywords)
+    for kw in salient_keywords:
+        if kw in synonym_map:
+            expanded_search_terms.update(synonym_map[kw])
+    for syn_key, syn_vals in synonym_map.items():
+        if any(sv in q_lower for sv in syn_vals):
+            expanded_search_terms.add(syn_key)
+
+    filtered: list[VectorSearchResult] = []
+    for r in results:
+        meta = r.metadata if isinstance(r.metadata, dict) else {}
+        is_web = meta.get("source_type") == "web" or (r.document_id and str(r.document_id).startswith("http"))
+        if is_web:
+            filtered.append(r)
+            continue
+
+        chunk_text = (r.content or "").lower()
+        doc_title = (r.document_title or "").lower()
+
+        # Check for keyword matches in chunk or document title
+        has_keyword_match = any(st in chunk_text or st in doc_title for st in expanded_search_terms) if expanded_search_terms else False
+
+        score = r.score if r.score is not None else 0.0
+        sem_score = meta.get("semantic_score") or 0.0
+
+        if has_keyword_match:
+            filtered.append(r)
+        elif not salient_keywords:
+            # Pure conversational query without salient search terms (e.g. "hello", "how are you")
+            logger.info(f"Discarding candidate '{r.document_title}' for conversational query without salient keywords")
+        elif sem_score >= 0.65 or score >= 0.70:
+            filtered.append(r)
+        else:
+            logger.info(f"Filtering out unrelated candidate '{r.document_title}' for query '{user_query[:50]}'")
+
+    return filtered
 
 
 class AssistantRuntime:
@@ -403,6 +515,9 @@ class AssistantRuntime:
                 ]
 
         # 5. Assemble Context & Citations with 4-Tier Trust Hierarchy
+        # Filter candidate results for substantive relevance to the user query
+        retrieved_results = filter_substantive_relevance(user_message, retrieved_results)
+
         ctx_span = trace.start_span("context_assembly")
         messages, citations_data = build_rag_context(
             system_prompt=asst.system_prompt,
@@ -416,15 +531,16 @@ class AssistantRuntime:
             citation_style=getattr(asst, "citation_style", "strict"),
             web_notice=web_preflight_notice,
         )
-        ctx_span.set_attribute("citations", len(citations_data))
+        ctx_span.set_attribute("candidates", len(citations_data))
         ctx_span.finish()
-        trace.citation_count = len(citations_data)
 
+        # Emit retrieval completion with candidate counts, without exposing unverified citations prematurely
         yield format_sse(
             "retrieval_complete",
             {
-                "citation_count": len(citations_data),
-                "citations": citations_data,
+                "candidate_count": len(retrieved_results),
+                "citation_count": 0,
+                "citations": [],
             },
         )
 
@@ -672,21 +788,24 @@ class AssistantRuntime:
             quota_svc.release_reservation(reservation_id)
             await quota_svc.release_reservation_async(reservation_id)
             logger.exception("LLM generation stream failed")
-            safe_err = sanitize_error_message(str(e))
-            gen_span.finish(status="FAILED", error=safe_err)
-            trace.finish(status="FAILED", error=safe_err)
+            safe_diag_err = sanitize_error_message(str(e))
+            gen_span.finish(status="FAILED", error=safe_diag_err)
+            trace.finish(status="FAILED", error=safe_diag_err)
+            trace.citation_count = 0
             await tracer.persist_to_database(trace, session=self.session)
+
+            user_friendly_err = format_user_facing_error(e, safe_diag_err)
             err_msg_obj = Message(
                 id=uuid.uuid4(),
                 tenant_id=self.tenant_id,
                 conversation_id=conversation_id,
                 sender_type="assistant",
-                content=f"⚠️ LLM generation failed: {safe_err}",
+                content=f"⚠️ LLM generation failed: {user_friendly_err}",
                 token_count=0,
             )
             self.session.add(err_msg_obj)
             await self.session.commit()
-            yield format_sse("message_error", {"error": f"LLM generation failed: {safe_err}"})
+            yield format_sse("message_error", {"error": f"LLM generation failed: {user_friendly_err}"})
             return
 
         final_content = "".join(full_content_chunks)
@@ -695,13 +814,14 @@ class AssistantRuntime:
             await quota_svc.release_reservation_async(reservation_id)
             logger.warning("LLM provider returned empty response stream")
             trace.finish(status="FAILED", error="Empty response stream received")
+            trace.citation_count = 0
             await tracer.persist_to_database(trace, session=self.session)
             err_msg_obj = Message(
                 id=uuid.uuid4(),
                 tenant_id=self.tenant_id,
                 conversation_id=conversation_id,
                 sender_type="assistant",
-                content="⚠️ LLM generation failed: Empty response stream received",
+                content="⚠️ LLM generation failed: Empty response stream received. Please retry.",
                 token_count=0,
             )
             self.session.add(err_msg_obj)
@@ -709,7 +829,39 @@ class AssistantRuntime:
             yield format_sse("message_error", {"error": "LLM generation failed: Empty response stream received"})
             return
 
-        # 8. Persist Assistant Message and Citations in Database
+        # 8. Filter and Verify Citations against Generated Content
+        # Only sources explicitly cited (e.g. [1], [2]) or named in the final response are preserved as verified evidence
+        cited_numbers = set(int(m) for m in re.findall(r"\[(\d+)\]", final_content))
+        verified_citations: list[dict[str, Any]] = []
+
+        if cited_numbers:
+            verified_citations = [c for c in citations_data if c.get("citation_num") in cited_numbers]
+        elif not citations_data:
+            verified_citations = []
+        else:
+            # If no numeric markers, check if specific document titles are explicitly referenced in final_content
+            verified_citations = [
+                c for c in citations_data
+                if c.get("document_name") and len(c["document_name"]) > 3 and c["document_name"].lower() in final_content.lower()
+            ]
+
+        # Group/deduplicate chunks from the same document
+        seen_cit_keys = set()
+        unique_verified_citations: list[dict[str, Any]] = []
+        for c in verified_citations:
+            ckey = (c.get("document_name"), c.get("page_number"), c.get("chunk_id"))
+            if ckey not in seen_cit_keys:
+                seen_cit_keys.add(ckey)
+                unique_verified_citations.append(c)
+
+        all_citations_to_save = unique_verified_citations + dynamic_citations
+        trace.citation_count = len(all_citations_to_save)
+
+        # Emit verified citations event to frontend Sources tray
+        if all_citations_to_save:
+            yield format_sse("citation", {"citations": all_citations_to_save})
+
+        # Persist Assistant Message and Citations in Database
         final_normalized_content = normalize_markdown(final_content)
         assistant_msg = Message(
             id=uuid.uuid4(),
@@ -722,7 +874,6 @@ class AssistantRuntime:
         self.session.add(assistant_msg)
         await self.session.flush()
 
-        all_citations_to_save = citations_data + dynamic_citations
         for c in all_citations_to_save:
             citation_obj = MessageCitation(
                 id=uuid.uuid4(),

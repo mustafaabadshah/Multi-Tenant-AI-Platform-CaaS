@@ -1,8 +1,12 @@
 """Web Search Provider Abstraction and Search Service for M27."""
 
 import abc
+import asyncio
 import os
+import re
+import time
 import uuid
+import xml.etree.ElementTree as ET
 from typing import Any, Optional
 
 import httpx
@@ -162,6 +166,130 @@ class BraveSearchProvider(WebSearchProvider):
             return results
 
 
+class ArxivSearchProvider(WebSearchProvider):
+    """Terms-compliant, zero-cost academic literature search using the official open ArXiv REST API.
+
+    Hardened for M28.10.1:
+    - HTTPS endpoint: https://export.arxiv.org/api/query
+    - Rate pacing: 3.0s interval enforced via asyncio.Lock to comply with official arXiv API policy.
+    - Concurrency control: Single in-flight request at a time.
+    - XML safety: Bounded response size (512 KB), no DTD/external entity parsing.
+    - Academic provenance: Identifies items as preprints, extracts authors, canonical URLs, publication & update dates.
+    """
+
+    BASE_URL = "https://export.arxiv.org/api/query"
+    RATE_LIMIT_INTERVAL: float = 3.0
+    MAX_RESPONSE_BYTES: int = 512_000
+
+    _lock: asyncio.Lock = asyncio.Lock()
+    _last_request_time: float = 0.0
+
+    async def search(self, query: str, max_results: int = 5, count: Optional[int] = None) -> list[dict[str, Any]]:
+        limit = count if count is not None else max_results
+        bounded_limit = min(max(limit, 1), 10)
+
+        # Normalize query: strip non-alphanumeric punctuation
+        safe_query = re.sub(r"[^\w\s\-\.]", " ", query).strip()
+        if not safe_query:
+            return []
+
+        params = {
+            "search_query": f"all:{safe_query}",
+            "start": 0,
+            "max_results": bounded_limit,
+            "sortBy": "relevance",
+            "sortOrder": "descending",
+        }
+
+        headers = {
+            "User-Agent": "MultiTenantAIPlatform/1.0 (academic search; terms-compliant; mailto:platform-admin@example.org)",
+            "Accept": "application/atom+xml",
+        }
+
+        # Enforce official arXiv API policy: single connection, minimum 3s between calls
+        async with self._lock:
+            now = time.monotonic()
+            elapsed = now - self._last_request_time
+            if elapsed < self.RATE_LIMIT_INTERVAL and self._last_request_time > 0:
+                await asyncio.sleep(self.RATE_LIMIT_INTERVAL - elapsed)
+            self._last_request_time = time.monotonic()
+
+            async with httpx.AsyncClient(timeout=15.0, headers=headers, follow_redirects=True, max_redirects=3) as client:
+                try:
+                    resp = await client.get(self.BASE_URL, params=params)
+                except httpx.TimeoutException:
+                    raise ValueError("ArXiv API request timed out after 15 seconds.")
+                except httpx.RequestError as req_err:
+                    raise ValueError(f"ArXiv API network error: {req_err}")
+
+                if resp.status_code in (429, 503):
+                    raise ValueError(f"ArXiv API rate limited or temporarily unavailable (HTTP {resp.status_code}). Please retry after backoff.")
+                if resp.status_code != 200:
+                    raise ValueError(f"ArXiv API HTTP error {resp.status_code}: {resp.text[:200]}")
+
+                raw_bytes = resp.content
+                if len(raw_bytes) > self.MAX_RESPONSE_BYTES:
+                    raise ValueError(f"ArXiv API response exceeded maximum allowable size ({len(raw_bytes)} bytes)")
+
+                raw_text = resp.text
+                if "<!ENTITY" in raw_text or ("<!DOCTYPE" in raw_text and "SYSTEM" in raw_text):
+                    raise ValueError("Unsafe XML entity declaration detected in ArXiv response")
+
+                try:
+                    root = ET.fromstring(raw_text)
+                except ET.ParseError as pe:
+                    raise ValueError(f"Failed to parse ArXiv XML response: {pe}")
+
+                ns = {"atom": "http://www.w3.org/2005/Atom"}
+
+                results = []
+                for rank, entry in enumerate(root.findall("atom:entry", ns), start=1):
+                    title_node = entry.find("atom:title", ns)
+                    summary_node = entry.find("atom:summary", ns)
+                    id_node = entry.find("atom:id", ns)
+                    pub_node = entry.find("atom:published", ns)
+                    updated_node = entry.find("atom:updated", ns)
+
+                    raw_title = title_node.text.strip().replace("\n", " ") if title_node is not None and title_node.text else "Academic Research"
+                    raw_summary = summary_node.text.strip().replace("\n", " ") if summary_node is not None and summary_node.text else ""
+                    raw_id = id_node.text.strip() if id_node is not None and id_node.text else ""
+
+                    # Canonicalize URL to HTTPS
+                    if raw_id.startswith("http://"):
+                        url = "https://" + raw_id[7:]
+                    elif raw_id.startswith("https://"):
+                        url = raw_id
+                    elif raw_id:
+                        url = f"https://arxiv.org/abs/{raw_id}"
+                    else:
+                        url = ""
+
+                    # Authors extraction
+                    authors = [
+                        a.text.strip()
+                        for a in entry.findall("atom:author/atom:name", ns)
+                        if a.text and a.text.strip()
+                    ]
+                    authors_str = ", ".join(authors[:5]) + (" et al." if len(authors) > 5 else "")
+
+                    pub_date = pub_node.text.strip()[:10] if pub_node is not None and pub_node.text else None
+                    updated_date = updated_node.text.strip()[:10] if updated_node is not None and updated_node.text else None
+
+                    results.append({
+                        "title": raw_title,
+                        "url": url,
+                        "snippet": raw_summary[:400] + ("..." if len(raw_summary) > 400 else "") if raw_summary else "",
+                        "source": "arXiv Preprint",
+                        "domain": "arxiv.org",
+                        "authors": authors_str,
+                        "publication_date": pub_date,
+                        "updated_date": updated_date,
+                        "is_preprint": True,
+                        "rank": rank,
+                    })
+                return results
+
+
 class WebSearchService:
     """Orchestrates search queries across configured providers."""
 
@@ -174,7 +302,7 @@ class WebSearchService:
         self.tenant_id = tenant_id
         self._provider = provider or provider_override
 
-    def _resolve_provider(self) -> Optional[WebSearchProvider]:
+    def _resolve_provider(self, query: str = "") -> Optional[WebSearchProvider]:
         if self._provider:
             return self._provider
 
@@ -183,8 +311,32 @@ class WebSearchService:
         if brave_key:
             return BraveSearchProvider(brave_key)
 
-        # In testing or development environments without an external key, use deterministic mock
-        if getattr(settings, "ENVIRONMENT", "development") in ("development", "test"):
+        # Free-first Academic literature search for research & scientific comparisons
+        q_lower = query.lower()
+
+        # Explicit academic indicators
+        academic_explicit = (
+            "arxiv", "paper", "papers", "literature", "preprint", "preprints",
+            "academic", "journal", "scholar", "citation", "citations", "publication", "publications",
+        )
+        has_academic_marker = any(kw in q_lower for kw in academic_explicit)
+
+        # Research intent markers combined with scientific / machine-learning topics
+        research_markers = (
+            "research", "study", "survey", "benchmark", "baseline", "compare",
+            "evaluation", "state of the art", "sota",
+        )
+        scientific_domains = (
+            "forecasting", "irradiance", "solar", "deep learning", "neural",
+            "transformer", "lstm", "lightgbm", "algorithm", "rmse", "ghi",
+        )
+        has_research_combo = any(rm in q_lower for rm in research_markers) and any(sd in q_lower for sd in scientific_domains)
+
+        if has_academic_marker or has_research_combo:
+            return ArxivSearchProvider()
+
+        # In testing environments, fallback to deterministic mock
+        if os.environ.get("PYTEST_CURRENT_TEST"):
             return MockSearchProvider()
 
         return None
@@ -203,7 +355,7 @@ class WebSearchService:
                 "result_count": 0,
             })
 
-        provider = self._resolve_provider()
+        provider = self._resolve_provider(clean_query)
         if not provider:
             return SearchResponse({
                 "query": clean_query,

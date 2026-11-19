@@ -52,20 +52,9 @@ def test_citation_bounding_box_default_generation():
     assert c["score"] == 0.9234
     assert "Standard operating procedure" in c["snippet"]
 
-    # Verify bounding box geometry
+    # Verify bounding box geometry: per M28.10 Phase 4.5, do not synthesize guessed bounding boxes
     bbox = c["bounding_box"]
-    assert bbox is not None
-    assert bbox["page"] == 1
-    assert bbox["x"] == 72.0
-    assert bbox["y"] == 90.0
-    assert bbox["width"] == 468.0
-    assert bbox["height"] == 65.0
-
-    # Verify coordinates fit strictly within standard US Letter (612 x 792 pt)
-    assert 0 <= bbox["x"] < 612
-    assert 0 <= bbox["y"] < 792
-    assert bbox["x"] + bbox["width"] <= 612
-    assert bbox["y"] + bbox["height"] <= 792
+    assert bbox is None
 
 
 def test_citation_bounding_box_custom_metadata_preservation():
@@ -118,6 +107,15 @@ def test_multi_chunk_vertical_slot_distribution():
             document_title="handbook.pdf",
             page_number=2,
             chunk_index=i,
+            metadata={
+                "bounding_box": {
+                    "page": 2,
+                    "x": 72.0,
+                    "y": 90.0 + (i * 85.0),
+                    "width": 468.0,
+                    "height": 65.0,
+                }
+            },
         )
         for i in range(4)
     ]

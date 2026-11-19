@@ -4,6 +4,7 @@ from app.services.web.extractor import WebContentExtractor
 from app.services.web.kb_saver import WebKBSaveService
 from app.services.web.reader import WebFetchService
 from app.services.web.search import (
+    ArxivSearchProvider,
     BraveSearchProvider,
     MockSearchProvider,
     WebSearchProvider,
@@ -18,6 +19,7 @@ __all__ = [
     "WebSearchProvider",
     "MockSearchProvider",
     "BraveSearchProvider",
+    "ArxivSearchProvider",
     "WebSearchService",
     "SSRFSecurityError",
     "validate_web_url",

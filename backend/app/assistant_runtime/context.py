@@ -67,7 +67,7 @@ def build_rag_context(
         safe_title = sanitize_untrusted_content(raw_title).strip()
         safe_content = sanitize_untrusted_content(item.content).strip()
 
-        # Determine bounding box from item metadata or compute standard deterministic PDF viewport coordinates
+        # Determine bounding box from item metadata if genuine extracted coordinates exist
         bbox = None
         if item.metadata and isinstance(item.metadata, dict):
             raw_bbox = item.metadata.get("bounding_box")
@@ -79,19 +79,6 @@ def build_rag_context(
                     "width": float(raw_bbox["width"]),
                     "height": float(raw_bbox["height"]),
                 }
-
-        if bbox is None:
-            # Deterministic standard US Letter PDF coordinates (612 x 792 pt, 72 pt margins)
-            page_num = item.page_number or 1
-            chunk_idx = getattr(item, "chunk_index", 0) or (idx - 1)
-            slot = chunk_idx % 7
-            bbox = {
-                "page": page_num,
-                "x": 72.0,
-                "y": 90.0 + (slot * 85.0),
-                "width": 468.0,
-                "height": 65.0,
-            }
 
         heading = item.heading_path or (item.metadata.get("heading_path") if item.metadata else None)
         meta = item.metadata if isinstance(item.metadata, dict) else {}
@@ -161,7 +148,17 @@ def build_rag_context(
     elif uncertainty_behavior == "synthesize":
         behavior_rules.append("- When information is missing or uncertain: Clearly distinguish verified source facts from general context.")
     if citation_style == "strict":
-        behavior_rules.append("- Citation Rule: Include citation badges for all factual statements.")
+        behavior_rules.append("- Citation Rule: When referencing information from <KNOWLEDGE_BASE_CONTEXT>, cite the exact source number using brackets, e.g. [1], [2]. Do not cite sources that are not referenced in your answer.")
+
+    # Scientific & Research Guidelines
+    behavior_rules.append(
+        "- Scientific & Empirical Rigor:\n"
+        "  * When comparing machine learning or statistical forecasting models (e.g. time series, solar irradiance):\n"
+        "    - Always establish baselines (persistence, linear/statistical, or gradient boosted trees like LightGBM/XGBoost) before recommending complex neural architectures.\n"
+        "    - Never present reported metrics (e.g. RMSE, MAE, R²) from different datasets, geographic locations, or prediction horizons as directly comparable without explicitly noting differences in scale, target normalization, and evaluation methodology.\n"
+        "    - Regarding Bidirectional architectures (Bi-LSTM / Bi-GRU) in sequential forecasting: clarify that while backward passes over historical input windows do not inherently leak future targets, bidirectional processing cannot be used on future timesteps or unobserved targets. Acknowledge causal forecasting constraints and do not claim Bi-LSTM unconditionally outperforms unidirectional models.\n"
+        "    - Clearly distinguish empirical findings proven in referenced sources from hypotheses or suggestions for further testing. Never fabricate experimental metrics."
+    )
 
     behavior_str = "\n".join(behavior_rules)
     custom_system = (system_prompt or "You are an enterprise AI assistant.").strip()
