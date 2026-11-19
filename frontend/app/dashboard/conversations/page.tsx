@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState, useMemo } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import {
   api,
@@ -65,8 +66,9 @@ import Modal from "@/components/ui/Modal";
 import EmptyState from "@/components/ui/EmptyState";
 import Badge from "@/components/ui/Badge";
 import MarkdownRenderer from "@/components/chat/MarkdownRenderer";
+import { consumePendingChatDraft } from "@/lib/chat-draft";
 
-export default function ConversationsWorkspacePage() {
+function ConversationsContent() {
   const { user, activeWorkspace } = useAuth();
 
   // Core State
@@ -136,6 +138,12 @@ export default function ConversationsWorkspacePage() {
 
   // Citation inspection modal
   const [inspectCitation, setInspectCitation] = useState<MessageCitationItem | null>(null);
+
+  // M28.7: Add Webpage Modal State
+  const [showAddWebModal, setShowAddWebModal] = useState<boolean>(false);
+  const [webpageUrlInput, setWebpageUrlInput] = useState<string>("");
+  const [webpagePromptInput, setWebpagePromptInput] = useState<string>("");
+  const [webpageUrlError, setWebpageUrlError] = useState<string | null>(null);
 
   // M27.1 Speech and Voice Session States
   const [recognitionState, setRecognitionState] = useState<RecognitionState>("IDLE");
@@ -279,6 +287,10 @@ export default function ConversationsWorkspacePage() {
     };
   }, []);
 
+  const searchParams = useSearchParams();
+  const queryAssistantId = searchParams?.get("assistantId");
+  const queryConversationId = searchParams?.get("conversationId");
+
   // 2. Fetch Assistants, Knowledge Bases, and Conversations on Workspace load
   useEffect(() => {
     async function init() {
@@ -293,7 +305,42 @@ export default function ConversationsWorkspacePage() {
         setAssistants(astList);
         setConversations(convList);
         setKnowledgeBases(kbList);
-        if (convList.length > 0) {
+
+        // Secure tab-scoped draft handoff (one-time consumption, tenant-scoped, no URL leakage)
+        const pendingDraft = consumePendingChatDraft(activeWorkspace.tenant_id, queryAssistantId || undefined);
+        if (pendingDraft) {
+          setInputMessage(pendingDraft);
+        }
+
+        if (queryConversationId) {
+          const match = convList.find((c) => c.id === queryConversationId);
+          if (match) {
+            setActiveConversation(match);
+          } else if (convList.length > 0) {
+            setActiveConversation(convList[0]);
+          }
+        } else if (queryAssistantId) {
+          setSelectedAssistantFilter(queryAssistantId);
+          const match = convList.find((c) => c.assistant_id === queryAssistantId);
+          if (match) {
+            setActiveConversation(match);
+          } else if (astList.some((a) => a.id === queryAssistantId)) {
+            // Start a new conversation for this assistant
+            try {
+              const targetAst = astList.find((a) => a.id === queryAssistantId);
+              const newConv = await api.createConversation({
+                assistant_id: queryAssistantId,
+                title: `Chat with ${targetAst?.name || "Assistant"}`,
+              });
+              setConversations((prev) => [newConv, ...prev]);
+              setActiveConversation(newConv);
+            } catch {
+              if (convList.length > 0) setActiveConversation(convList[0]);
+            }
+          } else if (convList.length > 0) {
+            setActiveConversation(convList[0]);
+          }
+        } else if (convList.length > 0) {
           setActiveConversation(convList[0]);
         } else {
           setActiveConversation(null);
@@ -305,7 +352,7 @@ export default function ConversationsWorkspacePage() {
       }
     }
     init();
-  }, [activeWorkspace]);
+  }, [activeWorkspace, queryAssistantId, queryConversationId]);
 
   // 3. Fetch Messages & Attachments when active conversation changes
   useEffect(() => {
@@ -2141,7 +2188,7 @@ export default function ConversationsWorkspacePage() {
                     onChange={handleFileUpload}
                   />
 
-                  {/* Attachment & Mic Controls (Left of Textarea) */}
+                  {/* Attachment, Webpage & Mic Controls (Left of Textarea) */}
                   <div className="absolute left-2 flex items-center gap-1 z-10">
                     <button
                       type="button"
@@ -2155,6 +2202,19 @@ export default function ConversationsWorkspacePage() {
                       ) : (
                         <Paperclip size={16} />
                       )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWebpageUrlError(null);
+                        setShowAddWebModal(true);
+                      }}
+                      disabled={streaming}
+                      className="p-1.5 rounded-lg text-gray-500 hover:text-blue-600 hover:bg-gray-100 transition-colors"
+                      title="Add Webpage (Paste documentation or article URL to read)"
+                    >
+                      <Globe size={16} />
                     </button>
 
                     <button
@@ -2184,10 +2244,10 @@ export default function ConversationsWorkspacePage() {
                     placeholder={
                       isListening
                         ? "Listening... speak now"
-                        : `Message ${activeAssistant?.name || "Assistant"}...`
+                        : `Message ${activeAssistant?.name || "Assistant"}... (e.g. paste URL or click globe to read)`
                     }
                     disabled={streaming}
-                    className="w-full resize-none pl-20 pr-24 py-2.5 text-sm bg-gray-50 border border-gray-300 rounded-xl text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-blue-600 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+                    className="w-full resize-none pl-28 pr-24 py-2.5 text-sm bg-gray-50 border border-gray-300 rounded-xl text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-blue-600 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
                   />
 
                   <div className="absolute right-2 flex items-center gap-1">
@@ -2574,6 +2634,183 @@ export default function ConversationsWorkspacePage() {
           </div>
         </Modal>
       )}
+
+      {/* M28.7: Add Webpage Modal */}
+      {showAddWebModal && (
+        <Modal
+          isOpen={true}
+          onClose={() => {
+            setShowAddWebModal(false);
+            setWebpageUrlError(null);
+          }}
+          title="Add Webpage to Conversation"
+          description="Read and analyze public documentation, articles, or tutorials in real time."
+          maxWidth="md"
+        >
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="block text-xs font-medium text-gray-700">
+                Webpage URL <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="url"
+                autoFocus
+                value={webpageUrlInput}
+                onChange={(e) => {
+                  setWebpageUrlInput(e.target.value);
+                  setWebpageUrlError(null);
+                }}
+                placeholder="https://www.w3schools.com/cpp/cpp_for_loop.asp"
+                className="w-full text-xs bg-white border border-gray-300 rounded-lg p-2.5 text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-mono"
+              />
+              {webpageUrlError && (
+                <p className="text-[11px] text-rose-600 font-medium">{webpageUrlError}</p>
+              )}
+            </div>
+
+            {/* Quick Example Chips */}
+            <div className="space-y-1.5">
+              <span className="text-[11px] font-medium text-gray-500">Quick test examples:</span>
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setWebpageUrlInput("https://www.w3schools.com/cpp/cpp_for_loop.asp");
+                    setWebpagePromptInput("Explain C++ for loop syntax and show standard code examples.");
+                    setWebpageUrlError(null);
+                  }}
+                  className="px-2.5 py-1 text-[11px] bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition-colors"
+                >
+                  W3Schools C++ Loop
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setWebpageUrlInput("https://docs.python.org/3/tutorial/controlflow.html");
+                    setWebpagePromptInput("Summarize Python control flow tools.");
+                    setWebpageUrlError(null);
+                  }}
+                  className="px-2.5 py-1 text-[11px] bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition-colors"
+                >
+                  Python Control Flow
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-xs font-medium text-gray-700">
+                Question or Prompt (Optional)
+              </label>
+              <input
+                type="text"
+                value={webpagePromptInput}
+                onChange={(e) => setWebpagePromptInput(e.target.value)}
+                placeholder="e.g. Read this page and explain the syntax and examples"
+                className="w-full text-xs bg-white border border-gray-300 rounded-lg p-2.5 text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+
+            <div className="p-3 rounded-lg bg-blue-50/70 border border-blue-200/70 text-[11px] text-blue-900 space-y-1">
+              <div className="font-semibold flex items-center gap-1.5">
+                <Sparkles size={13} className="text-blue-600" />
+                <span>Reading vs Permanent Knowledge Base</span>
+              </div>
+              <p className="text-blue-800">
+                <strong>Read in Chat:</strong> Safe outbound fetch extracts main article content cleanly for this conversation.
+              </p>
+              <p className="text-blue-800">
+                <strong>Save to KB:</strong> Permanently indexes this URL with vector embeddings for all assistants in your workspace.
+              </p>
+            </div>
+
+            <div className="flex justify-between items-center pt-3 border-t border-gray-100">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setShowAddWebModal(false);
+                  setWebpageUrlError(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  icon={Bookmark}
+                  onClick={() => {
+                    const trimmed = webpageUrlInput.trim();
+                    if (!trimmed || (!trimmed.startsWith("http://") && !trimmed.startsWith("https://"))) {
+                      setWebpageUrlError("Please enter a valid HTTP/HTTPS URL first.");
+                      return;
+                    }
+                    setShowAddWebModal(false);
+                    handleOpenSaveWebSource({
+                      id: `temp-${Date.now()}`,
+                      chunk_id: null,
+                      citation_text: "",
+                      source_type: "web",
+                      source_url: trimmed,
+                      document_name: trimmed,
+                      domain: trimmed.replace(/^https?:\/\//, "").split("/")[0],
+                      snippet: "",
+                      retrieved_at: new Date().toISOString(),
+                      page_number: null,
+                      citation_num: 1,
+                    });
+                  }}
+                >
+                  Save to KB
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  icon={Globe}
+                  onClick={() => {
+                    const trimmed = webpageUrlInput.trim();
+                    if (!trimmed) {
+                      setWebpageUrlError("Please enter a webpage URL.");
+                      return;
+                    }
+                    if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
+                      setWebpageUrlError("URL must begin with http:// or https://");
+                      return;
+                    }
+                    const prompt = webpagePromptInput.trim()
+                      ? `${webpagePromptInput.trim()}\n\nSource: ${trimmed}`
+                      : `Please read this webpage and explain the key points: ${trimmed}`;
+                    setInputMessage(prompt);
+                    setShowAddWebModal(false);
+                    setWebpageUrlInput("");
+                    setWebpagePromptInput("");
+                    setWebpageUrlError(null);
+                  }}
+                >
+                  Read in Chat
+                </Button>
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
+  );
+}
+
+export default function ConversationsWorkspacePage() {
+  return (
+    <React.Suspense
+      fallback={
+        <div className="flex h-screen items-center justify-center bg-gray-50">
+          <div className="flex flex-col items-center gap-2">
+            <Spinner size="lg" />
+            <span className="text-xs text-gray-500">Loading conversation workspace...</span>
+          </div>
+        </div>
+      }
+    >
+      <ConversationsContent />
+    </React.Suspense>
   );
 }

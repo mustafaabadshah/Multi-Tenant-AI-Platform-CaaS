@@ -2,276 +2,430 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { api, AuditLogItem } from "@/lib/api";
 import {
-  Users,
+  api,
+  AssistantItem,
+  ConversationItem,
+  KnowledgeBaseItem,
+  AuditLogItem,
+} from "@/lib/api";
+import {
   Bot,
   Database,
-  ShieldCheck,
   History,
   ArrowRight,
   Plus,
   MessageSquare,
-  Key,
-  ChevronRight,
   Sparkles,
+  ExternalLink,
+  ChevronRight,
+  Send,
+  Layers,
+  FileText,
+  Clock,
+  ShieldCheck,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
-import Card from "@/components/ui/Card";
 import Spinner from "@/components/ui/Spinner";
+import { setPendingChatDraft } from "@/lib/chat-draft";
 
 export default function DashboardOverviewPage() {
-  const { activeWorkspace } = useAuth();
-  const [employeeCount, setEmployeeCount] = useState<number | null>(null);
-  const [assistantCount, setAssistantCount] = useState<number | null>(null);
-  const [knowledgeCount, setKnowledgeCount] = useState<number | null>(null);
-  const [conversationCount, setConversationCount] = useState<number | null>(null);
+  const { user, activeWorkspace } = useAuth();
+  const router = useRouter();
+
+  const [assistants, setAssistants] = useState<AssistantItem[]>([]);
+  const [conversations, setConversations] = useState<ConversationItem[]>([]);
+  const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBaseItem[]>([]);
   const [recentAudit, setRecentAudit] = useState<AuditLogItem[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Quick Start Composer state
+  const [selectedAssistantId, setSelectedAssistantId] = useState<string>("");
+  const [draftPrompt, setDraftPrompt] = useState<string>("");
+
   useEffect(() => {
-    async function loadStats() {
+    async function loadWorkspaceData() {
       if (!activeWorkspace) return;
       setLoading(true);
       try {
-        const [members, assistants, knowledge, conversations, auditLogs] =
+        const [assistantsRes, knowledgeRes, conversationsRes, auditRes] =
           await Promise.allSettled([
-            api.listMembers(),
             api.listAssistants(),
             api.listKnowledgeBases(),
             api.listConversations(),
             api.listAuditLogs(),
           ]);
 
-        if (members.status === "fulfilled") setEmployeeCount(members.value.length);
-        if (assistants.status === "fulfilled") setAssistantCount(assistants.value.length);
-        if (knowledge.status === "fulfilled") setKnowledgeCount(knowledge.value.length);
-        if (conversations.status === "fulfilled") setConversationCount(conversations.value.length);
-        if (auditLogs.status === "fulfilled") setRecentAudit(auditLogs.value.slice(0, 5));
+        if (assistantsRes.status === "fulfilled") {
+          const list = assistantsRes.value;
+          setAssistants(list);
+          if (list.length > 0) {
+            setSelectedAssistantId(list[0].id);
+          }
+        }
+        if (knowledgeRes.status === "fulfilled") {
+          setKnowledgeBases(knowledgeRes.value);
+        }
+        if (conversationsRes.status === "fulfilled") {
+          setConversations(conversationsRes.value);
+        }
+        if (auditRes.status === "fulfilled") {
+          setRecentAudit(auditRes.value.slice(0, 5));
+        }
       } catch (err) {
-        console.error("Error loading dashboard metrics", err);
+        console.error("Error loading dashboard data", err);
       } finally {
         setLoading(false);
       }
     }
 
-    loadStats();
+    loadWorkspaceData();
   }, [activeWorkspace]);
 
+  const handleStartChatFromComposer = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (draftPrompt.trim() && activeWorkspace?.tenant_id) {
+      setPendingChatDraft(activeWorkspace.tenant_id, draftPrompt.trim(), selectedAssistantId);
+    }
+    const query = new URLSearchParams();
+    if (selectedAssistantId) {
+      query.set("assistantId", selectedAssistantId);
+    }
+    const qs = query.toString();
+    router.push(`/dashboard/conversations${qs ? `?${qs}` : ""}`);
+  };
+
   return (
-    <div className="space-y-6 max-w-6xl">
-      {/* Workspace Header Banner */}
-      <div>
-        <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Dashboard</h1>
-        <p className="text-sm text-gray-600 mt-1">
-          Welcome to your{" "}
-          <span className="font-semibold text-gray-900">
-            {activeWorkspace?.tenant_name || "Enterprise"}
-          </span>{" "}
-          workspace. Manage your knowledge bases, AI assistants, conversations, and organization.
-        </p>
+    <div className="space-y-6 max-w-5xl mx-auto">
+      {/* Workspace Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-200 pb-4">
+        <div>
+          <h1 className="text-xl font-semibold text-gray-900 tracking-tight">
+            {activeWorkspace?.tenant_name || "Workspace Overview"}
+          </h1>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Grounded AI workspace · Multi-tenant isolated · Staging
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Link href="/dashboard/conversations">
+            <Button variant="primary" size="sm" icon={MessageSquare}>
+              Open Chat
+            </Button>
+          </Link>
+          <Link href="/dashboard/knowledge">
+            <Button variant="secondary" size="sm" icon={Database}>
+              Add Knowledge
+            </Button>
+          </Link>
+        </div>
       </div>
 
-      {/* First-Time User Onboarding Guide (Phase 6.1) */}
-      {!loading && (assistantCount === 0 || assistantCount === null) && (
-        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200/80 rounded-xl p-5 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-fadeIn">
-          <div className="space-y-1">
+      {/* Main Task-Oriented Start Area */}
+      {loading ? (
+        <div className="p-12 text-center bg-white rounded-xl border border-gray-200">
+          <Spinner size="md" />
+          <p className="text-xs text-gray-500 mt-2">Loading workspace...</p>
+        </div>
+      ) : assistants.length === 0 ? (
+        /* Empty Assistants: First-time Onboarding */
+        <div className="p-8 rounded-2xl bg-gradient-to-br from-blue-50/60 via-white to-gray-50 border border-blue-200/80 shadow-xs text-center sm:text-left flex flex-col sm:flex-row items-center justify-between gap-6">
+          <div className="space-y-2 max-w-xl">
             <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
               <Sparkles size={12} />
-              <span>Get Started</span>
+              <span>Step 1: Create an Assistant</span>
             </div>
-            <h3 className="text-sm font-semibold text-gray-900">Create your first AI Assistant</h3>
-            <p className="text-xs text-gray-600 max-w-xl">
-              Build an AI assistant grounded in your documents, connected to knowledge bases, or able to read web pages.
+            <h2 className="text-base font-semibold text-gray-900">
+              Set up your first AI Assistant
+            </h2>
+            <p className="text-xs text-gray-600 leading-relaxed">
+              Build an AI assistant grounded in your documents, connected to knowledge bases, or able to read public web pages in real time.
             </p>
           </div>
-          <Link href="/dashboard/assistants">
-            <Button variant="primary" size="sm" icon={Plus}>
+          <Link href="/dashboard/assistants?create=true">
+            <Button variant="primary" size="md" icon={Plus}>
               Create Assistant
             </Button>
           </Link>
         </div>
+      ) : (
+        /* Returning / Active User: One-Click Prompt Composer */
+        <div className="p-5 rounded-2xl bg-white border border-gray-200 shadow-xs">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-md bg-blue-50 text-blue-600 flex items-center justify-center">
+                <Bot size={14} />
+              </div>
+              <span className="text-xs font-semibold text-gray-900">
+                Start a Conversation
+              </span>
+            </div>
+
+            {/* Assistant Selector */}
+            <div className="flex items-center gap-1.5 text-xs text-gray-600">
+              <span className="text-[11px] text-gray-400">Assistant:</span>
+              <select
+                value={selectedAssistantId}
+                onChange={(e) => setSelectedAssistantId(e.target.value)}
+                className="text-xs bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-gray-800 font-medium outline-none focus:border-blue-500"
+              >
+                {assistants.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <form onSubmit={handleStartChatFromComposer} className="space-y-3">
+            <textarea
+              rows={2}
+              value={draftPrompt}
+              onChange={(e) => setDraftPrompt(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleStartChatFromComposer(e);
+                }
+              }}
+              placeholder={`Ask ${assistants.find((a) => a.id === selectedAssistantId)?.name || "Assistant"} a question, paste a webpage link, or outline what you need...`}
+              className="w-full resize-none p-3 text-xs bg-gray-50/70 border border-gray-200 rounded-xl text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-blue-500 focus:bg-white focus:ring-1 focus:ring-blue-500"
+            />
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              {/* Quick suggestion chips */}
+              <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setDraftPrompt("Please read this webpage and explain the key points: ")
+                  }
+                  className="px-2 py-0.5 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors"
+                >
+                  🌐 Read webpage
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setDraftPrompt("Summarize key findings from our connected knowledge base.")
+                  }
+                  className="px-2 py-0.5 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors"
+                >
+                  📚 Search knowledge
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2 justify-end">
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="sm"
+                  icon={Send}
+                >
+                  Start Chat
+                </Button>
+              </div>
+            </div>
+          </form>
+        </div>
       )}
 
-      {/* Metrics Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Knowledge Bases Metric */}
-        <div className="bg-white border border-gray-200 rounded-lg p-5 hover:border-gray-300 transition-colors">
-          <div className="flex items-center justify-between mb-3">
-            <div className="p-2.5 rounded-lg bg-blue-50 text-blue-600">
-              <Database size={22} />
+      {/* Two Column Grid: Continue Working & Active Assistants */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        {/* Recent Conversations */}
+        <div className="p-5 rounded-2xl bg-white border border-gray-200 shadow-xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <MessageSquare size={16} className="text-gray-500" />
+                <h3 className="text-xs font-semibold text-gray-900 uppercase tracking-wider">
+                  Recent Conversations
+                </h3>
+              </div>
+              <Link
+                href="/dashboard/conversations"
+                className="text-[11px] text-blue-600 hover:underline font-medium"
+              >
+                View all &rarr;
+              </Link>
             </div>
-            <span className="text-2xl font-bold text-gray-900">
-              {loading ? <Spinner size="sm" /> : knowledgeCount ?? 0}
-            </span>
+
+            {conversations.length === 0 ? (
+              <div className="py-8 text-center text-gray-400 text-xs">
+                No conversations yet. Type above to start your first chat.
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {conversations.slice(0, 4).map((c) => {
+                  const asst = assistants.find((a) => a.id === c.assistant_id);
+                  return (
+                    <Link
+                      key={c.id}
+                      href={`/dashboard/conversations?conversationId=${c.id}`}
+                      className="py-2.5 flex items-center justify-between hover:bg-gray-50 -mx-2 px-2 rounded-lg transition-colors group"
+                    >
+                      <div className="min-w-0 pr-2">
+                        <span className="text-xs font-medium text-gray-800 truncate block group-hover:text-blue-600 transition-colors">
+                          {c.title}
+                        </span>
+                        <span className="text-[10px] text-gray-400 block">
+                          {asst ? asst.name : "Assistant"} · {new Date(c.updated_at || c.created_at).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <ChevronRight
+                        size={14}
+                        className="text-gray-400 group-hover:translate-x-0.5 transition-transform shrink-0"
+                      />
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
           </div>
-          <h3 className="text-sm font-semibold text-gray-900">Knowledge Bases</h3>
-          <p className="text-xs text-gray-500 mb-3">Indexed document collections</p>
-          <Link href="/dashboard/knowledge">
-            <Button variant="secondary" size="xs" className="w-full">
-              View All
-            </Button>
-          </Link>
         </div>
 
-        {/* AI Assistants Metric */}
-        <div className="bg-white border border-gray-200 rounded-lg p-5 hover:border-gray-300 transition-colors">
-          <div className="flex items-center justify-between mb-3">
-            <div className="p-2.5 rounded-lg bg-purple-50 text-purple-600">
-              <Bot size={22} />
+        {/* Your Assistants */}
+        <div className="p-5 rounded-2xl bg-white border border-gray-200 shadow-xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Bot size={16} className="text-gray-500" />
+                <h3 className="text-xs font-semibold text-gray-900 uppercase tracking-wider">
+                  Configured Assistants
+                </h3>
+              </div>
+              <Link
+                href="/dashboard/assistants"
+                className="text-[11px] text-blue-600 hover:underline font-medium"
+              >
+                Manage &rarr;
+              </Link>
             </div>
-            <span className="text-2xl font-bold text-gray-900">
-              {loading ? <Spinner size="sm" /> : assistantCount ?? 0}
-            </span>
-          </div>
-          <h3 className="text-sm font-semibold text-gray-900">AI Assistants</h3>
-          <p className="text-xs text-gray-500 mb-3">Configured AI personas</p>
-          <Link href="/dashboard/assistants">
-            <Button variant="secondary" size="xs" className="w-full">
-              Manage Assistants
-            </Button>
-          </Link>
-        </div>
 
-        {/* Conversations Metric */}
-        <div className="bg-white border border-gray-200 rounded-lg p-5 hover:border-gray-300 transition-colors">
-          <div className="flex items-center justify-between mb-3">
-            <div className="p-2.5 rounded-lg bg-emerald-50 text-emerald-600">
-              <MessageSquare size={22} />
-            </div>
-            <span className="text-2xl font-bold text-gray-900">
-              {loading ? <Spinner size="sm" /> : conversationCount ?? 0}
-            </span>
-          </div>
-          <h3 className="text-sm font-semibold text-gray-900">Conversations</h3>
-          <p className="text-xs text-gray-500 mb-3">Active chat threads</p>
-          <Link href="/dashboard/conversations">
-            <Button variant="secondary" size="xs" className="w-full">
-              Open Chat
-            </Button>
-          </Link>
-        </div>
+            {assistants.length === 0 ? (
+              <div className="py-8 text-center text-gray-400 text-xs">
+                No assistants configured.
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {assistants.slice(0, 4).map((a) => (
+                  <div
+                    key={a.id}
+                    className="py-2.5 flex items-center justify-between hover:bg-gray-50 -mx-2 px-2 rounded-lg transition-colors"
+                  >
+                    <div className="min-w-0 pr-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-medium text-gray-900 truncate">
+                          {a.name}
+                        </span>
+                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-gray-100 text-gray-600 font-mono">
+                          {a.llm_provider || "omniroute"}
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-gray-400 truncate block mt-0.5">
+                        {a.description || "Grounded assistant"} · {a.connected_kb_ids?.length || 0} KBs
+                      </span>
+                    </div>
 
-        {/* Members Metric */}
-        <div className="bg-white border border-gray-200 rounded-lg p-5 hover:border-gray-300 transition-colors">
-          <div className="flex items-center justify-between mb-3">
-            <div className="p-2.5 rounded-lg bg-amber-50 text-amber-600">
-              <Users size={22} />
-            </div>
-            <span className="text-2xl font-bold text-gray-900">
-              {loading ? <Spinner size="sm" /> : employeeCount ?? 0}
-            </span>
+                    <Link href={`/dashboard/conversations?assistantId=${a.id}`}>
+                      <Button variant="secondary" size="xs">
+                        Chat
+                      </Button>
+                    </Link>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-          <h3 className="text-sm font-semibold text-gray-900">Team Members</h3>
-          <p className="text-xs text-gray-500 mb-3">Enrolled workspace users</p>
-          <Link href="/dashboard/employees">
-            <Button variant="secondary" size="xs" className="w-full">
-              Manage Team
-            </Button>
-          </Link>
         </div>
       </div>
 
-      {/* Main Sections: Quick Actions & Recent Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Quick Launch Panel */}
-        <div className="lg:col-span-1 bg-white border border-gray-200 rounded-lg p-6 space-y-4">
-          <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">
-            Quick Actions
-          </h2>
-          <div className="space-y-2">
-            <Link
-              href="/dashboard/conversations"
-              className="p-3 rounded-lg border border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-colors flex items-center justify-between text-xs text-gray-800 group"
-            >
-              <div className="flex items-center gap-3">
-                <MessageSquare size={16} className="text-emerald-600" />
-                <span className="font-medium">Start New Conversation</span>
-              </div>
-              <ChevronRight size={14} className="text-gray-400 group-hover:translate-x-0.5 transition-transform" />
-            </Link>
-
+      {/* Knowledge Bases & Quick Links */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        {/* Knowledge Bases Card */}
+        <div className="p-5 rounded-2xl bg-white border border-gray-200 shadow-xs">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Database size={16} className="text-gray-500" />
+              <h3 className="text-xs font-semibold text-gray-900 uppercase tracking-wider">
+                Connected Knowledge
+              </h3>
+            </div>
             <Link
               href="/dashboard/knowledge"
-              className="p-3 rounded-lg border border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-colors flex items-center justify-between text-xs text-gray-800 group"
+              className="text-[11px] text-blue-600 hover:underline font-medium"
             >
-              <div className="flex items-center gap-3">
-                <Database size={16} className="text-blue-600" />
-                <span className="font-medium">Upload Knowledge Base</span>
-              </div>
-              <ChevronRight size={14} className="text-gray-400 group-hover:translate-x-0.5 transition-transform" />
-            </Link>
-
-            <Link
-              href="/dashboard/assistants"
-              className="p-3 rounded-lg border border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-colors flex items-center justify-between text-xs text-gray-800 group"
-            >
-              <div className="flex items-center gap-3">
-                <Bot size={16} className="text-purple-600" />
-                <span className="font-medium">Create AI Assistant</span>
-              </div>
-              <ChevronRight size={14} className="text-gray-400 group-hover:translate-x-0.5 transition-transform" />
-            </Link>
-
-            <Link
-              href="/dashboard/providers"
-              className="p-3 rounded-lg border border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-colors flex items-center justify-between text-xs text-gray-800 group"
-            >
-              <div className="flex items-center gap-3">
-                <Key size={16} className="text-amber-600" />
-                <span className="font-medium">Manage BYOK API Keys</span>
-              </div>
-              <ChevronRight size={14} className="text-gray-400 group-hover:translate-x-0.5 transition-transform" />
+              Add Knowledge &rarr;
             </Link>
           </div>
 
-          <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-start gap-2.5">
-            <ShieldCheck size={16} className="shrink-0 mt-0.5 text-emerald-600" />
-            <span>
-              Zero-Trust Isolation: Role permissions and tenant boundaries are cryptographically scoped on every backend request.
-            </span>
-          </div>
+          {knowledgeBases.length === 0 ? (
+            <div className="py-6 text-center text-gray-400 text-xs">
+              No knowledge bases found. Upload documents to ground your assistants.
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-100">
+              {knowledgeBases.slice(0, 3).map((kb) => (
+                <div
+                  key={kb.id}
+                  className="py-2 flex items-center justify-between text-xs"
+                >
+                  <div className="min-w-0 pr-2">
+                    <span className="font-medium text-gray-800 block truncate">
+                      {kb.name}
+                    </span>
+                    <span className="text-[10px] text-gray-400 font-mono">
+                      {kb.document_count ?? 0} documents · {kb.status || "READY"}
+                    </span>
+                  </div>
+                  <Link href="/dashboard/knowledge">
+                    <Button variant="ghost" size="xs">
+                      View
+                    </Button>
+                  </Link>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Recent Activity Audit Ledger */}
-        <div className="lg:col-span-2 bg-white border border-gray-200 rounded-lg p-6">
-          <div className="flex items-center justify-between mb-4">
+        {/* Recent Activity Audit */}
+        <div className="p-5 rounded-2xl bg-white border border-gray-200 shadow-xs">
+          <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <History size={16} className="text-gray-500" />
-              <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">
+              <h3 className="text-xs font-semibold text-gray-900 uppercase tracking-wider">
                 Recent Activity
-              </h2>
+              </h3>
             </div>
             <Link
               href="/dashboard/audit"
-              className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+              className="text-[11px] text-blue-600 hover:underline font-medium"
             >
-              View Full Audit Trail &rarr;
+              Audit Trail &rarr;
             </Link>
           </div>
 
           {recentAudit.length === 0 ? (
-            <div className="p-8 text-center border border-dashed border-gray-200 rounded-lg">
-              <History size={24} className="text-gray-300 mx-auto mb-2" />
-              <p className="text-xs text-gray-600 font-medium">No recent activity to display.</p>
-              <p className="text-[11px] text-gray-400 mt-0.5">
-                Actions like creating assistants, uploading documents, and managing credentials will appear here.
-              </p>
+            <div className="py-6 text-center text-gray-400 text-xs">
+              No recent activity recorded.
             </div>
           ) : (
             <div className="divide-y divide-gray-100">
-              {recentAudit.map((log) => (
-                <div key={log.id} className="py-3 flex items-center justify-between text-xs">
-                  <div>
-                    <span className="font-mono text-blue-600 font-semibold block">
+              {recentAudit.slice(0, 3).map((log) => (
+                <div key={log.id} className="py-2 flex items-center justify-between text-xs">
+                  <div className="min-w-0 pr-2">
+                    <span className="font-mono text-blue-600 font-medium block truncate text-[11px]">
                       {log.action}
                     </span>
-                    <span className="text-gray-500 text-[11px]">
-                      By {log.actor_name || "System"} on {log.resource_type}
+                    <span className="text-[10px] text-gray-400 block truncate">
+                      {log.resource_type} by {log.actor_name || "System"}
                     </span>
                   </div>
-                  <span className="text-[11px] text-gray-400 font-mono">
+                  <span className="text-[10px] text-gray-400 font-mono shrink-0">
                     {new Date(log.created_at).toLocaleTimeString([], {
                       hour: "2-digit",
                       minute: "2-digit",
@@ -281,6 +435,22 @@ export default function DashboardOverviewPage() {
               ))}
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Platform Status & Non-Sensitive Release Identity */}
+      <div className="p-3.5 rounded-xl bg-gray-50 border border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-gray-500">
+        <div className="flex items-center gap-2.5">
+          <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+          <span className="font-medium text-gray-800">
+            Multi-Tenant AI Platform (CaaS) · Release M28.8
+          </span>
+          <span className="text-gray-300">|</span>
+          <span className="text-gray-500">Unified AI Workspace</span>
+        </div>
+        <div className="flex items-center gap-3 text-[11px] font-mono text-gray-400">
+          <span>Staging</span>
+          <span>Zero-Trust Scoped</span>
         </div>
       </div>
     </div>

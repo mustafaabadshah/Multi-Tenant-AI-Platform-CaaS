@@ -266,6 +266,7 @@ export interface MessageCitationItem {
   source_type?: "document" | "web" | string | null;
   source_url?: string | null;
   domain?: string | null;
+  retrieved_at?: string | null;
 }
 
 export type CitationItem = MessageCitationItem;

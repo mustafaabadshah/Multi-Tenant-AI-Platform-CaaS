@@ -72,12 +72,21 @@ class WebFetchService:
         canonical_url = validated_url
         domain = urlparse(canonical_url).netloc.lower()
 
-        cache_key = (str(self.tenant_id), canonical_url)
+        effective_tenant = tenant_id or self.tenant_id
+        cache_key = (str(effective_tenant), canonical_url)
         now = time.time()
         if not bypass_cache and cache_key in _WEB_CACHE:
             ts, cached_result = _WEB_CACHE[cache_key]
             if now - ts < _CACHE_TTL_SECONDS:
-                return {**cached_result, "cached": True}
+                extracted = cached_result.get("content", cached_result.get("extracted_text", ""))
+                return WebFetchResult({
+                    **cached_result,
+                    "url": canonical_url,
+                    "hostname": domain,
+                    "extracted_text": extracted,
+                    "text": extracted,
+                    "cached": True,
+                })
 
         # 2. Bounded outbound fetch with connection-level SSRF defense and manual redirect re-validation
         headers = {

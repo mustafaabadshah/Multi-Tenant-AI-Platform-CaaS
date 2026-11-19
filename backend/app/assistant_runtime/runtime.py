@@ -189,15 +189,9 @@ class AssistantRuntime:
             if url_matches:
                 target_url = url_matches[0].rstrip(".,;!?)]}")
                 lower_msg = user_message.lower()
-                read_keywords = (
-                    "read", "explain", "summarize", "what is", "check", "browse",
-                    "analyze", "content", "page", "knowledge", "using tool", "tool",
-                    "look at", "visit", "tell me about", "from this url", "fetch",
-                )
-                is_explicit_read = (
-                    any(kw in lower_msg for kw in read_keywords)
-                    or len(user_message.strip()) <= len(target_url) + 12
-                )
+                # Treat any URL present in untrusted message as an explicit web reading request
+                # unless explicitly commanded to ignore it
+                is_explicit_read = not bool(re.search(r"\b(?:don't|do not|ignore)\b.*\b(?:url|link|page|web)\b", lower_msg))
                 if is_explicit_read:
                     web_preflight_triggered = True
                     yield format_sse("web_reading_started", {"url": target_url})
@@ -209,7 +203,8 @@ class AssistantRuntime:
                         web_svc = get_web_fetch_service(tenant_id=self.tenant_id)
                         fetch_res = await web_svc.read_webpage(target_url, tenant_id=self.tenant_id)
 
-                        if fetch_res.get("status") in ("SUCCESS", "FALLBACK_PARSED") and fetch_res.get("extracted_text"):
+                        extracted_body = fetch_res.get("extracted_text", "").strip()
+                        if fetch_res.get("status") in ("SUCCESS", "FALLBACK_PARSED") and extracted_body:
                             canonical_url = fetch_res.get("canonical_url") or target_url
                             page_title = fetch_res.get("title") or fetch_res.get("domain") or canonical_url
                             domain = fetch_res.get("domain") or ""
@@ -221,7 +216,7 @@ class AssistantRuntime:
                                     canonical_url=canonical_url,
                                     original_url=target_url,
                                     title=page_title,
-                                    extracted_text=fetch_res.get("extracted_text", ""),
+                                    extracted_text=extracted_body,
                                     hostname=domain,
                                     content_type=fetch_res.get("content_type", "text/html"),
                                     retrieved_at=datetime.now(timezone.utc),
@@ -238,12 +233,13 @@ class AssistantRuntime:
                                 "title": page_title,
                             })
 
+                            # Inject up to 12,000 characters of clean extracted article/code context
                             web_chunk = VectorSearchResult(
                                 chunk_id=str(uuid.uuid5(uuid.NAMESPACE_URL, canonical_url)),
                                 document_id=str(canonical_url),
                                 document_title=page_title,
                                 knowledge_base_id=None,
-                                content=fetch_res.get("extracted_text", "")[:4000],
+                                content=extracted_body[:12000],
                                 score=0.99,
                                 metadata={
                                     "source_type": fetch_res.get("source_type", "web"),
@@ -256,7 +252,15 @@ class AssistantRuntime:
                             )
                             explicit_web_chunks.append(web_chunk)
                         else:
-                            error_reason = fetch_res.get("description") or fetch_res.get("status") or "Page unreachable"
+                            error_reason = (
+                                fetch_res.get("description")
+                                if fetch_res.get("description") and fetch_res.get("status") != "SUCCESS"
+                                else (
+                                    "Webpage content was empty or protected by anti-bot measures"
+                                    if fetch_res.get("status") == "SUCCESS"
+                                    else fetch_res.get("status", "Page unreachable")
+                                )
+                            )
                             yield format_sse("web_reading_failed", {
                                 "url": target_url,
                                 "error": error_reason,
@@ -357,7 +361,7 @@ class AssistantRuntime:
                                 document_id=str(cp.canonical_url),
                                 document_title=cp.title or cp.hostname,
                                 knowledge_base_id=None,
-                                content=cp.extracted_text[:2000],
+                                content=cp.extracted_text[:8000],
                                 score=0.95,
                                 metadata={
                                     "source_type": "web",

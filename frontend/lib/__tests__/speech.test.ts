@@ -356,8 +356,10 @@ describe("VoiceSessionController", () => {
     assert.equal(submittedCount, 1);
     assert.equal(submittedText, "What is a for loop?");
 
-    // Wait for synthesis playback (~100ms)
-    await new Promise((resolve) => setTimeout(resolve, 150));
+    // Wait for synthesis playback to complete
+    for (let i = 0; i < 12 && controller.getState() === "SPEAKING"; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
 
     // Controller transitions back to ready/listening for turn 2
     assert.ok(
@@ -427,8 +429,10 @@ describe("VoiceSessionController", () => {
     assert.equal(turnsReceived.length, 1);
     assert.equal(turnsReceived[0], "What is a C++ for loop?");
 
-    // Synthesis finishes playing
-    await new Promise((resolve) => setTimeout(resolve, 150));
+    // Wait for synthesis playback to complete
+    for (let i = 0; i < 12 && controller.getState() === "SPEAKING"; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
     assert.ok(
       controller.getState() === "LISTENING" || controller.getState() === "STARTING",
       `Controller not ready for turn 2: ${controller.getState()}`
@@ -438,12 +442,17 @@ describe("VoiceSessionController", () => {
     mockRecognition.emitResult([{ transcript: "Give me an example", isFinal: true }]);
     if (mockRecognition.onspeechend) mockRecognition.onspeechend();
 
-    await new Promise((resolve) => setTimeout(resolve, 750));
+    // Wait for silence endpointing
+    for (let i = 0; i < 15 && turnsReceived.length < 2; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 60));
+    }
     assert.equal(turnsReceived.length, 2);
     assert.equal(turnsReceived[1], "Give me an example");
 
     // Synthesis finishes playing second turn
-    await new Promise((resolve) => setTimeout(resolve, 150));
+    for (let i = 0; i < 12 && controller.getState() === "SPEAKING"; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
 
     controller.endSession();
     assert.equal(controller.getState(), "INACTIVE");

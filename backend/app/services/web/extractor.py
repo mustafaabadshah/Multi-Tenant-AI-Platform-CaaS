@@ -17,6 +17,12 @@ class _DOMContentExtractor(HTMLParser):
         "form", "noscript", "svg", "button", "iframe", "object",
     })
 
+    BOILERPLATE_PATTERN = re.compile(
+        r"(?:sidebar|sidenav|left-menu|menu-wrapper|top-nav|navbar|cookie-banner|cookie-notice|"
+        r"advertisement|banner-ad|social-share|breadcrumbs?|widget-area|pagination)",
+        re.IGNORECASE,
+    )
+
     HEADING_TAGS = {"h1": 1, "h2": 2, "h3": 3, "h4": 4, "h5": 5, "h6": 6}
 
     def __init__(self):
@@ -25,6 +31,7 @@ class _DOMContentExtractor(HTMLParser):
         self.meta_description: str = ""
         self.in_title: bool = False
         self.ignore_depth: int = 0
+        self.ignored_elements_depth: int = 0
 
         # Structural buffers
         self.blocks: list[str] = []
@@ -65,7 +72,17 @@ class _DOMContentExtractor(HTMLParser):
             self.ignore_depth += 1
             return
 
-        if self.ignore_depth > 0:
+        # Check class, id, or role for boilerplate navigation/sidebar/ad patterns
+        cls_id = f"{attr_dict.get('id', '')} {attr_dict.get('class', '')} {attr_dict.get('role', '')}".strip()
+        if cls_id and self.BOILERPLATE_PATTERN.search(cls_id):
+            # Do not ignore if it's explicitly marked as main/article container
+            if not re.search(r"\b(?:main|article|post-body)\b", cls_id, re.IGNORECASE):
+                self.ignored_elements_depth += 1
+                return
+
+        if self.ignore_depth > 0 or self.ignored_elements_depth > 0:
+            if self.ignored_elements_depth > 0:
+                self.ignored_elements_depth += 1
             return
 
         if tag_lower == "title":
@@ -147,6 +164,10 @@ class _DOMContentExtractor(HTMLParser):
                 self.ignore_depth -= 1
             return
 
+        if self.ignored_elements_depth > 0:
+            self.ignored_elements_depth -= 1
+            return
+
         if self.ignore_depth > 0:
             return
 
@@ -205,7 +226,7 @@ class _DOMContentExtractor(HTMLParser):
             return
 
     def handle_data(self, data: str):
-        if self.ignore_depth > 0:
+        if self.ignore_depth > 0 or self.ignored_elements_depth > 0:
             return
 
         if self.in_title:
@@ -290,32 +311,53 @@ class WebContentExtractor:
             or "access denied" in raw_lower and len(raw_html) < 2000
         )
 
-        parser = _DOMContentExtractor()
+        # 2. Extract title & meta from full HTML first
+        full_parser = _DOMContentExtractor()
         try:
-            parser.feed(raw_html)
-            parser._flush_line()
+            full_parser.feed(raw_html)
+            full_parser._flush_line()
         except Exception:
-            # Fallback to plain regex stripping if parser encounters broken markup
-            plain = re.sub(r"<[^>]+>", " ", raw_html)
-            plain = re.sub(r"\s+", " ", plain).strip()
-            return {
-                "title": parser.title.strip() or "Web Document",
-                "description": parser.meta_description.strip(),
-                "content": plain[: cls.MAX_EXTRACTED_CHARS],
-                "status": "FALLBACK_PARSED",
-                "char_count": len(plain[: cls.MAX_EXTRACTED_CHARS]),
-                "is_js_required": is_js_required,
-                "is_blocked": is_blocked,
-            }
+            pass
 
-        title = parser.title.strip()
-        description = parser.meta_description.strip()
+        title = full_parser.title.strip()
+        description = full_parser.meta_description.strip()
 
-        # Deduplicate and format blocks
+        # 3. Check for semantic primary content container
+        # Prioritizes the actual article/body content over sidebars, breadcrumbs, and menus
+        main_patterns = [
+            r"<main\b[^>]*>",
+            r"<article\b[^>]*>",
+            r"<div\b[^>]*(?:id=[\"'](?:main-content|main|content|bodyContent|mw-content-text|article|post-body)[\"'])[^>]*>",
+            r"<div\b[^>]*(?:role=[\"']main[\"'])[^>]*>",
+            r"<div\b[^>]*(?:class=[\"'][^\"']*(?:article-body|post-content|entry-content|main-content)[^\"']*[\"'])[^>]*>",
+        ]
+
+        main_parser = None
+        for pattern in main_patterns:
+            match = re.search(pattern, raw_html, re.IGNORECASE)
+            if match:
+                candidate = raw_html[match.start():]
+                p_cand = _DOMContentExtractor()
+                try:
+                    p_cand.feed(candidate)
+                    p_cand._flush_line()
+                    cand_blocks = [b for b in p_cand.blocks if b.strip()]
+                    cand_text = "\n\n".join(cand_blocks)
+                    if len(cand_text.strip()) >= 200:
+                        main_parser = p_cand
+                        break
+                except Exception:
+                    pass
+
+        # Use main container if found with sufficient content, otherwise fallback to full DOM parser
+        parser = main_parser if main_parser else full_parser
         joined_content = "\n\n".join(b for b in parser.blocks if b.strip())
 
-        # Clean multiple blank lines
+        # Clean multiple blank lines and common boilerplate crumbs
         joined_content = re.sub(r"\n{3,}", "\n\n", joined_content).strip()
+        # Clean comment residue and leading navigation arrows/crumbs
+        joined_content = re.sub(r"^[a-zA-Z0-9_\-]+:-->\s*", "", joined_content).strip()
+        joined_content = re.sub(r"^[❮❯<>\s]*(?:Previous|Next|Share|Home|Menu)[❮❯<>\s]*\n+", "", joined_content, flags=re.IGNORECASE)
 
         # Enforce bounds
         truncated = False

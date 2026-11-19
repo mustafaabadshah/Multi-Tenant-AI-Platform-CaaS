@@ -84,74 +84,120 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   };
 
-  const navGroups = [
-    {
-      group: "Main",
-      items: [
-        { label: "Overview", href: "/dashboard", icon: LayoutDashboard },
-        { label: "Chat Studio", href: "/dashboard/conversations", icon: MessageSquare },
-        { label: "AI Assistants", href: "/dashboard/assistants", icon: Bot },
-        { label: "Knowledge Bases", href: "/dashboard/knowledge", icon: Database },
-      ],
-    },
-    {
-      group: "Manage",
-      items: [
-        { label: "Team & Roles", href: "/dashboard/employees", icon: Users },
-        { label: "Usage & Quotas", href: "/dashboard/settings", icon: Settings },
-      ],
-    },
-    {
-      group: "Advanced",
-      items: [
-        { label: "Tools & MCP", href: "/dashboard/integrations", icon: Network },
-        { label: "Evaluations", href: "/dashboard/evaluations", icon: FlaskConical },
-        { label: "Beta Quality", href: "/dashboard/beta", icon: UserCheck },
-        { label: "Observability", href: "/dashboard/observability", icon: Activity },
-        { label: "Providers & Keys", href: "/dashboard/providers", icon: Key },
-        { label: "Audit Logs", href: "/dashboard/audit", icon: History },
-      ],
-    },
+  const isAdvancedRoute = [
+    "/dashboard/integrations",
+    "/dashboard/evaluations",
+    "/dashboard/beta",
+    "/dashboard/observability",
+    "/dashboard/providers",
+    "/dashboard/audit",
+  ].some((route) => pathname.startsWith(route));
+
+  const [advancedOpen, setAdvancedOpen] = useState(isAdvancedRoute);
+
+  useEffect(() => {
+    if (isAdvancedRoute) {
+      setAdvancedOpen(true);
+    }
+  }, [isAdvancedRoute]);
+
+  const mainNavItems = [
+    { label: "Overview", href: "/dashboard", icon: LayoutDashboard },
+    { label: "Chat", href: "/dashboard/conversations", icon: MessageSquare },
+    { label: "Assistants", href: "/dashboard/assistants", icon: Bot },
+    { label: "Knowledge", href: "/dashboard/knowledge", icon: Database },
   ];
+
+  const managementNavItems = [
+    { label: "Team", href: "/dashboard/employees", icon: Users },
+    { label: "Settings", href: "/dashboard/settings", icon: Settings },
+  ];
+
+  const advancedNavItems = [
+    { label: "Tools & MCP", href: "/dashboard/integrations", icon: Network },
+    { label: "Evaluations", href: "/dashboard/evaluations", icon: FlaskConical },
+    { label: "Beta Quality", href: "/dashboard/beta", icon: UserCheck },
+    { label: "Observability", href: "/dashboard/observability", icon: Activity },
+    { label: "Providers & Keys", href: "/dashboard/providers", icon: Key },
+    { label: "Audit Logs", href: "/dashboard/audit", icon: History },
+  ];
+
+  const renderNavList = (items: typeof mainNavItems, collapsed = false) => {
+    return items.map((item) => {
+      const Icon = item.icon;
+      const isActive =
+        item.href === "/dashboard"
+          ? pathname === "/dashboard"
+          : pathname.startsWith(item.href);
+
+      return (
+        <Link
+          key={item.href}
+          href={item.href}
+          onClick={() => setMobileMenuOpen(false)}
+          title={collapsed ? item.label : undefined}
+          className={`flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
+            collapsed ? "justify-center" : ""
+          } ${
+            isActive
+              ? "bg-blue-50 text-blue-600 font-semibold"
+              : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+          }`}
+        >
+          <Icon size={18} className={`shrink-0 ${isActive ? "text-blue-600" : "text-gray-500"}`} />
+          {!collapsed && <span className="truncate">{item.label}</span>}
+        </Link>
+      );
+    });
+  };
 
   const renderNavItems = (collapsed = false) => {
     return (
       <nav className="space-y-4 px-2">
-        {navGroups.map((group) => (
-          <div key={group.group} className="space-y-1">
-            {!collapsed && (
-              <div className="px-2.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
-                {group.group}
-              </div>
-            )}
-            {group.items.map((item) => {
-              const Icon = item.icon;
-              const isActive =
-                item.href === "/dashboard"
-                  ? pathname === "/dashboard"
-                  : pathname.startsWith(item.href);
+        {/* Workspace Core */}
+        <div className="space-y-1">
+          {!collapsed && (
+            <div className="px-2.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+              Workspace
+            </div>
+          )}
+          {renderNavList(mainNavItems, collapsed)}
+        </div>
 
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setMobileMenuOpen(false)}
-                  title={collapsed ? item.label : undefined}
-                  className={`flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
-                    collapsed ? "justify-center" : ""
-                  } ${
-                    isActive
-                      ? "bg-blue-50 text-blue-600 font-semibold"
-                      : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
-                  }`}
-                >
-                  <Icon size={18} className={`shrink-0 ${isActive ? "text-blue-600" : "text-gray-500"}`} />
-                  {!collapsed && <span className="truncate">{item.label}</span>}
-                </Link>
-              );
-            })}
-          </div>
-        ))}
+        {/* Management */}
+        <div className="space-y-1">
+          {!collapsed && (
+            <div className="px-2.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+              Management
+            </div>
+          )}
+          {renderNavList(managementNavItems, collapsed)}
+        </div>
+
+        {/* Advanced (Collapsible) */}
+        <div className="space-y-1">
+          {!collapsed ? (
+            <button
+              type="button"
+              onClick={() => setAdvancedOpen(!advancedOpen)}
+              className="w-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-gray-400 hover:text-gray-600 flex items-center justify-between cursor-pointer"
+            >
+              <span>Advanced</span>
+              <ChevronDown
+                size={12}
+                className={`transition-transform duration-150 ${advancedOpen ? "rotate-0" : "-rotate-90"}`}
+              />
+            </button>
+          ) : (
+            <div className="border-t border-gray-100 my-2 pt-2" />
+          )}
+
+          {(!collapsed ? advancedOpen : true) && (
+            <div className="space-y-0.5">
+              {renderNavList(advancedNavItems, collapsed)}
+            </div>
+          )}
+        </div>
       </nav>
     );
   };

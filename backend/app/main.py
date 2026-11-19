@@ -175,6 +175,21 @@ def create_app(app_settings: Settings = settings) -> FastAPI:
             timestamp=datetime.now(UTC),
         )
 
+    @app.get("/version", tags=["System Health"])
+    async def version_info() -> dict[str, str]:
+        """Non-sensitive build and release identity for operations and auditing."""
+        import os
+
+        return {
+            "service": "mmaip-backend",
+            "milestone": "M28.7",
+            "release": "M28.7-web-ux-defect-closure",
+            "git_commit": os.environ.get("RENDER_GIT_COMMIT", os.environ.get("GIT_COMMIT", "local-dev")),
+            "environment": os.environ.get("ENVIRONMENT", "staging"),
+            "status": "operational",
+            "timestamp": datetime.now(UTC).isoformat(),
+        }
+
     # Mount versioned API
     app.include_router(api_v1_router)
     return app
