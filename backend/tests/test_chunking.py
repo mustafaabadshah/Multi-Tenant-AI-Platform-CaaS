@@ -1,9 +1,10 @@
 """Comprehensive tests for all chunking strategies and metadata preservation."""
 
 import uuid
+
 import pytest
 
-from app.chunking.base import ChunkingConfig, estimate_tokens
+from app.chunking.base import ChunkingConfig
 from app.chunking.markdown import MarkdownHeaderChunking
 from app.chunking.recursive import RecursiveCharacterChunking
 from app.chunking.registry import get_chunking_registry

@@ -1,8 +1,8 @@
-# MM AI Platform — Tenant Isolation Specification & Verification Standard
+# Multi-Tenant AI Platform (CaaS) — Tenant Isolation Specification & Verification Standard
 
 ## 1. Zero-Leakage Tenant Isolation Mandate
 
-In the MM AI Platform, tenant isolation is the highest-priority architectural requirement. A multi-tenant platform must guarantee under all circumstances that one customer's private data, organizational structure, employees, assistants, and documents are inaccessible to another customer.
+In the Multi-Tenant AI Platform (CaaS), tenant isolation is the highest-priority architectural requirement. A multi-tenant platform must guarantee under all circumstances that one customer's private data, organizational structure, employees, assistants, and documents are inaccessible to another customer.
 
 ### The 8 Non-Negotiable Isolation Rules:
 1. **Never trust frontend tenant IDs:** Any tenant ID supplied via URL, query parameter, or `X-Tenant-ID` header must be validated against `tenant_memberships` for the authenticated user.

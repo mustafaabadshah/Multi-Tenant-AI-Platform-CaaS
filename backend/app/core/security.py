@@ -1,3 +1,6 @@
+import hashlib
+import secrets
+import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -38,12 +41,23 @@ def needs_rehash(hashed_password: str) -> bool:
         return True
 
 
+def generate_session_token() -> str:
+    """Return a high-entropy, cryptographically secure raw refresh token."""
+    return secrets.token_urlsafe(32)
+
+
+def hash_session_token(raw_token: str) -> str:
+    """Return the SHA-256 hex digest for server-side lookup of a refresh token."""
+    return hashlib.sha256(raw_token.strip().encode("utf-8")).hexdigest()
+
+
 def create_access_token(
     subject: str,
     claims: dict[str, Any] | None = None,
+    session_id: str | None = None,
     expires_delta: timedelta | None = None,
 ) -> str:
-    """Create a short-lived access JWT token."""
+    """Create a short-lived access JWT token with unique JTI and session binding."""
     now = datetime.now(UTC)
     if expires_delta:
         expire = now + expires_delta
@@ -51,16 +65,22 @@ def create_access_token(
         expire = now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
     to_encode: dict[str, Any] = {
+        "jti": str(uuid.uuid4()),
         "sub": str(subject),
         "iat": now,
         "exp": expire,
         "type": "access",
+        "iss": "mmaip-auth",
+        "aud": "mmaip-platform",
     }
+    if session_id:
+        to_encode["sid"] = str(session_id)
     if claims:
         to_encode.update(claims)
 
     encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
     return encoded_jwt
+
 
 
 def create_refresh_token(
@@ -92,7 +112,9 @@ def decode_token(token: str) -> dict[str, Any] | None:
             token,
             settings.JWT_SECRET,
             algorithms=[settings.JWT_ALGORITHM],
+            options={"verify_aud": False},
         )
         return payload
     except jwt.PyJWTError:
         return None
+

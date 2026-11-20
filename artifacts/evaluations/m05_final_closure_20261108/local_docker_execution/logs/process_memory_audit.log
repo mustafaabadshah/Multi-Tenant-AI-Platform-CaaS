@@ -1,0 +1,14 @@
+Total Visible Memory: 7820.98 MB (~7.64 GB)
+Free Physical Memory: 1123.24 MB (~1.10 GB)
+Commit Limit:         28300.98 MB
+Committed Memory:     13392.52 MB
+
+Top Memory Consumers by Working Set & Private Memory:
+1. chrome (21 processes):            1327.41 MB Working Set / 1652.42 MB Private Memory
+2. Antigravity IDE (19 processes):   1617.59 MB Working Set / 3114.36 MB Private Memory
+3. pyrefly (1 process):               264.58 MB Working Set / 1167.27 MB Private Memory
+4. language_server_windows_x64 (2):   429.19 MB Working Set /  518.19 MB Private Memory
+5. sqlservr (1 process):               90.03 MB Working Set /  449.59 MB Private Memory
+6. msedge + msedgewebview2 (14):      354.95 MB Working Set /  421.99 MB Private Memory
+7. copilotapp (9 processes):           96.90 MB Working Set /  260.03 MB Private Memory
+8. MsMpEng (Windows Defender) (1):    353.05 MB Working Set /  482.25 MB Private Memory

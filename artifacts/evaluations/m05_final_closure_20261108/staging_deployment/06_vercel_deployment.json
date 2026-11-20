@@ -1,0 +1,9 @@
+{
+  "project_name": "mmaip-frontend",
+  "environment": "staging",
+  "framework": "nextjs",
+  "build_command": "next build",
+  "root_directory": "frontend",
+  "config_file": "frontend/vercel.json",
+  "status": "PREPARED_AND_CONFIGURED"
+}

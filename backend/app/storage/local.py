@@ -21,8 +21,11 @@ class LocalStorageProvider(StorageProvider):
 
         # Normalize relative key by stripping leading slashes and tenant prefix if repeated
         clean_key = relative_key.replace("\\", "/").lstrip("/")
-        if clean_key.startswith(f"tenants/{tenant_id}/"):
-            clean_key = clean_key[len(f"tenants/{tenant_id}/"):]
+        t_str = str(tenant_id)
+        if clean_key.startswith(f"tenants/{t_str}/"):
+            clean_key = clean_key[len(f"tenants/{t_str}/") :]
+        elif clean_key.startswith(f"{t_str}/"):
+            clean_key = clean_key[len(f"{t_str}/") :]
 
         target_path = (tenant_root / clean_key).resolve()
 
@@ -86,3 +89,22 @@ class LocalStorageProvider(StorageProvider):
             return target_path.stat().st_size
 
         return await asyncio.to_thread(_sync_size)
+
+    async def list_keys(self, tenant_id: str, prefix: str = "") -> list[str]:
+        """List file keys under the tenant root, relative to the storage root."""
+        tenant_root = (self.base_dir / "tenants" / str(tenant_id)).resolve()
+        if not tenant_root.exists():
+            return []
+
+        def _sync_list() -> list[str]:
+            keys: list[str] = []
+            for path in tenant_root.rglob("*"):
+                if not path.is_file() or path.name.endswith(".tmp"):
+                    continue
+                key = path.relative_to(self.base_dir).as_posix()
+                if prefix and not key.startswith(prefix):
+                    continue
+                keys.append(key)
+            return sorted(keys)
+
+        return await asyncio.to_thread(_sync_list)

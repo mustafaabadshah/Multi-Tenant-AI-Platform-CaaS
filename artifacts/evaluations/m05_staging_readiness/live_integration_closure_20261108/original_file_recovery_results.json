@@ -1,0 +1,25 @@
+{
+  "timestamp": "2026-11-07T21:03:51.104439+00:00",
+  "status": "PASS \u2014 100% RECOVERED AND VERIFIED",
+  "blocker_status": "CLOSED",
+  "test_suite": "backend/tests/test_m05_file_recovery.py",
+  "results": {
+    "test_paired_file_and_database_backup_and_restore": "PASSED",
+    "test_reconciliation_detects_missing_corrupted_and_orphan_files": "PASSED",
+    "test_storage_restore_zip_slip_prevention": "PASSED"
+  },
+  "formats_verified": [
+    "PDF",
+    "DOCX",
+    "XLSX",
+    "PNG",
+    "TXT"
+  ],
+  "checksum_match": "100% byte-for-byte SHA-256 match",
+  "tenant_isolation": "Verified; cross-tenant document retrieval blocked.",
+  "scripts": [
+    "infrastructure/scripts/backup-storage.ps1",
+    "infrastructure/scripts/restore-storage.ps1",
+    "infrastructure/scripts/backup-paired.ps1"
+  ]
+}

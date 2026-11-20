@@ -1,6 +1,6 @@
-# AGENTS.md — MM AI Platform Engineering Guidelines
+# AGENTS.md — Multi-Tenant AI Platform (CaaS) Engineering Guidelines
 
-This document outlines the strict architectural rules, security boundaries, and coding standards for all human and AI contributors working on the MM AI Platform.
+This document outlines the strict architectural rules, security boundaries, and coding standards for all human and AI contributors working on the Multi-Tenant AI Platform (CaaS).
 
 ---
 

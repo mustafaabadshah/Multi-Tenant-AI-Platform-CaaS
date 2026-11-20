@@ -1,0 +1,12 @@
+{
+  "blockers": [
+    {
+      "id": "BLK-01",
+      "title": "Live Container Infrastructure Validation on PostgreSQL 16 & Qdrant v1.9.0",
+      "severity": "RELEASE_BLOCKER_FOR_UNCONDITIONAL_PASS",
+      "status": "PORTABLE_RUNNER_READY",
+      "snapshot_sha256": "3c97b830261542a6a27dd1d0ee93cc76b63cebbb91f99fa9f54e50dcc8eeed6f",
+      "resolution": "Execute snapshot on external Linux runner with >= 4 GB RAM and return raw logs."
+    }
+  ]
+}

@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from app.models.department import Department
     from app.models.role import Role
     from app.models.tenant import Tenant
+    from app.models.user import User
 
 
 class Invitation(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin):
@@ -25,11 +26,18 @@ class Invitation(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin):
         ForeignKey("departments.id", ondelete="SET NULL"),
         nullable=True,
     )
+    invited_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     token: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_cancelled: Mapped[bool] = mapped_column(default=False, nullable=False)
 
     # Relationships
     tenant: Mapped["Tenant"] = relationship("Tenant")
     role: Mapped["Role"] = relationship("Role")
     department: Mapped["Department | None"] = relationship("Department")
+    invited_by: Mapped["User | None"] = relationship("User")
+

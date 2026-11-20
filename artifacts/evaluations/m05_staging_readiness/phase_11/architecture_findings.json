@@ -1,0 +1,39 @@
+{
+  "milestone": "M05",
+  "phase": 11,
+  "component": "Architecture Findings & Quality Assessment",
+  "timestamp": "2026-11-08T00:50:00Z",
+  "quality_score": "96/100",
+  "findings": [
+    {
+      "id": "ARCH-01",
+      "severity": "LOW",
+      "category": "Data Lifecycle",
+      "component": "backend/app/repositories/document_repository.py",
+      "title": "Asynchronous Vector Store Cleanup on Document Deletion",
+      "description": "When a document is soft-deleted or purged, PostgreSQL cascades delete chunks in the relational database, but remote Qdrant vectors rely on background or scoped collection point deletion. A failed vector deletion job could leave orphaned vectors in Qdrant.",
+      "mitigation": "The relational retrieval authorizer (app/retrieval/authorization.py) validates candidate IDs against PostgreSQL documents and filters out any deleted documents or chunks. Thus, orphaned vectors never reach the LLM context.",
+      "recommendation": "Add a scheduled reconciliation task in post-M05 to prune Qdrant vectors whose chunk_id no longer exists in PostgreSQL."
+    },
+    {
+      "id": "ARCH-02",
+      "severity": "LOW",
+      "category": "Performance / I/O",
+      "component": "backend/app/parsers/pdf.py",
+      "title": "CPU-Bound Document Parsing in Async Context",
+      "description": "PyMuPDF text extraction is CPU-bound. Large multi-megabyte PDFs could block the asyncio event loop if parsed synchronously in the main thread.",
+      "mitigation": "Current ingestion pipeline delegates ingestion jobs to background workers or threads via asyncio.to_thread.",
+      "recommendation": "Maintain strict upload file size limit (50 MB) and worker pool concurrency limits in production settings."
+    },
+    {
+      "id": "ARCH-03",
+      "severity": "INFORMATIONAL",
+      "category": "Frontend Code Quality",
+      "component": "frontend/app/dashboard/",
+      "title": "Unused Imports in Static Dashboard Pages",
+      "description": "ESLint reported 19 unused variable/import warnings (e.g. Shield, Clock, PlusCircle) across dashboard pages. They do not block builds or cause runtime errors.",
+      "mitigation": "Verified next build passes with 0 errors.",
+      "recommendation": "Clean up unused Lucide imports during routine dashboard maintenance."
+    }
+  ]
+}

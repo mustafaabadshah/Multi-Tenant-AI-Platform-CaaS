@@ -7,7 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import TenantContext, get_current_user, require_permission
 from app.core.config import settings
 from app.core.constants import PermissionName
+from app.core.rate_limit import enforce_rate_limit
 from app.database.session import get_db
+from app.models.knowledge import KnowledgeBase
 from app.models.user import User
 from app.repositories.audit_repository import AuditLogRepository
 from app.repositories.document_repository import DocumentRepository
@@ -20,10 +22,29 @@ from app.schemas.knowledge import (
     IngestionJobResponse,
     KnowledgeBaseCreateRequest,
     KnowledgeBaseResponse,
+    KnowledgeBaseUpdateRequest,
 )
+from app.schemas.retrieval import (
+    EmbeddingJobRead,
+    IndexStatusResponse,
+    RetrievalConfigRead,
+    RetrievalConfigUpdate,
+)
+from app.services.ingestion.limits import UploadTooLargeError, read_upload_bounded
 from app.services.ingestion.service import IngestionService, run_ingestion_in_background
 
 router = APIRouter(prefix="/knowledge", tags=["Knowledge Base Foundation"])
+
+
+def _check_kb_acl(kb: KnowledgeBase, ctx: TenantContext) -> None:
+    if ctx.is_admin:
+        return
+    user_dept_id = ctx.membership.department_id if ctx.membership else None
+    if kb.department_id and kb.department_id != user_dept_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Knowledge base not found in active workspace",
+        )
 
 
 @router.get("", response_model=list[KnowledgeBaseResponse])
@@ -33,20 +54,25 @@ async def list_knowledge_bases(
 ) -> list[KnowledgeBaseResponse]:
     repo = KnowledgeRepository(db, ctx.tenant.id)
     items = await repo.list_with_counts()
+    user_dept_id = ctx.membership.department_id if ctx.membership else None
 
-    return [
-        KnowledgeBaseResponse(
-            id=kb.id,
-            tenant_id=kb.tenant_id,
-            name=kb.name,
-            description=kb.description,
-            status=kb.status,
-            document_count=doc_count,
-            created_at=kb.created_at,
-            updated_at=kb.updated_at,
+    responses = []
+    for kb, doc_count in items:
+        if not ctx.is_admin and kb.department_id and kb.department_id != user_dept_id:
+            continue
+        responses.append(
+            KnowledgeBaseResponse(
+                id=kb.id,
+                tenant_id=kb.tenant_id,
+                name=kb.name,
+                description=kb.description,
+                status=kb.status,
+                document_count=doc_count,
+                created_at=kb.created_at,
+                updated_at=kb.updated_at,
+            )
         )
-        for kb, doc_count in items
-    ]
+    return responses
 
 
 @router.post("", response_model=KnowledgeBaseResponse, status_code=status.HTTP_201_CREATED)
@@ -97,6 +123,8 @@ async def get_knowledge_base(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Knowledge base not found in active workspace",
         )
+    _check_kb_acl(kb, ctx)
+    doc_count = await repo.get_document_count(kb.id)
 
     return KnowledgeBaseResponse(
         id=kb.id,
@@ -104,9 +132,67 @@ async def get_knowledge_base(
         name=kb.name,
         description=kb.description,
         status=kb.status,
-        document_count=0,
+        document_count=doc_count,
         created_at=kb.created_at,
         updated_at=kb.updated_at,
+    )
+
+
+@router.patch("/{kb_id}", response_model=KnowledgeBaseResponse)
+async def update_knowledge_base(
+    kb_id: uuid.UUID,
+    payload: KnowledgeBaseUpdateRequest,
+    ctx: TenantContext = Depends(require_permission(PermissionName.KNOWLEDGE_CREATE.value)),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> KnowledgeBaseResponse:
+    repo = KnowledgeRepository(db, ctx.tenant.id)
+    kb = await repo.get_by_id(kb_id)
+    if not kb:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Knowledge base not found in active workspace",
+        )
+    _check_kb_acl(kb, ctx)
+
+    update_dict = payload.model_dump(exclude_unset=True)
+    if not update_dict:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No fields provided for update",
+        )
+
+    if "name" in update_dict and update_dict["name"] is not None:
+        update_dict["name"] = update_dict["name"].strip()
+
+    updated_kb = await repo.update(kb_id, **update_dict)
+    if not updated_kb:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Knowledge base not found in active workspace",
+        )
+    await db.commit()
+
+    audit_repo = AuditLogRepository(db, ctx.tenant.id)
+    await audit_repo.log_event(
+        action="knowledge.update",
+        resource_type="knowledge_base",
+        resource_id=kb.id,
+        actor_id=current_user.id,
+        details=update_dict,
+    )
+
+    doc_count = await repo.get_document_count(kb.id)
+
+    return KnowledgeBaseResponse(
+        id=updated_kb.id,
+        tenant_id=updated_kb.tenant_id,
+        name=updated_kb.name,
+        description=updated_kb.description,
+        status=updated_kb.status,
+        document_count=doc_count,
+        created_at=updated_kb.created_at,
+        updated_at=updated_kb.updated_at,
     )
 
 
@@ -118,6 +204,13 @@ async def delete_knowledge_base(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     repo = KnowledgeRepository(db, ctx.tenant.id)
+    kb = await repo.get_by_id(kb_id)
+    if not kb:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Knowledge base not found in active workspace",
+        )
+    _check_kb_acl(kb, ctx)
     deleted = await repo.delete(kb_id)
     if not deleted:
         raise HTTPException(
@@ -149,6 +242,14 @@ async def upload_documents(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[DocumentUploadResponse]:
+    # Per-user upload budget, scoped by tenant to keep identities opaque and isolated.
+    await enforce_rate_limit(
+        "knowledge.upload",
+        f"{ctx.tenant.id}:{current_user.id}",
+        settings.RATE_LIMIT_UPLOAD_PER_HOUR,
+        3600,
+    )
+
     # 1. Verify KB belongs to active tenant
     kb_repo = KnowledgeRepository(db, ctx.tenant.id)
     kb = await kb_repo.get_by_id(kb_id)
@@ -157,6 +258,7 @@ async def upload_documents(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Knowledge base not found in active workspace",
         )
+    _check_kb_acl(kb, ctx)
 
     if not files:
         raise HTTPException(
@@ -176,7 +278,19 @@ async def upload_documents(
 
     for upload_file in files:
         filename = upload_file.filename or f"uploaded_{uuid.uuid4().hex[:8]}"
-        content = await upload_file.read()
+
+        # Stream one file at a time with a hard byte budget. The whole request
+        # is never materialized at once and nothing is stored or parsed for a
+        # file that exceeds the limit.
+        try:
+            content = await read_upload_bounded(upload_file, settings.MAX_FILE_SIZE_BYTES)
+        except UploadTooLargeError as err:
+            raise HTTPException(
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                detail=str(err),
+            )
+        finally:
+            await upload_file.close()
 
         try:
             doc, job, is_dup = await service.upload_document(
@@ -307,4 +421,181 @@ async def update_ingestion_config(
     )
 
     return IngestionConfigResponse.model_validate(updated)
+
+
+@router.get("/{kb_id}/retrieval-config", response_model=RetrievalConfigRead)
+async def get_retrieval_config(
+    kb_id: uuid.UUID,
+    ctx: TenantContext = Depends(require_permission(PermissionName.RETRIEVAL_SEARCH.value)),
+    db: AsyncSession = Depends(get_db),
+) -> RetrievalConfigRead:
+    """Fetch retrieval & vector database configuration for a knowledge base."""
+    kb_repo = KnowledgeRepository(db, ctx.tenant.id)
+    kb = await kb_repo.get_by_id(kb_id)
+    if not kb:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Knowledge base not found")
+
+    from app.core.crypto import decrypt_secret, mask_secret
+    from app.repositories.retrieval_repository import RetrievalRepository
+    from app.schemas.retrieval import RetrievalConfigRead
+
+    ret_repo = RetrievalRepository(db, ctx.tenant.id)
+    cfg = await ret_repo.get_or_create_config(kb_id)
+    plain = decrypt_secret(cfg.encrypted_api_key) if cfg.encrypted_api_key else None
+
+    return RetrievalConfigRead(
+        id=cfg.id,
+        knowledge_base_id=cfg.knowledge_base_id,
+        retrieval_mode=cfg.retrieval_mode,
+        vector_store=cfg.vector_store,
+        embedding_provider=cfg.embedding_provider,
+        embedding_model=cfg.embedding_model,
+        embedding_dimensions=cfg.embedding_dimensions,
+        similarity_metric=cfg.similarity_metric,
+        top_k=cfg.top_k,
+        rrf_k=cfg.rrf_k,
+        rerank_enabled=cfg.rerank_enabled,
+        rerank_provider=cfg.rerank_provider,
+        embedding_version=cfg.embedding_version,
+        has_api_key=bool(cfg.encrypted_api_key),
+        masked_api_key=mask_secret(plain) if plain else None,
+        settings_json=cfg.settings_json or {},
+    )
+
+
+@router.patch("/{kb_id}/retrieval-config", response_model=RetrievalConfigRead)
+async def update_retrieval_config(
+    kb_id: uuid.UUID,
+    payload: RetrievalConfigUpdate,
+    ctx: TenantContext = Depends(require_permission(PermissionName.RETRIEVAL_CONFIGURE.value)),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> RetrievalConfigRead:
+    """Update retrieval and vector configuration for a knowledge base."""
+    kb_repo = KnowledgeRepository(db, ctx.tenant.id)
+    kb = await kb_repo.get_by_id(kb_id)
+    if not kb:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Knowledge base not found")
+
+    from app.core.crypto import decrypt_secret, mask_secret
+    from app.repositories.retrieval_repository import RetrievalRepository
+
+    ret_repo = RetrievalRepository(db, ctx.tenant.id)
+    update_data = payload.model_dump(exclude_unset=True)
+
+    updated = await ret_repo.update_config(kb_id, **update_data)
+    await db.commit()
+
+    audit_repo = AuditLogRepository(db, ctx.tenant.id)
+    await audit_repo.log_event(
+        action="retrieval.configure",
+        resource_type="knowledge_base",
+        resource_id=kb_id,
+        actor_id=current_user.id,
+        details={k: v for k, v in update_data.items() if k != "api_key"},
+    )
+
+    plain = decrypt_secret(updated.encrypted_api_key) if updated.encrypted_api_key else None
+    return RetrievalConfigRead(
+        id=updated.id,
+        knowledge_base_id=updated.knowledge_base_id,
+        retrieval_mode=updated.retrieval_mode,
+        vector_store=updated.vector_store,
+        embedding_provider=updated.embedding_provider,
+        embedding_model=updated.embedding_model,
+        embedding_dimensions=updated.embedding_dimensions,
+        similarity_metric=updated.similarity_metric,
+        top_k=updated.top_k,
+        rrf_k=updated.rrf_k,
+        rerank_enabled=updated.rerank_enabled,
+        rerank_provider=updated.rerank_provider,
+        embedding_version=updated.embedding_version,
+        has_api_key=bool(updated.encrypted_api_key),
+        masked_api_key=mask_secret(plain) if plain else None,
+        settings_json=updated.settings_json or {},
+    )
+
+
+@router.get("/{kb_id}/index-status", response_model=IndexStatusResponse)
+async def get_kb_index_status(
+    kb_id: uuid.UUID,
+    ctx: TenantContext = Depends(require_permission(PermissionName.INDEX_READ.value)),
+    db: AsyncSession = Depends(get_db),
+) -> IndexStatusResponse:
+    """Return indexing statistics, chunk counts, and vector store health for a knowledge base."""
+    kb_repo = KnowledgeRepository(db, ctx.tenant.id)
+    kb = await kb_repo.get_by_id(kb_id)
+    if not kb:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Knowledge base not found")
+
+    from app.repositories.retrieval_repository import RetrievalRepository
+
+    ret_repo = RetrievalRepository(db, ctx.tenant.id)
+    status_data = await ret_repo.get_index_status(kb_id)
+    return IndexStatusResponse(**status_data)
+
+
+@router.post("/{kb_id}/reindex")
+async def trigger_kb_reindex(
+    kb_id: uuid.UUID,
+    ctx: TenantContext = Depends(require_permission(PermissionName.INDEX_REINDEX.value)),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Trigger re-embedding and vector store reindexing for all chunks in this knowledge base."""
+    kb_repo = KnowledgeRepository(db, ctx.tenant.id)
+    kb = await kb_repo.get_by_id(kb_id)
+    if not kb:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Knowledge base not found")
+
+    service = IngestionService(db, ctx.tenant.id)
+    job = await service.reindex_knowledge_base(kb_id)
+
+    audit_repo = AuditLogRepository(db, ctx.tenant.id)
+    await audit_repo.log_event(
+        action="index.reindex",
+        resource_type="knowledge_base",
+        resource_id=kb_id,
+        actor_id=current_user.id,
+        details={"job_id": str(job.id), "total_chunks": job.total_chunks},
+    )
+
+    return {
+        "message": "Reindexing completed successfully.",
+        "job_id": str(job.id),
+        "status": job.status,
+        "processed_chunks": job.processed_chunks,
+        "total_chunks": job.total_chunks,
+    }
+
+
+@router.get("/{kb_id}/embedding-jobs", response_model=list[EmbeddingJobRead])
+async def list_kb_embedding_jobs(
+    kb_id: uuid.UUID,
+    ctx: TenantContext = Depends(require_permission(PermissionName.INDEX_READ.value)),
+    db: AsyncSession = Depends(get_db),
+) -> list[EmbeddingJobRead]:
+    """List recent embedding and reindexing jobs for a knowledge base."""
+    from app.repositories.retrieval_repository import RetrievalRepository
+
+    ret_repo = RetrievalRepository(db, ctx.tenant.id)
+    jobs = await ret_repo.list_embedding_jobs(kb_id)
+    return [
+        EmbeddingJobRead(
+            id=j.id,
+            knowledge_base_id=j.knowledge_base_id,
+            document_id=j.document_id,
+            embedding_version=j.embedding_version,
+            status=j.status,
+            stage=j.stage,
+            total_chunks=j.total_chunks,
+            processed_chunks=j.processed_chunks,
+            failed_chunks=j.failed_chunks,
+            error_message=j.error_message,
+            created_at=j.created_at.isoformat(),
+            completed_at=j.completed_at.isoformat() if j.completed_at else None,
+        )
+        for j in jobs
+    ]
+
 

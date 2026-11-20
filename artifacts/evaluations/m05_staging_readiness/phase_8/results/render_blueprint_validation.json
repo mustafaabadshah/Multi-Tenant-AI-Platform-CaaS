@@ -1,0 +1,30 @@
+{
+  "timestamp": "2026-11-07T18:05:00+05:00",
+  "milestone": "M05",
+  "phase": "Phase 8",
+  "blueprint_path": "render.yaml",
+  "validation_status": "PASS",
+  "web_service": {
+    "name": "mmaip-backend",
+    "type": "web",
+    "env": "python",
+    "region": "oregon",
+    "plan": "starter",
+    "root_dir": "backend",
+    "build_command": "pip install -e .",
+    "pre_deploy_command": "alembic upgrade head",
+    "start_command": "uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 2",
+    "health_check_path": "/health",
+    "auto_deploy": true,
+    "environment_variables_configured": 22
+  },
+  "database": {
+    "name": "mmaip-postgres",
+    "database_name": "mmaip_staging",
+    "user": "mmaip_user",
+    "region": "oregon",
+    "plan": "starter",
+    "postgres_major_version": "16",
+    "required_extensions": ["vector", "uuid-ossp"]
+  }
+}

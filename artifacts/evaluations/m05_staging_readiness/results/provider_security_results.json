@@ -1,0 +1,44 @@
+{
+  "timestamp": "2026-11-07T14:45:00+05:00",
+  "milestone": "M05",
+  "phase": "Phase 6",
+  "security_evaluation": {
+    "byok_isolation": {
+      "encryption_algorithm": "Fernet (AES-128-CBC with HMAC-SHA256)",
+      "at_rest_format": "Base64 URL-safe encrypted payload with IV and HMAC",
+      "tamper_resistance": "Fernet InvalidToken raised if ciphertext modified",
+      "plaintext_in_api": "Masked (e.g. 'sk-proj-****4X2') in GET responses",
+      "test_status": "PASS",
+      "evidence": "tests/test_m05_provider_reliability.py::test_byok_encryption_and_tamper_resistance"
+    },
+    "custom_endpoint_ssrf_policy": {
+      "allowed_schemes": ["http", "https"],
+      "blocked_schemes": ["file", "gopher", "ftp", "ldap", "dict", "sftp"],
+      "cloud_metadata_protection": "STRICT_BLOCK (169.254.169.254, metadata.google.internal, 100.100.100.200)",
+      "local_loopback_policy": "ALLOWED for trusted local AI gateway / OmniRoute (localhost, 127.0.0.1, ::1)",
+      "test_status": "PASS",
+      "evidence": [
+        "tests/test_m05_provider_reliability.py::test_validate_provider_endpoint_blocks_ssrf_cloud_metadata",
+        "tests/test_m05_provider_reliability.py::test_validate_provider_endpoint_blocks_forbidden_schemes",
+        "tests/test_m05_provider_reliability.py::test_validate_provider_endpoint_allows_valid_local_and_remote_targets"
+      ]
+    },
+    "configuration_authorization": {
+      "tenant_scoping": "Assistants and BYOK credentials strictly partitioned by tenant_id",
+      "assistant_provider_whitelist": ["omniroute", "openai", "mock"],
+      "unsupported_provider_rejected": "ValueError raised if provider not in approved list",
+      "empty_model_rejected": "ValueError raised if default_model is empty or whitespace",
+      "test_status": "PASS",
+      "evidence": [
+        "tests/test_m05_provider_reliability.py::test_assistant_creation_rejects_unsupported_provider",
+        "tests/test_m05_provider_reliability.py::test_assistant_creation_and_update_rejects_empty_model"
+      ]
+    },
+    "secret_leakage_mitigation": {
+      "exception_redaction": "sanitize_error_message applied to all runtime error frames",
+      "bearer_token_masking": "API keys redacted from logs, exceptions, and SSE error payloads",
+      "test_status": "PASS",
+      "evidence": "tests/test_m05_provider_reliability.py::test_sse_streaming_provider_failure_emits_sanitized_error_frame"
+    }
+  }
+}

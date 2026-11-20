@@ -1,0 +1,28 @@
+{
+  "ruff_check": {
+    "status": "PASS",
+    "errors": 0,
+    "details": "All checks passed across changed modules"
+  },
+  "python_compile_check": {
+    "status": "PASS",
+    "files_compiled": 11,
+    "syntax_errors": 0
+  },
+  "bash_syntax_check": {
+    "status": "PASS",
+    "tool": "bash -n",
+    "scripts_checked": [
+      "infrastructure/scripts/drill-live-qdrant-rebuild.sh",
+      "infrastructure/scripts/drill-live-postgres-backup-restore.sh",
+      "infrastructure/scripts/m05-portable-runner.sh"
+    ],
+    "syntax_errors": 0
+  },
+  "alembic_dag_check": {
+    "status": "PASS",
+    "continuity": "LINEAR",
+    "revisions": 5,
+    "head": "0005_add_assistant_byok_encrypted_key"
+  }
+}

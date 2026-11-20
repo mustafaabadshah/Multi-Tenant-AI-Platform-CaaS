@@ -1,0 +1,76 @@
+{
+  "milestone": "M05",
+  "phase": 10,
+  "component": "Consolidated Security Regression",
+  "timestamp": "2026-11-07T18:59:00Z",
+  "status": "PASS",
+  "vulnerability_counts": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0
+  },
+  "security_domains": [
+    {
+      "domain": "Tenant & Workspace Isolation",
+      "status": "PASS",
+      "evidence": "14/14 tests in test_m05_security_audit.py and test_tenant_isolation_security.py passed",
+      "verified_protections": [
+        "Forged X-Tenant-ID headers rejected with 403 Forbidden",
+        "Path-to-header tenant ID mismatches rejected with 403 Forbidden",
+        "Suspended tenant memberships immediately blocked from API execution",
+        "Cross-tenant object ID tampering (departments, documents, assistants, conversations) rejected with 404/403",
+        "Cross-tenant knowledge base linking strictly blocked"
+      ]
+    },
+    {
+      "domain": "RBAC & Authorization Hierarchy",
+      "status": "PASS",
+      "evidence": "test_unauthorized_role_escalation_blocked, test_read_only_viewer_cannot_modify_resources, and test_department_restricted_document_access passed",
+      "verified_protections": [
+        "Self-role escalation from MEMBER to ADMIN/OWNER strictly rejected",
+        "Read-only VIEWER roles blocked from creating/updating/deleting resources",
+        "Department-restricted documents inaccessible to unauthorized employees within the same tenant",
+        "Employee rosters isolated across department boundaries"
+      ]
+    },
+    {
+      "domain": "Prompt Injection & Untrusted Data Hardening",
+      "status": "PASS",
+      "evidence": "19/19 tests in test_m05_prompt_injection.py passed",
+      "verified_protections": [
+        "System prompt developer security instructions enforce strict hierarchy over user and document inputs",
+        "Delimiter breakout attacks (<KNOWLEDGE_BASE_CONTEXT>) neutralized and rewritten to [UNTRUSTED_CONTEXT_TAG]",
+        "Fake instruction headers (SYSTEM:, DEVELOPER:, CRITICAL:) neutralized to [UNTRUSTED_HEADER: ...]",
+        "Zero-width control characters (U+200B, U+200C, U+200D, U+FEFF) stripped prior to prompt construction",
+        "Token-budgeting algorithm prunes conversation history while preserving immutable developer boundaries",
+        "SQL static parsing with sqlglot prevents destructive DML/DDL execution",
+        "File upload storage path traversal strictly prevented by resolve_tenant_path"
+      ]
+    },
+    {
+      "domain": "LLM Provider Reliability & BYOK Security",
+      "status": "PASS",
+      "evidence": "19/19 tests in test_m05_provider_reliability.py passed",
+      "verified_protections": [
+        "BYOK API keys encrypted with Fernet AES-128-CBC and authenticated with HMAC-SHA256",
+        "Tamper resistance: modified ciphertexts fail cleanly without crashing",
+        "Secret masking: API keys displayed as masked substrings (e.g., ***1234)",
+        "SSRF protection: validate_provider_endpoint blocks cloud metadata (169.254.169.254) and forbidden schemes (file://, gopher://)",
+        "Streaming errors redacted to prevent internal stack trace or credential leakage"
+      ]
+    },
+    {
+      "domain": "Database Migration & Encryption Key Rotation",
+      "status": "PASS",
+      "evidence": "test_m05_database_recovery.py passed",
+      "verified_protections": [
+        "Alembic migration graph verified as a linear DAG across all 4 revisions",
+        "Every migration includes an explicit, tested downgrade() drop sequence",
+        "Multi-key Fernet rotation supports seamless re-encryption from PREVIOUS_SECRET_KEYS to SECRET_ENCRYPTION_KEY",
+        "Automated batch re-encryption CLI script provided in app/commands/rotate_encryption_keys.py",
+        "Role and permission seeding verified 100% idempotent across 3 consecutive runs"
+      ]
+    }
+  ]
+}

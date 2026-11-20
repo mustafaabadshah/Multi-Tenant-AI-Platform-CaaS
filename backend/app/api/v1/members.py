@@ -17,7 +17,14 @@ from app.repositories.department_repository import DepartmentRepository
 from app.repositories.member_repository import MemberRepository
 from app.repositories.role_repository import RoleRepository
 from app.repositories.user_repository import UserRepository
-from app.schemas.member import MemberInviteRequest, MemberResponse, MemberUpdateRequest
+from app.schemas.member import (
+    InvitationResponse,
+    MemberAssignRequest,
+    MemberInviteRequest,
+    MemberResponse,
+    MemberUpdateRequest,
+)
+from app.services.invitation_service import InvitationService
 
 router = APIRouter(prefix="/members", tags=["Members & Employees"])
 
@@ -69,6 +76,13 @@ async def invite_member(
             detail=f"Role '{payload.role}' does not exist",
         )
 
+    # Restrict owner and superadmin assignment
+    if payload.role in (SystemRole.TENANT_OWNER.value, SystemRole.PLATFORM_SUPERADMIN.value) and not ctx.is_owner:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only workspace owners can assign owner privileges",
+        )
+
     # Validate department if provided
     if payload.department_id:
         dept = await dept_repo.get_by_id(payload.department_id)
@@ -80,6 +94,7 @@ async def invite_member(
 
     # Check if target user exists or create account
     user = await user_repo.get_by_email(payload.email)
+    newly_created_user = False
     if not user:
         # Create a new user with placeholder temporary password
         temp_pwd = hash_password(str(uuid.uuid4()))
@@ -89,22 +104,36 @@ async def invite_member(
             hashed_password=temp_pwd,
             full_name=name_from_email,
         )
+        newly_created_user = True
 
     # Check if already a member in this tenant
+
     existing_membership = await member_repo.get_by_user_id(user.id)
     if existing_membership:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="This user is already a member of this workspace.",
+        if existing_membership.status == MembershipStatus.ACTIVE.value:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This user is already an active member of this workspace.",
+            )
+        membership = existing_membership
+    else:
+        # Create membership in INVITED status pending explicit acceptance
+        membership = await member_repo.create(
+            user_id=user.id,
+            role_id=role.id,
+            department_id=payload.department_id,
+            title=payload.title,
+            status=MembershipStatus.INVITED.value,
         )
 
-    # Create membership
-    membership = await member_repo.create(
-        user_id=user.id,
+    # Issue cryptographic invitation token for both new and existing users
+    invitation_service = InvitationService(db)
+    invitation, invitation_raw_token = await invitation_service.create_invitation(
+        tenant_id=ctx.tenant.id,
+        email=user.email,
         role_id=role.id,
         department_id=payload.department_id,
-        title=payload.title,
-        status=MembershipStatus.ACTIVE.value,
+        invited_by_id=current_user.id,
     )
 
     audit_repo = AuditLogRepository(db, ctx.tenant.id)
@@ -133,7 +162,162 @@ async def invite_member(
         status=fresh_member.status,
         created_at=fresh_member.created_at,
         updated_at=fresh_member.updated_at,
+        invitation_token=invitation_raw_token,
+        invitation_expires_at=invitation.expires_at,
     )
+
+
+@router.post("/assign", response_model=MemberResponse, status_code=status.HTTP_201_CREATED)
+async def assign_member(
+    payload: MemberAssignRequest,
+    ctx: TenantContext = Depends(require_permission(PermissionName.MEMBER_INVITE.value)),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> MemberResponse:
+    """Directly assign an existing platform user to this workspace as an ACTIVE member without an invitation."""
+    user_repo = UserRepository(db)
+    role_repo = RoleRepository(db)
+    dept_repo = DepartmentRepository(db, ctx.tenant.id)
+    member_repo = MemberRepository(db, ctx.tenant.id)
+
+    role = await role_repo.get_by_name(payload.role)
+    if not role:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Role '{payload.role}' does not exist",
+        )
+
+    if payload.role in (SystemRole.TENANT_OWNER.value, SystemRole.PLATFORM_SUPERADMIN.value) and not ctx.is_owner:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only workspace owners can assign owner privileges",
+        )
+
+    if payload.department_id:
+        dept = await dept_repo.get_by_id(payload.department_id)
+        if not dept:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Department not found in active workspace",
+            )
+
+    user = await user_repo.get_by_email(payload.email)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User does not exist on platform. Use /invite to onboard new users.",
+        )
+
+    existing_membership = await member_repo.get_by_user_id(user.id)
+    if existing_membership:
+        if existing_membership.status == MembershipStatus.ACTIVE.value:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This user is already an active member of this workspace.",
+            )
+        existing_membership.status = MembershipStatus.ACTIVE.value
+        existing_membership.role_id = role.id
+        membership = existing_membership
+    else:
+        membership = await member_repo.create(
+            user_id=user.id,
+            role_id=role.id,
+            department_id=payload.department_id,
+            title=payload.title,
+            status=MembershipStatus.ACTIVE.value,
+        )
+
+    audit_repo = AuditLogRepository(db, ctx.tenant.id)
+    await audit_repo.log_event(
+        action="member.direct_assigned",
+        resource_type="member",
+        resource_id=membership.id,
+        actor_id=current_user.id,
+        details={"email": user.email, "role": role.name},
+    )
+    await db.commit()
+
+    fresh_member = await member_repo.get_by_id(membership.id)
+    assert fresh_member is not None
+
+    return MemberResponse(
+        id=fresh_member.id,
+        tenant_id=fresh_member.tenant_id,
+        user_id=user.id,
+        email=user.email,
+        full_name=user.full_name,
+        role=role.name,
+        department_id=fresh_member.department_id,
+        department_name=fresh_member.department.name if fresh_member.department else None,
+        title=fresh_member.title,
+        status=fresh_member.status,
+        created_at=fresh_member.created_at,
+        updated_at=fresh_member.updated_at,
+        invitation_token=None,
+        invitation_expires_at=None,
+    )
+
+
+@router.get("/invitations", response_model=list[InvitationResponse])
+async def list_pending_invitations(
+    ctx: TenantContext = Depends(require_permission(PermissionName.MEMBER_READ.value)),
+    db: AsyncSession = Depends(get_db),
+) -> list[InvitationResponse]:
+    """List pending invitations for the active workspace."""
+    invitation_service = InvitationService(db)
+    invites = await invitation_service.list_pending_invitations(ctx.tenant.id)
+    return [
+        InvitationResponse(
+            id=inv.id,
+            tenant_id=inv.tenant_id,
+            email=inv.email,
+            role_id=inv.role_id,
+            department_id=inv.department_id,
+            invited_by_id=inv.invited_by_id,
+            expires_at=inv.expires_at,
+            accepted_at=inv.accepted_at,
+            is_cancelled=inv.is_cancelled,
+            created_at=inv.created_at,
+        )
+        for inv in invites
+    ]
+
+
+@router.delete("/invitations/{invitation_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def cancel_invitation(
+    invitation_id: uuid.UUID,
+    ctx: TenantContext = Depends(require_permission(PermissionName.MEMBER_INVITE.value)),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Cancel a pending invitation and remove the corresponding unaccepted membership."""
+    invitation_service = InvitationService(db)
+    cancelled = await invitation_service.cancel_invitation(invitation_id, ctx.tenant.id)
+    if not cancelled:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Pending invitation not found",
+        )
+
+    # Clean up pending INVITED membership for this email
+    user_repo = UserRepository(db)
+    member_repo = MemberRepository(db, ctx.tenant.id)
+    target_user = await user_repo.get_by_email(cancelled.email)
+    if target_user:
+        target_membership = await member_repo.get_by_user_id(target_user.id)
+        if target_membership and target_membership.status == MembershipStatus.INVITED.value:
+            await member_repo.delete(target_membership.id)
+
+    audit_repo = AuditLogRepository(db, ctx.tenant.id)
+    await audit_repo.log_event(
+        action="member.invite_cancelled",
+        resource_type="invitation",
+        resource_id=invitation_id,
+        actor_id=current_user.id,
+        details={"email": cancelled.email},
+    )
+    await db.commit()
+
 
 
 @router.patch("/{member_id}", response_model=MemberResponse)
@@ -155,8 +339,20 @@ async def update_member(
             detail="Member not found in active workspace",
         )
 
+    # Prevent self-role modification
+    if target_member.user_id == current_user.id and payload.role and payload.role != target_member.role.name:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Users cannot modify their own role",
+        )
+
     new_role_id = None
     if payload.role:
+        if payload.role in (SystemRole.TENANT_OWNER.value, SystemRole.PLATFORM_SUPERADMIN.value) and not ctx.is_owner:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only workspace owners can assign owner privileges",
+            )
         role_obj = await role_repo.get_by_name(payload.role)
         if not role_obj:
             raise HTTPException(

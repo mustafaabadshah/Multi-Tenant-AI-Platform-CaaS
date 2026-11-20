@@ -1,0 +1,25 @@
+{
+  "cors_configuration": {
+    "production_regex": "^https://mmaip-frontend(-[a-zA-Z0-9_-]+)?\\.vercel\\.app$",
+    "allowed_origins_exact": [
+      "https://mmaip-frontend.vercel.app"
+    ],
+    "security_assessment": "SECURE (Restricted to project-specific Vercel preview and production subdomains; blocks unrelated vercel.app domains, http, and null origins)"
+  },
+  "database_pool": {
+    "pool_size": 5,
+    "max_overflow": 10,
+    "pool_timeout_seconds": 30,
+    "pool_recycle_seconds": 1800,
+    "connect_timeout_seconds": 3,
+    "workers": 2,
+    "max_concurrent_connections_ceiling": 30
+  },
+  "health_endpoints": {
+    "liveness_url": "/health",
+    "liveness_db_dependency": false,
+    "readiness_url": "/ready",
+    "readiness_db_dependency": true,
+    "readiness_timeout_seconds": 3
+  }
+}

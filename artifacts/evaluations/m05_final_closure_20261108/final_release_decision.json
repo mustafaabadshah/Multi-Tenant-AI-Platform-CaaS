@@ -1,0 +1,17 @@
+{
+  "milestone": "M05 Final Closure",
+  "decision": "CONDITIONAL_PASS",
+  "staging_deployment_authorized": false,
+  "production_deployment_authorized": false,
+  "git_push_authorized": false,
+  "current_snapshot_sha256": "3c97b830261542a6a27dd1d0ee93cc76b63cebbb91f99fa9f54e50dcc8eeed6f",
+  "archive_file": "portable_runner/m05_live_test_snapshot.zip",
+  "artifact_reconciliation": {
+    "root_files_count": 23,
+    "subdirectories_count": 1,
+    "portable_runner_files_count": 6,
+    "total_files": 29
+  },
+  "summary": "147 offline tests passed, 1 skipped. Frontend Next.js 16 build passed (15/15 routes). 64 unique security test node IDs passed. Portable runner snapshot generated and verified (SHA-256 3c97b830261542a6a27dd1d0ee93cc76b63cebbb91f99fa9f54e50dcc8eeed6f) containing all live integration tests, live PostgreSQL backup/restore drill, and Qdrant rebuild drill.",
+  "exact_next_action": "Transfer portable_runner/m05_live_test_snapshot.zip to an Ubuntu 22.04/24.04 runner with >= 4 GB RAM, run ./infrastructure/scripts/run-live-integration-tests.sh --mode all, and return the test_results directory."
+}

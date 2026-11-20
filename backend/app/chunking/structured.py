@@ -3,9 +3,9 @@
 from typing import Any
 
 from app.chunking.base import (
-    ChunkMetadata,
     ChunkingConfig,
     ChunkingStrategy,
+    ChunkMetadata,
     ProcessedChunk,
     calculate_chunk_hash,
     estimate_tokens,

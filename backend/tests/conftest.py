@@ -69,6 +69,19 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
 
 
 @pytest.fixture
+def enable_public_features(monkeypatch):
+    """Opt-in fixture enabling public publishing and the developer API.
+
+    Default-off behavior remains testable because this is not autouse.
+    """
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "PUBLIC_PUBLISHING_ENABLED", True)
+    monkeypatch.setattr(settings, "DEVELOPER_API_ENABLED", True)
+    yield
+
+
+@pytest.fixture
 async def seed_data(db_session: AsyncSession):
     """Creates two distinct tenants (Company A and Company B) with distinct owners and employees."""
     user_repo = UserRepository(db_session)

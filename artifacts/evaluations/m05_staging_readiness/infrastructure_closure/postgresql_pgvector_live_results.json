@@ -1,0 +1,19 @@
+{
+  "milestone": "M05",
+  "component": "PostgreSQL 16 & pgvector Live Integration",
+  "timestamp": "2026-11-08T00:50:00Z",
+  "status": "NOT RUN — ENVIRONMENT CONSTRAINT",
+  "reason": "Host available physical memory (467.7 MB – 1,057.8 MB) is below the 2048 MB machine safety threshold required to spawn Docker Desktop and PostgreSQL containers safely.",
+  "compose_profile": "docker-compose.m05-postgres.yml",
+  "container_image": "pgvector/pgvector:pg16",
+  "isolated_port": 5433,
+  "affected_tests": [
+    "tests/integration/test_postgres_connection.py",
+    "tests/integration/test_postgres_migrations.py",
+    "tests/integration/test_pgvector_operations.py",
+    "tests/integration/test_postgres_fts.py",
+    "tests/integration/test_postgres_tenant_isolation.py"
+  ],
+  "verification_command": "docker compose -f docker-compose.m05-postgres.yml up -d; pytest tests/integration/test_postgres_connection.py tests/integration/test_postgres_migrations.py tests/integration/test_pgvector_operations.py tests/integration/test_postgres_fts.py tests/integration/test_postgres_tenant_isolation.py -v; docker compose -f docker-compose.m05-postgres.yml down -v",
+  "next_action": "Execute command on runner with >= 2048 MB free RAM prior to cloud deployment."
+}

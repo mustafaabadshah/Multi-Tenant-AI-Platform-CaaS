@@ -1,0 +1,50 @@
+{
+  "milestone": "M05",
+  "phase": 10,
+  "component": "Defect Findings & Audit Log",
+  "timestamp": "2026-11-07T18:59:00Z",
+  "defects": [
+    {
+      "id": "DEF-01",
+      "phase_discovered": 9,
+      "severity": "MEDIUM",
+      "component": "backend/app/assistant_runtime/context.py",
+      "description": "NameError: name 'page_info' is not defined during RAG knowledge block string formatting when adding bounding box calculation.",
+      "root_cause": "The page_info string interpolation was deleted when replacing citation dictionary generation.",
+      "remediation": "Restored page_info = f' (Page {item.page_number})' if item.page_number else '' before knowledge_blocks.append.",
+      "test_added": "tests/test_m05_citation_highlighting.py and tests/test_assistants_and_rag.py",
+      "status": "RESOLVED_AND_VERIFIED"
+    },
+    {
+      "id": "DEF-02",
+      "phase_discovered": 6,
+      "severity": "LOW",
+      "component": "backend/app/llm/registry.py",
+      "description": "TypeError: LLMProviderRegistry.get_provider() got an unexpected keyword argument 'strict'.",
+      "root_cause": "get_provider method signature did not accept the strict parameter passed in provider reliability test.",
+      "remediation": "Added strict: bool = False to get_provider parameter list.",
+      "test_added": "tests/test_m05_provider_reliability.py::test_provider_registry_strict_lookup_unknown_provider",
+      "status": "RESOLVED_AND_VERIFIED"
+    },
+    {
+      "id": "DEF-03",
+      "phase_discovered": 10,
+      "severity": "LOW",
+      "component": "Operational / Disaster Recovery Tooling",
+      "description": "PostgreSQL pg_dump backup script does not automatically capture raw uploaded files stored in STORAGE_PATH or S3 bucket.",
+      "root_cause": "Database backup scripts are scoped to database engines and do not encompass file storage volumes.",
+      "remediation": "Documented requirement for concurrent volume snapshotting/S3 bucket replication in operational readiness report and deployment instructions.",
+      "status": "DOCUMENTED_REQUIREMENT"
+    },
+    {
+      "id": "DEF-04",
+      "phase_discovered": 10,
+      "severity": "LOW",
+      "component": "PDF Parser / Citation Highlighting",
+      "description": "PyMuPDF parser does not extract span-level bounding box coordinates during ingestion, necessitating deterministic standard viewport fallback.",
+      "root_cause": "PDFParser calls page.get_text('text') rather than page.get_text('words') or page.get_text('blocks').",
+      "remediation": "Classified as FALLBACK_SYNTHETIC in citation provenance results and scheduled for post-M05 parser enhancement.",
+      "status": "DOCUMENTED_LIMITATION"
+    }
+  ]
+}

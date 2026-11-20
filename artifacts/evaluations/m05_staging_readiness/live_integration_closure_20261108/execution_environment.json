@@ -1,0 +1,28 @@
+{
+  "timestamp": "2026-11-07T21:03:51.104439+00:00",
+  "hardware": {
+    "processor": "Intel(R) Core(TM) i3-7100U CPU @ 2.40GHz",
+    "cores": 2,
+    "threads": 4,
+    "gpu": "Intel(R) HD Graphics 620 (No dedicated GPU)",
+    "ram_total_kb": 8008680,
+    "ram_total_gb": 7.64,
+    "ram_free_kb": 1267300,
+    "ram_free_mb": 1237.6
+  },
+  "operating_system": "Microsoft Windows 11 Home Single Language (Build 26100)",
+  "runtime": {
+    "python": "3.12.3",
+    "node": "24.x",
+    "nextjs": "16.4.5 (Turbopack)",
+    "docker_client": "25.0.3",
+    "docker_compose": "v2.24.6-desktop.1"
+  },
+  "docker_service": {
+    "name": "com.docker.service",
+    "status": "Stopped",
+    "uac_required": true
+  },
+  "memory_safety_threshold_mb": 2048,
+  "decision": "CONTAINERS_WITHHELD_PER_MEMORY_POLICY"
+}

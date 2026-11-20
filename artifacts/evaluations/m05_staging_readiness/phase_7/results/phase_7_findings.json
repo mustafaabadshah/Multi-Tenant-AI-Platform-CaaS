@@ -1,0 +1,46 @@
+[
+  {
+    "id": "FINDING-MIG-01",
+    "title": "Encryption Key Derived from Single SECRET_KEY Prevented Seamless Key Rotation",
+    "severity": "HIGH",
+    "affected_component": "app.core.crypto",
+    "reproduction_steps": "Changing SECRET_KEY in configuration immediately rendered all previously encrypted BYOK API keys unreadable, causing InvalidToken decryption exceptions.",
+    "evidence": "crypto.py previously hardcoded a single key derivation without MultiFernet or previous key fallbacks.",
+    "fix_status": "RESOLVED",
+    "regression_test": "tests/test_m05_database_recovery.py::test_fernet_multi_key_decryption",
+    "residual_risk": "None. MultiFernet now supports PREVIOUS_SECRET_KEYS fallback and in-place re-encryption."
+  },
+  {
+    "id": "FINDING-MIG-02",
+    "title": "Absence of Automated Database Key Rotation Command",
+    "severity": "MEDIUM",
+    "affected_component": "app.commands.rotate_encryption_keys",
+    "reproduction_steps": "No batch mechanism existed to safely re-encrypt tenant secrets in the database when rotating keys.",
+    "evidence": "Operator was forced to manually write SQL or scripts to re-encrypt credentials.",
+    "fix_status": "RESOLVED",
+    "regression_test": "tests/test_m05_database_recovery.py::test_database_key_rotation_service",
+    "residual_risk": "None. Implemented rotate_tenant_byok_secrets with cryptographic in-memory verification before commit."
+  },
+  {
+    "id": "FINDING-MIG-03",
+    "title": "Absence of Documented Checksummed PostgreSQL Backup/Restore Tooling",
+    "severity": "MEDIUM",
+    "affected_component": "infrastructure/scripts",
+    "reproduction_steps": "No standard operational scripts existed for creating custom-format dumps, verifying SHA-256 integrity, or safely restoring with confirmation gates.",
+    "evidence": "Repository only contained init-db.sql without automated disaster recovery scripts.",
+    "fix_status": "RESOLVED",
+    "regression_test": "Verified backup-postgres.ps1, verify-backup.ps1, and restore-postgres.ps1 created.",
+    "residual_risk": "None."
+  },
+  {
+    "id": "FINDING-MIG-04",
+    "title": "Host RAM Below 2048 MB Safety Threshold for Docker Container Execution",
+    "severity": "MEDIUM",
+    "affected_component": "Local Development Environment",
+    "reproduction_steps": "Available physical memory is 736 MB. Starting Docker Desktop or heavy PostgreSQL containers risks host OS thrashing and instability.",
+    "evidence": "Get-CimInstance Win32_OperatingSystem reported FreePhysicalMemoryMB = 736.13.",
+    "fix_status": "ACKNOWLEDGED_SAFEGUARDED",
+    "regression_test": "test_m05_database_recovery.py::test_live_postgres_container_safety_check safely skipped.",
+    "residual_risk": "Live PostgreSQL container tests must be executed in staging environment or on host with >= 2 GB free RAM."
+  }
+]

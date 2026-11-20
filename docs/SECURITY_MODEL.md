@@ -1,8 +1,8 @@
-# MM AI Platform — Security Model & Authorization Architecture
+# Multi-Tenant AI Platform (CaaS) — Security Model & Authorization Architecture
 
 ## 1. Security Architecture Principles
 
-The MM AI Platform enforces **Zero-Trust Multi-Tenancy**:
+The Multi-Tenant AI Platform (CaaS) enforces **Zero-Trust Multi-Tenancy**:
 1. **No Implicit Trust:** No request, route parameter, or header is trusted until cryptographically authenticated and checked against tenant authorization.
 2. **Provider-Agnostic Authentication:** Core identity logic is decoupled from external identity providers. Local credentials use **Argon2id** password hashing.
 3. **Stateless JWT with Ephemeral Expiration:** Short-lived access tokens (15-60 minutes) coupled with refresh tokens.

@@ -1,0 +1,79 @@
+{
+  "milestone": "M05",
+  "phase": 10,
+  "component": "Operational Readiness & Deployment Configuration",
+  "timestamp": "2026-11-07T18:59:00Z",
+  "infrastructure_blueprints": {
+    "render_blueprint": {
+      "path": "render.yaml",
+      "services": [
+        {
+          "name": "mmaip-backend",
+          "type": "web",
+          "env": "python",
+          "plan": "starter",
+          "buildCommand": "pip install -e .",
+          "preDeployCommand": "alembic upgrade head",
+          "startCommand": "uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 2",
+          "healthCheckPath": "/health"
+        },
+        {
+          "name": "mmaip-postgres",
+          "type": "database",
+          "databaseName": "mmaip_db",
+          "user": "mmaip_user",
+          "plan": "starter"
+        }
+      ],
+      "validation_status": "PASS"
+    },
+    "vercel_configuration": {
+      "path": "frontend/vercel.json",
+      "framework": "nextjs",
+      "headers": {
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "X-XSS-Protection": "1; mode=block",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Permissions-Policy": "camera=(), microphone=(), geolocation=()"
+      },
+      "validation_status": "PASS"
+    },
+    "environment_template": {
+      "path": ".env.production.example",
+      "variable_inventory_count": 28,
+      "client_side_variables": [
+        "NEXT_PUBLIC_API_URL"
+      ],
+      "secret_generation_commands_documented": [
+        "SECRET_KEY",
+        "JWT_SECRET",
+        "SECRET_ENCRYPTION_KEY"
+      ],
+      "validation_status": "PASS"
+    }
+  },
+  "disaster_recovery_and_persistence": {
+    "database_backup": {
+      "script": "infrastructure/scripts/backup-postgres.ps1",
+      "format": "PostgreSQL custom archive (.dump) with pg_dump -Fc",
+      "verification_script": "infrastructure/scripts/verify-backup.ps1",
+      "restore_script": "infrastructure/scripts/restore-postgres.ps1",
+      "status": "PASS"
+    },
+    "original_binary_file_persistence": {
+      "storage_backends": ["local", "s3"],
+      "operational_gap": "IMPORTANT — The PostgreSQL backup script alone only preserves database relational schema, document text, and vector chunk records. If STORAGE_BACKEND=local, the STORAGE_PATH directory containing raw PDF/DOCX/image binaries must be backed up using volume snapshots or file synchronization. If STORAGE_BACKEND=s3, bucket versioning and replication must be enabled.",
+      "remediation_status": "DOCUMENTED_REQUIREMENT"
+    },
+    "qdrant_vector_store_recovery": {
+      "strategy": "Authoritative PostgreSQL Rebuild Pattern",
+      "details": "PostgreSQL acts as the single source of truth for all DocumentChunk records, embeddings, and metadata. In the event of catastrophic Qdrant data loss or index corruption, Qdrant collections can be completely rebuilt and reindexed from PostgreSQL chunk records using the idempotent ingestion pipeline without data loss."
+    },
+    "encryption_key_rotation": {
+      "tool": "backend/app/commands/rotate_encryption_keys.py",
+      "multi_fernet_support": "MultiFernet fallback with PREVIOUS_SECRET_KEYS enables zero-downtime key rotation",
+      "status": "PASS"
+    }
+  }
+}

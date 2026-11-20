@@ -6,7 +6,7 @@ from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.constants import MembershipStatus, UserStatus
+from app.core.constants import MembershipStatus, SystemRole, UserStatus
 from app.core.security import decode_token
 from app.database.session import get_db
 from app.models.membership import TenantMembership
@@ -25,6 +25,25 @@ class TenantContext:
     membership: TenantMembership
     role: Role
     permissions: set[str]
+
+    @property
+    def user_id(self) -> uuid.UUID:
+        return self.membership.user_id
+
+    @property
+    def is_admin(self) -> bool:
+        return self.role.name in (
+            SystemRole.PLATFORM_SUPERADMIN.value,
+            SystemRole.TENANT_OWNER.value,
+            SystemRole.ORG_ADMIN.value,
+        )
+
+    @property
+    def is_owner(self) -> bool:
+        return self.role.name in (
+            SystemRole.PLATFORM_SUPERADMIN.value,
+            SystemRole.TENANT_OWNER.value,
+        )
 
 
 async def get_current_user(
@@ -74,6 +93,27 @@ async def get_current_user(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User account is inactive or suspended",
         )
+
+    # If token is bound to a server-side session, verify session is unrevoked
+    session_id_str = payload.get("sid")
+    if session_id_str:
+        try:
+            from sqlalchemy import select
+
+            from app.models.session import AuthSession
+
+            session_uuid = uuid.UUID(session_id_str)
+            s_stmt = select(AuthSession.is_revoked).where(AuthSession.id == session_uuid)
+            s_res = await db.execute(s_stmt)
+            is_revoked = s_res.scalar_one_or_none()
+            if is_revoked is True:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Session has been revoked",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+        except ValueError:
+            pass
 
     return user
 
@@ -135,11 +175,22 @@ async def get_current_tenant_context(
 
     # Verify membership
     membership = await tenant_repo.get_membership(current_user.id, tenant_uuid)
-    if not membership or membership.status != MembershipStatus.ACTIVE.value:
+    if not membership:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: You do not have membership in this workspace",
+        )
+    if membership.status == MembershipStatus.INVITED.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Workspace invitation pending acceptance",
+        )
+    if membership.status != MembershipStatus.ACTIVE.value:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied: You do not have active membership in this workspace",
         )
+
 
     role = membership.role
     perms = {p.name for p in role.permissions}

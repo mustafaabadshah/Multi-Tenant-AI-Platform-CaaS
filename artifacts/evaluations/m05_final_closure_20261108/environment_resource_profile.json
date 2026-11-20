@@ -1,0 +1,11 @@
+{
+  "os": "Windows 11 Home (10.0.26100)",
+  "cpu": "Intel Core i3-7100U @ 2.40GHz (2 Cores, 4 Logical Processors)",
+  "gpu": "Intel HD Graphics 620 (No dedicated GPU)",
+  "ram_total_mb": 7820.98,
+  "ram_free_mb": 914.25,
+  "ram_safety_threshold_mb": 2048,
+  "docker_service": "com.docker.service (Status: Stopped, StartType: Manual)",
+  "docker_daemon_connectivity": false,
+  "enforcement_decision": "Container startup locally withheld to prevent severe memory thrashing and OS crash"
+}

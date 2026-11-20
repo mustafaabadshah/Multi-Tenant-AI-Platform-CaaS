@@ -1,0 +1,22 @@
+{
+  "timestamp": "2026-11-07T20:45:49.179007+00:00",
+  "docker_client_version": "25.0.3",
+  "docker_compose_version": "v2.24.6-desktop.1",
+  "service_name": "com.docker.service",
+  "service_status": "Stopped",
+  "wsl_backend": {
+    "distribution": "docker-desktop-data",
+    "state": "Stopped",
+    "wsl_version": 2
+  },
+  "daemon_status": "OFFLINE_UAC_REQUIRED",
+  "memory_gate": {
+    "free_ram_mb": 1041.5,
+    "required_threshold_mb": 2048,
+    "container_execution_allowed": false
+  },
+  "compose_files_verified": [
+    "docker-compose.m05-postgres.yml (pgvector/pgvector:pg16, port 55432, 512MB limit)",
+    "docker-compose.m05-qdrant.yml (qdrant/qdrant:v1.9.0, port 6333, 256MB limit)"
+  ]
+}

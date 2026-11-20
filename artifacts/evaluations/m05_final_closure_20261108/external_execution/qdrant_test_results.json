@@ -1,0 +1,18 @@
+{
+  "status": "NOT_RUN",
+  "reason": "ENVIRONMENT_MEMORY_CONSTRAINT (1271 MB < 2048 MB threshold)",
+  "target_image": "qdrant/qdrant:v1.9.0",
+  "target_ports": {
+    "http": 6333,
+    "grpc": 6334
+  },
+  "total_nodes": 5,
+  "execution_command": "python -m pytest tests/integration/test_qdrant_live_integration.py -v",
+  "nodes": [
+    "tests/integration/test_qdrant_live_integration.py::test_qdrant_service_connectivity_and_health",
+    "tests/integration/test_qdrant_live_integration.py::test_qdrant_collection_creation_and_dimension_isolation",
+    "tests/integration/test_qdrant_live_integration.py::test_qdrant_upsert_and_filtered_search",
+    "tests/integration/test_qdrant_live_integration.py::test_qdrant_cross_tenant_payload_isolation",
+    "tests/integration/test_qdrant_live_integration.py::test_qdrant_scoped_deletion"
+  ]
+}

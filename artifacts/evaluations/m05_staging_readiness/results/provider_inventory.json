@@ -1,0 +1,46 @@
+{
+  "timestamp": "2026-11-07T14:45:00+05:00",
+  "milestone": "M05",
+  "phase": "Phase 6",
+  "providers": [
+    {
+      "name": "omniroute",
+      "adapter_class": "app.llm.providers.openai_provider.OpenAICompatibleLLMProvider",
+      "default_base_url": "http://localhost:20128/v1",
+      "auth_mechanism": "Bearer API Key (BYOK or OMNIROUTE_API_KEY / OPENAI_API_KEY)",
+      "supported_modes": ["generate", "generate_stream", "validate_key"],
+      "model_selection": "Dynamic auto routing (default: 'auto') or explicit model ID",
+      "wire_format": "OpenAI Chat Completions REST API v1",
+      "failover_supported": false,
+      "test_status": "VERIFIED_OFFLINE_MOCK_TRANSPORT"
+    },
+    {
+      "name": "openai",
+      "adapter_class": "app.llm.providers.openai_provider.OpenAICompatibleLLMProvider",
+      "default_base_url": "https://api.openai.com/v1",
+      "auth_mechanism": "Bearer API Key (Tenant-encrypted BYOK)",
+      "supported_modes": ["generate", "generate_stream", "validate_key"],
+      "model_selection": "Explicit OpenAI model name (e.g. gpt-4o, gpt-4o-mini)",
+      "wire_format": "OpenAI Chat Completions REST API v1",
+      "failover_supported": false,
+      "test_status": "VERIFIED_OFFLINE_MOCK_TRANSPORT"
+    },
+    {
+      "name": "mock",
+      "adapter_class": "app.llm.providers.mock_provider.MockLLMProvider",
+      "default_base_url": null,
+      "auth_mechanism": "None (Local in-process deterministic generator)",
+      "supported_modes": ["generate", "generate_stream", "validate_key"],
+      "model_selection": "Any string (e.g. 'mock-default')",
+      "wire_format": "In-memory async iterator",
+      "failover_supported": false,
+      "test_status": "VERIFIED_UNIT_AND_RUNTIME"
+    }
+  ],
+  "registry": {
+    "class": "app.llm.registry.LLMProviderRegistry",
+    "singleton_accessor": "app.llm.registry.get_llm_registry",
+    "strict_mode_supported": true,
+    "fallback_to_mock_when_non_strict": true
+  }
+}

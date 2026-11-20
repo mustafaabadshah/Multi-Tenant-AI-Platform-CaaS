@@ -1,0 +1,125 @@
+{
+  "lexical": {
+    "evaluation_population": {
+      "answerable_denominator": 22,
+      "unanswerable_denominator": 3
+    },
+    "recall@1": {
+      "numerator": 15,
+      "denominator": 22,
+      "percentage": 68.18,
+      "wilson_95_ci": [
+        0.4732,
+        0.8364
+      ]
+    },
+    "recall@3": {
+      "numerator": 17,
+      "denominator": 22,
+      "percentage": 77.27,
+      "wilson_95_ci": [
+        0.5656,
+        0.8988
+      ]
+    },
+    "recall@5": {
+      "numerator": 19,
+      "denominator": 22,
+      "percentage": 86.36,
+      "wilson_95_ci": [
+        0.6666,
+        0.9525
+      ]
+    },
+    "mrr": 0.7515,
+    "ndcg@3": 0.7273,
+    "ndcg@5": 0.7644,
+    "no_answer_rejection": {
+      "numerator": 0,
+      "denominator": 3,
+      "percentage": 0.0
+    }
+  },
+  "semantic": {
+    "evaluation_population": {
+      "answerable_denominator": 22,
+      "unanswerable_denominator": 3
+    },
+    "recall@1": {
+      "numerator": 21,
+      "denominator": 22,
+      "percentage": 95.45,
+      "wilson_95_ci": [
+        0.782,
+        0.9919
+      ]
+    },
+    "recall@3": {
+      "numerator": 22,
+      "denominator": 22,
+      "percentage": 100.0,
+      "wilson_95_ci": [
+        0.8513,
+        1.0
+      ]
+    },
+    "recall@5": {
+      "numerator": 22,
+      "denominator": 22,
+      "percentage": 100.0,
+      "wilson_95_ci": [
+        0.8513,
+        1.0
+      ]
+    },
+    "mrr": 0.9697,
+    "ndcg@3": 0.9773,
+    "ndcg@5": 0.9773,
+    "no_answer_rejection": {
+      "numerator": 3,
+      "denominator": 3,
+      "percentage": 100.0
+    }
+  },
+  "hybrid_rrf": {
+    "evaluation_population": {
+      "answerable_denominator": 22,
+      "unanswerable_denominator": 3
+    },
+    "recall@1": {
+      "numerator": 18,
+      "denominator": 22,
+      "percentage": 81.82,
+      "wilson_95_ci": [
+        0.6148,
+        0.9269
+      ]
+    },
+    "recall@3": {
+      "numerator": 21,
+      "denominator": 22,
+      "percentage": 95.45,
+      "wilson_95_ci": [
+        0.782,
+        0.9919
+      ]
+    },
+    "recall@5": {
+      "numerator": 22,
+      "denominator": 22,
+      "percentage": 100.0,
+      "wilson_95_ci": [
+        0.8513,
+        1.0
+      ]
+    },
+    "mrr": 0.8977,
+    "ndcg@3": 0.9042,
+    "ndcg@5": 0.9238,
+    "no_answer_rejection": {
+      "numerator": 3,
+      "denominator": 3,
+      "percentage": 100.0
+    }
+  }
+}

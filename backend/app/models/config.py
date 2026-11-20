@@ -1,7 +1,8 @@
-from sqlalchemy import Boolean, Float, Integer, String
+from sqlalchemy import Boolean, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database.base import Base, TenantScopedMixin, TimestampMixin, UUIDPrimaryKeyMixin
+from app.models.knowledge import RetrievalConfig  # noqa: F401
 
 
 class ProviderConnection(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin):
@@ -36,10 +37,3 @@ class VectorStoreConfig(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampM
     endpoint: Mapped[str | None] = mapped_column(String(255), nullable=True)
     collection_name: Mapped[str] = mapped_column(String(100), nullable=False)
 
-
-class RetrievalConfig(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin):
-    __tablename__ = "retrieval_configs"
-
-    hybrid_weight: Mapped[float] = mapped_column(Float, default=0.5, nullable=False)
-    top_k: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
-    rerank_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

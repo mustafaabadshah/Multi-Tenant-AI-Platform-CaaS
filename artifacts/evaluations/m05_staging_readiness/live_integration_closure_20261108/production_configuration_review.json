@@ -1,0 +1,20 @@
+{
+  "timestamp": "2026-11-07T21:03:51.104439+00:00",
+  "status": "PASS \u2014 AUDITED AND HARDENED",
+  "cors": {
+    "policy": "Project-scoped allowlist and preview regex",
+    "regex": "^https://mmaip-frontend(-[a-zA-Z0-9_-]+)?\\.vercel\\.app$",
+    "allowed_origins_env": "ALLOWED_ORIGINS",
+    "credential_protection": "Unrelated Vercel app domains rejected; no wildcard origin with credentials."
+  },
+  "database_connection_pool": {
+    "pool_size": 5,
+    "max_overflow": 10,
+    "pool_timeout": 30,
+    "pool_recycle": 1800,
+    "connect_timeout": 3,
+    "workers": 2,
+    "total_max_app_connections": 30,
+    "render_headroom": "30 connections leaves ample buffer under Render Starter PostgreSQL limit (50-100 connections)."
+  }
+}

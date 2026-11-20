@@ -1,0 +1,22 @@
+{
+  "timestamp": "2026-11-07T20:45:49.179007+00:00",
+  "hardware": {
+    "processor": "Intel(R) Core(TM) i3-7100U CPU @ 2.40GHz",
+    "cores": 2,
+    "threads": 4,
+    "gpu": "Intel(R) HD Graphics 620 (No dedicated GPU)",
+    "ram_total_kb": 8008680,
+    "ram_total_gb": 7.64,
+    "ram_free_kb": 1066500,
+    "ram_free_mb": 1041.5
+  },
+  "operating_system": "Microsoft Windows 11 Home Single Language (Build 26100)",
+  "runtime": {
+    "python": "3.12.3",
+    "node": "24.x",
+    "nextjs": "16.4.5 (Turbopack)",
+    "shell": "PowerShell 5.1 / 7.x"
+  },
+  "memory_safety_threshold_mb": 2048,
+  "memory_policy_status": "BELOW_THRESHOLD_CONTAINERS_WITHHELD"
+}

@@ -1,0 +1,16 @@
+{
+  "collection_naming_pattern": "tenant_{tenant_id}_dim_{dimension}",
+  "distance_metric": "Cosine",
+  "vector_dimensions_supported": [
+    768,
+    1536,
+    3072
+  ],
+  "indexed_payload_schema": {
+    "tenant_id": "keyword",
+    "knowledge_base_id": "keyword",
+    "department_id": "keyword (optional)",
+    "document_id": "keyword",
+    "chunk_index": "integer"
+  }
+}

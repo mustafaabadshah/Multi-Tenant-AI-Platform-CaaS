@@ -1,0 +1,17 @@
+=== Step 1: Physical File Verification ===
+Archive: m05_live_test_snapshot_v3.zip
+Physical Size: 760423 bytes (Expected: 760423)
+SHA-256: 6776cf077941c913d794076bcd076340211c00c2d263291791169170a609f64e (Expected: 6776cf077941c913d794076bcd076340211c00c2d263291791169170a609f64e)
+
+=== Step 2: Path Traversal & Archive Entry Inspection ===
+Total zip entries: 434
+Path safety check 100% PASSED: Zero absolute paths, zero '..' traversal.
+
+=== Step 3: Extraction and Manifest Hash Verification ===
+Manifest declared files: 434 (Expected: 434)
+Missing files: 0
+Hash mismatches: 0
+Secret alerts: 0
+Extraction & Manifest integrity 100% PASSED!
+Secret scan 100% PASSED (zero exposed keys/tokens).
+Temporary verification extract directory safely cleaned up.

@@ -1,0 +1,21 @@
+{
+  "execution_timestamp": "2026-11-08T15:28:00+05:00",
+  "status": "NOT_RUN",
+  "rationale": "Execution halted at mandatory 4 GB available physical RAM decision gate. Current available physical RAM is 2,298.66 MB (~2.24 GB).",
+  "target_service": "Qdrant v1.9.0",
+  "target_ports": {
+    "http": 6333,
+    "grpc": 6334
+  },
+  "cataloged_test_node_ids": [
+    "tests/integration/test_qdrant_live.py::test_qdrant_cluster_health_and_version",
+    "tests/integration/test_qdrant_live.py::test_disposable_collection_lifecycle",
+    "tests/integration/test_qdrant_live.py::test_tenant_payload_filter_isolation",
+    "tests/integration/test_qdrant_live.py::test_cross_tenant_vector_query_rejection",
+    "tests/integration/test_qdrant_live.py::test_vector_reindex_idempotency"
+  ],
+  "tests_executed": 0,
+  "tests_passed": 0,
+  "tests_failed": 0,
+  "tests_skipped": 5
+}

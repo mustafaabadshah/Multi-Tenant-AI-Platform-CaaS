@@ -1,0 +1,110 @@
+{
+  "milestone": "M05",
+  "phase": 13,
+  "component": "Phase Closure Matrix",
+  "timestamp": "2026-11-08T01:00:00Z",
+  "matrix": [
+    {
+      "phase": "Phase 0 — Baseline Audit",
+      "initial_decision": "PASS",
+      "final_decision": "PASS",
+      "evidence_path": "artifacts/evaluations/m05_staging_readiness/00_baseline_audit.md",
+      "status": "CLOSED"
+    },
+    {
+      "phase": "Phase 1 — PostgreSQL 16 & pgvector",
+      "initial_decision": "PARTIAL",
+      "final_decision": "CONDITIONAL",
+      "evidence_path": "artifacts/evaluations/m05_staging_readiness/02_postgresql_pgvector_validation.md",
+      "remaining_limitation": "Live container tests withheld due to host RAM < 2048 MB constraint",
+      "status": "PRESERVED_FOR_CI"
+    },
+    {
+      "phase": "Phase 2 — Qdrant Live Integration",
+      "initial_decision": "PARTIAL",
+      "final_decision": "CONDITIONAL",
+      "evidence_path": "artifacts/evaluations/m05_staging_readiness/03_qdrant_integration_validation.md",
+      "remaining_limitation": "Live container tests withheld due to host RAM < 2048 MB constraint",
+      "status": "PRESERVED_FOR_CI"
+    },
+    {
+      "phase": "Phase 3 — Hybrid Retrieval & Ranking",
+      "initial_decision": "PASS",
+      "final_decision": "PASS",
+      "evidence_path": "artifacts/evaluations/m05_staging_readiness/04_retrieval_evaluation.md",
+      "status": "CLOSED"
+    },
+    {
+      "phase": "Phase 4 — Tenant Isolation Security",
+      "initial_decision": "PASS",
+      "final_decision": "PASS",
+      "evidence_path": "artifacts/evaluations/m05_staging_readiness/05_tenant_isolation_acl_security.md",
+      "status": "CLOSED"
+    },
+    {
+      "phase": "Phase 5 — Prompt Injection Hardening",
+      "initial_decision": "PASS",
+      "final_decision": "PASS",
+      "evidence_path": "artifacts/evaluations/m05_staging_readiness/06_prompt_injection_untrusted_data_security.md",
+      "status": "CLOSED"
+    },
+    {
+      "phase": "Phase 6 — LLM Provider Reliability",
+      "initial_decision": "PASS",
+      "final_decision": "PASS",
+      "evidence_path": "artifacts/evaluations/m05_staging_readiness/07_llm_provider_streaming_reliability.md",
+      "status": "CLOSED"
+    },
+    {
+      "phase": "Phase 7 — Migration Safety & Key Rotation",
+      "initial_decision": "PARTIAL",
+      "final_decision": "PASS_OFFLINE",
+      "evidence_path": "artifacts/evaluations/m05_staging_readiness/phase_7/08_migration_backup_restore_validation.md",
+      "remaining_limitation": "Paired storage volume backup requirement documented",
+      "status": "CLOSED_OFFLINE"
+    },
+    {
+      "phase": "Phase 8 — Render & Vercel Staging Readiness",
+      "initial_decision": "PASS",
+      "final_decision": "PASS",
+      "evidence_path": "artifacts/evaluations/m05_staging_readiness/phase_8/09_staging_deployment_readiness.md",
+      "status": "CLOSED"
+    },
+    {
+      "phase": "Phase 9 — PDF Citation Highlighting",
+      "initial_decision": "PASS",
+      "final_decision": "PASS",
+      "evidence_path": "artifacts/evaluations/m05_staging_readiness/phase_9/10_pdf_citation_highlighting.md",
+      "remaining_limitation": "Span-level PyMuPDF word rect extraction documented as post-M05 enhancement",
+      "status": "CLOSED"
+    },
+    {
+      "phase": "Phase 10 — Expanded Regression Suite",
+      "initial_decision": "CONDITIONAL PASS",
+      "final_decision": "CONDITIONAL PASS",
+      "evidence_path": "artifacts/evaluations/m05_staging_readiness/phase_10/11_expanded_regression_and_staging_gate.md",
+      "status": "CLOSED"
+    },
+    {
+      "phase": "Phase 11 — Architecture & Quality Review",
+      "initial_decision": "PASS",
+      "final_decision": "PASS",
+      "evidence_path": "artifacts/evaluations/m05_staging_readiness/phase_11/12_architecture_and_code_quality_review.md",
+      "status": "CLOSED"
+    },
+    {
+      "phase": "Phase 12 — Documentation & Operational Handover",
+      "initial_decision": "PASS",
+      "final_decision": "PASS",
+      "evidence_path": "artifacts/evaluations/m05_staging_readiness/phase_12/13_documentation_and_operational_handover.md",
+      "status": "CLOSED"
+    },
+    {
+      "phase": "Phase 13 — Final M05 Release Sign-Off",
+      "initial_decision": "PENDING",
+      "final_decision": "CONDITIONAL PASS",
+      "evidence_path": "artifacts/evaluations/m05_staging_readiness/phase_13/14_final_m05_release_signoff.md",
+      "status": "CURRENT"
+    }
+  ]
+}

@@ -1,0 +1,94 @@
+{
+  "dataset_summary": {
+    "num_documents": 6,
+    "num_chunks": 18,
+    "num_queries": 25,
+    "answerable_queries": 22,
+    "unanswerable_queries": 3
+  },
+  "performance": {
+    "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+    "dimensions": 384,
+    "device": "CPU",
+    "batch_embed_throughput_chunks_per_sec": 8.49,
+    "total_embed_time_sec": 2.1196
+  },
+  "methods": {
+    "Lexical (BM25/FTS)": {
+      "metrics": {
+        "hit_rate@1": 0.6818,
+        "hit_rate@3": 0.7727,
+        "hit_rate@5": 0.8636,
+        "recall@1": 0.6818,
+        "recall@3": 0.7727,
+        "recall@5": 0.8636,
+        "precision@1": 0.6818,
+        "precision@3": 0.2576,
+        "precision@5": 0.1727,
+        "mrr": 0.7515,
+        "ndcg@3": 0.7273,
+        "ndcg@5": 0.7644
+      },
+      "latency_avg_ms": 0.3,
+      "latency_p95_ms": 0.44,
+      "no_answer_accuracy": 0.0
+    },
+    "Local Feature Baseline": {
+      "metrics": {
+        "hit_rate@1": 0.5909,
+        "hit_rate@3": 0.7273,
+        "hit_rate@5": 0.8182,
+        "recall@1": 0.5909,
+        "recall@3": 0.7273,
+        "recall@5": 0.8182,
+        "precision@1": 0.5909,
+        "precision@3": 0.2424,
+        "precision@5": 0.1636,
+        "mrr": 0.6867,
+        "ndcg@3": 0.665,
+        "ndcg@5": 0.7042
+      },
+      "latency_avg_ms": 4.29,
+      "latency_p95_ms": 7.7,
+      "no_answer_accuracy": 0.33
+    },
+    "Semantic (all-MiniLM-L6-v2)": {
+      "metrics": {
+        "hit_rate@1": 0.9545,
+        "hit_rate@3": 1.0,
+        "hit_rate@5": 1.0,
+        "recall@1": 0.9545,
+        "recall@3": 1.0,
+        "recall@5": 1.0,
+        "precision@1": 0.9545,
+        "precision@3": 0.3333,
+        "precision@5": 0.2,
+        "mrr": 0.9697,
+        "ndcg@3": 0.9773,
+        "ndcg@5": 0.9773
+      },
+      "latency_avg_ms": 12.86,
+      "latency_p95_ms": 21.08,
+      "no_answer_accuracy": 1.0
+    },
+    "Hybrid RRF (Lexical+Semantic)": {
+      "metrics": {
+        "hit_rate@1": 0.8182,
+        "hit_rate@3": 0.9545,
+        "hit_rate@5": 1.0,
+        "recall@1": 0.8182,
+        "recall@3": 0.9545,
+        "recall@5": 1.0,
+        "precision@1": 0.8182,
+        "precision@3": 0.3182,
+        "precision@5": 0.2,
+        "mrr": 0.8977,
+        "ndcg@3": 0.9042,
+        "ndcg@5": 0.9238
+      },
+      "latency_avg_ms": 0.04,
+      "latency_p95_ms": 0.06,
+      "no_answer_accuracy": 1.0
+    }
+  }
+}

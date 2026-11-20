@@ -1,0 +1,24 @@
+{
+  "timestamp": "2026-11-07T22:03:55.854206+00:00",
+  "decision": "CONDITIONAL_PASS",
+  "external_execution_status": "PENDING_USER_HANDOFF",
+  "host_ram_free_mb": 1271.36,
+  "memory_safety_threshold_mb": 2048,
+  "local_container_execution": "WITHHELD_DUE_TO_RAM_LIMIT",
+  "snapshot_archive": "artifacts/evaluations/m05_final_closure_20261108/portable_runner/m05_live_test_snapshot.zip",
+  "snapshot_sha256": "3c97b830261542a6a27dd1d0ee93cc76b63cebbb91f99fa9f54e50dcc8eeed6f",
+  "total_included_files": 406,
+  "summary": {
+    "offline_backend_passed": 147,
+    "offline_backend_skipped": 1,
+    "offline_backend_failed": 0,
+    "live_postgres_tests_pending": 12,
+    "live_qdrant_tests_pending": 5,
+    "live_postgres_backup_drill_pending": 1,
+    "live_qdrant_rebuild_drill_pending": 1,
+    "frontend_turbopack_static_routes": "15/15",
+    "frontend_ts_errors": 0,
+    "frontend_eslint_errors": 0,
+    "unique_security_node_ids_passed": 64
+  }
+}

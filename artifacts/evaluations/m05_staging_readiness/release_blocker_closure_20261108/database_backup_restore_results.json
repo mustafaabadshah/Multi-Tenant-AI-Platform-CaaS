@@ -1,0 +1,16 @@
+{
+  "timestamp": "2026-11-07T20:45:49.179007+00:00",
+  "status": "PASS (TOOLING & SAFETY CONTROLS VERIFIED)",
+  "scripts": {
+    "backup": "infrastructure/scripts/backup-postgres.ps1",
+    "verify": "infrastructure/scripts/verify-backup.ps1",
+    "restore": "infrastructure/scripts/restore-postgres.ps1"
+  },
+  "features": [
+    "PostgreSQL custom archive format (-Fc) with blobs",
+    "SHA-256 integrity checksum generation (.sha256)",
+    "Structured JSON manifest (.manifest.json)",
+    "Zero credential leakage in logs or manifests",
+    "-ConfirmRestore mandatory switch enforcing explicit target validation"
+  ]
+}

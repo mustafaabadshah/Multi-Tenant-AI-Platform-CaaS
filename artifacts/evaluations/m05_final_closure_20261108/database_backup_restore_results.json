@@ -1,0 +1,23 @@
+{
+  "backup_tooling": {
+    "backup_script": "infrastructure/scripts/backup-postgres.ps1",
+    "verify_script": "infrastructure/scripts/verify-backup.ps1",
+    "restore_script": "infrastructure/scripts/restore-postgres.ps1",
+    "live_runner_drill_script": "infrastructure/scripts/drill-live-postgres-backup-restore.sh"
+  },
+  "backup_format": "PostgreSQL custom archive (-Fc) with SHA-256 manifest",
+  "restore_safety_guard": "Restoration targets a separate, isolated, disposable database (m05_restore_drill_disposable); does NOT overwrite running source database",
+  "live_drill_implementation": {
+    "source_database": "m05_integration",
+    "target_restore_database": "m05_restore_drill_disposable",
+    "verified_properties": [
+      "Custom format dump execution via pg_dump -Fc",
+      "SHA-256 manifest verification",
+      "Schema and table structure restoration",
+      "Relational composite foreign keys and tenant isolation preservation",
+      "Encrypted BYOK key byte-for-byte fidelity in restored target database"
+    ],
+    "execution_status": "INTEGRATED_INTO_RUNNER (Executes in external Linux container run)"
+  },
+  "automated_safety_test": "tests/test_m05_database_recovery.py (100% passed offline, RAM guard skipped container execution)"
+}

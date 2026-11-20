@@ -1,8 +1,8 @@
-# MM AI Platform — Database Schema & Data Architecture
+# Multi-Tenant AI Platform (CaaS) — Database Schema & Data Architecture
 
 ## 1. Overview & Principles
 
-PostgreSQL is the single source of truth for the MM AI Platform. The relational database schema is designed according to these core principles:
+PostgreSQL is the single source of truth for the Multi-Tenant AI Platform (CaaS). The relational database schema is designed according to these core principles:
 1. **UUID Primary Keys:** All tables use standard UUIDv4 primary keys to prevent enumeration attacks and simplify distributed data migrations.
 2. **UTC Timestamps:** All tables record `created_at` and `updated_at` in timezone-aware UTC (`TIMESTAMP WITH TIME ZONE`).
 3. **Explicit Foreign Key Constraints:** Hard referential integrity enforced with `ON DELETE CASCADE` or `RESTRICT` as appropriate.
