@@ -37,7 +37,7 @@ def test_groq_model_explicitly_configured():
 
 
 def test_groq_model_auto_resolves_supported_default():
-    """Groq model='auto' resolves to the supported production default (openai/gpt-oss-120b)."""
+    """Groq model='auto' resolves to the supported production default (GROQ_DEFAULT_MODEL)."""
     provider = GroqLLMProvider()
     config = LLMConfig(
         provider="groq",
@@ -45,7 +45,6 @@ def test_groq_model_auto_resolves_supported_default():
         api_key="gsk_test_key_12345",
     )
     normalized = provider._normalize_config(config)
-    assert normalized.model == "openai/gpt-oss-120b"
     assert normalized.model == GROQ_DEFAULT_MODEL
 
 
@@ -59,7 +58,7 @@ def test_groq_model_empty_resolves_supported_default():
             api_key="gsk_test_key_12345",
         )
         normalized = provider._normalize_config(config)
-        assert normalized.model == "openai/gpt-oss-120b"
+        assert normalized.model == GROQ_DEFAULT_MODEL
 
 
 def test_groq_explicit_deprecated_model_not_silently_replaced():

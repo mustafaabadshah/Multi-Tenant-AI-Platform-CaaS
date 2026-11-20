@@ -124,6 +124,18 @@ function ConversationsContent() {
   const [negativeCategory, setNegativeCategory] = useState<string>("ACCURACY");
   const [negativeComment, setNegativeComment] = useState<string>("");
 
+  // M28.16.1 & M28.16.2: In-Chat Model Override & Truthful Token Usage State
+  const [activeChatModel, setActiveChatModel] = useState<string>("auto");
+  const [lastUsage, setLastUsage] = useState<{
+    input_tokens: number;
+    output_tokens: number;
+    total_tokens: number;
+    duration_ms: number;
+    model?: string;
+    provider?: string;
+    is_estimated?: boolean;
+  } | null>(null);
+
   // M23 & M24: Speech & Voice State
   const [voiceMode, setVoiceMode] = useState<VoiceMode>("TEXT");
   const [isListening, setIsListening] = useState(false);
@@ -835,7 +847,10 @@ function ConversationsContent() {
             Authorization: `Bearer ${token}`,
             "X-Tenant-ID": tenantId,
           },
-          body: JSON.stringify({ content: textToSend }),
+          body: JSON.stringify({
+            content: textToSend,
+            model: activeChatModel !== "auto" ? activeChatModel : undefined,
+          }),
           signal: abortController.signal,
         }
       );
@@ -920,6 +935,16 @@ function ConversationsContent() {
                   return exists ? prev : [...prev, approvalItem];
                 });
                 voiceSessionRef.current?.notifyWaitingForApproval();
+              } else if (eventType === "usage") {
+                setLastUsage({
+                  input_tokens: data.input_tokens || 0,
+                  output_tokens: data.output_tokens || 0,
+                  total_tokens: data.total_tokens || ((data.input_tokens || 0) + (data.output_tokens || 0)),
+                  duration_ms: data.duration_ms || 0,
+                  model: data.model || activeChatModel,
+                  provider: data.provider,
+                  is_estimated: Boolean(data.is_estimated),
+                });
               } else if (eventType === "message_end") {
                 // Completed
               } else if (eventType === "message_error") {
@@ -2212,6 +2237,58 @@ function ConversationsContent() {
               )}
 
               <form onSubmit={handleSendMessage} className="space-y-2">
+                {/* Chat Control Toolbar: In-Chat Model Selector & Real-Time Token Usage */}
+                <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-xs">
+                  <div className="flex items-center gap-1.5">
+                    <label className="text-[11px] font-medium text-gray-500 flex items-center gap-1">
+                      <Sparkles size={11} className="text-blue-500" />
+                      Model:
+                    </label>
+                    <select
+                      value={activeChatModel}
+                      onChange={(e) => setActiveChatModel(e.target.value)}
+                      disabled={streaming}
+                      className="text-[11px] font-medium bg-white border border-gray-200 rounded-md py-0.5 px-2 text-gray-700 outline-none hover:border-gray-300 focus:border-blue-500 shadow-2xs cursor-pointer"
+                      title="Select model for this conversation"
+                    >
+                      <option value="auto">Auto ({activeAssistant?.default_model || "Provider Default"})</option>
+                      <option value="openai/gpt-oss-20b">GPT-OSS 20B (Groq LPU — Free Tier)</option>
+                      <option value="openai/gpt-oss-120b">GPT-OSS 120B (Groq LPU)</option>
+                      <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash-Lite (Google)</option>
+                      <option value="gemini-3.8-flash">Gemini 3.8 Flash (Google)</option>
+                      <option value="gpt-4o-mini">GPT-4o mini (OpenAI)</option>
+                      <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet (Anthropic)</option>
+                    </select>
+                  </div>
+
+                  {/* Usage & Token Counter */}
+                  <div className="flex items-center gap-2 text-[11px] text-gray-500">
+                    {lastUsage ? (
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-mono ${
+                        lastUsage.is_estimated
+                          ? "bg-amber-50 text-amber-700 border border-amber-200/60"
+                          : "bg-emerald-50 text-emerald-700 border border-emerald-200/60"
+                      }`}>
+                        <Activity size={10} className={lastUsage.is_estimated ? "text-amber-500" : "text-emerald-500"} />
+                        <span>
+                          {lastUsage.is_estimated ? (
+                            `~${lastUsage.total_tokens} tokens (est.)`
+                          ) : (
+                            `${lastUsage.total_tokens} tokens (${lastUsage.input_tokens} in / ${lastUsage.output_tokens} out)`
+                          )}
+                        </span>
+                        <span className="text-gray-300">·</span>
+                        <span>{Math.round(lastUsage.duration_ms)}ms</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-gray-50 text-gray-500 border border-gray-200 font-mono">
+                        <Activity size={10} className="text-gray-400" />
+                        <span>Session: {messages.reduce((acc, m) => acc + (m.token_count || 0), 0)} tokens ({messages.length} msgs)</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+
                 <div className="relative flex items-center">
                   {/* Hidden File Input for Paperclip */}
                   <input

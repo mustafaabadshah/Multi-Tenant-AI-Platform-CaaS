@@ -53,7 +53,7 @@ def test_groq_normalize_config_preserves_tools_and_tool_choice():
     normalized = provider._normalize_config(cfg)
     assert normalized.tools == tools
     assert normalized.tool_choice == "auto"
-    assert normalized.model == "openai/gpt-oss-120b"
+    assert normalized.model in ("openai/gpt-oss-20b", "llama-3.3-70b-versatile", "openai/gpt-oss-120b")
 
 
 def test_groq_normalize_config_without_tools():

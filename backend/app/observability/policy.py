@@ -15,6 +15,7 @@ class ErrorCategory:
     AUTH_ERROR = "AUTH_ERROR"
     QUOTA_EXCEEDED = "QUOTA_EXCEEDED"
     RATE_LIMITED = "RATE_LIMITED"
+    MODEL_UNAVAILABLE = "MODEL_UNAVAILABLE"
     PROVIDER_UNAVAILABLE = "PROVIDER_UNAVAILABLE"
     PROVIDER_TIMEOUT = "PROVIDER_TIMEOUT"
     INVALID_CONFIG = "INVALID_CONFIG"
@@ -38,6 +39,14 @@ def categorize_error(err: Any) -> tuple[str, str]:
 
     msg = str(err)
 
+    from app.llm.base import (
+        LLMAuthenticationError,
+        LLMModelUnavailableError,
+        LLMRateLimitError,
+        LLMTimeoutError,
+        LLMToolCallUnsupportedError,
+    )
+
     # 1. Cancelled stream
     if "GeneratorExit" in msg or "cancelled" in msg.lower() or "client disconnected" in msg.lower():
         return ErrorCategory.CANCELLED_STREAM, "Request stream was cancelled or disconnected by the client."
@@ -48,14 +57,22 @@ def categorize_error(err: Any) -> tuple[str, str]:
         return ErrorCategory.QUOTA_EXCEEDED, f"Workspace quota exceeded: {clean_detail or 'limit reached'}"
 
     # 3. Auth / BYOK missing
-    if "byok" in msg.lower() or "not configured with an active byok" in msg.lower():
+    if isinstance(err, LLMAuthenticationError) or "byok" in msg.lower() or "not configured with an active byok" in msg.lower():
         return ErrorCategory.AUTH_ERROR, "Provider credential is not configured or active for this workspace."
     if "401" in msg or "unauthorized" in msg.lower() or "invalid api key" in msg.lower():
         return ErrorCategory.AUTH_ERROR, "Authentication failed with upstream provider."
 
     # 4. Rate limited
-    if "429" in msg or "rate limit" in msg.lower() or "too many requests" in msg.lower():
+    if isinstance(err, LLMRateLimitError) or "429" in msg or "rate limit" in msg.lower() or "too many requests" in msg.lower():
         return ErrorCategory.RATE_LIMITED, "Provider rate limit reached. Please retry after a brief delay."
+
+    # 5. Tool execution or tool choice conflict
+    if isinstance(err, LLMToolCallUnsupportedError) or "tool choice" in msg.lower() or "tool_use_failed" in msg.lower() or "tool action" in msg.lower() or "tool error" in msg.lower() or "unsupported function" in msg.lower() or "unregistered tool" in msg.lower():
+        return ErrorCategory.TOOL_ERROR, "AI provider tool choice conflict or tool action failed."
+
+    # 6. Model unavailable / 404
+    if isinstance(err, LLMModelUnavailableError) or "404" in msg or "model_unavailable" in msg.lower() or "not found" in msg.lower() or ("model" in msg.lower() and ("unavailable" in msg.lower() or "not supported" in msg.lower())):
+        return ErrorCategory.MODEL_UNAVAILABLE, "The requested AI model is unavailable or no longer supported by the provider."
 
     # 5. Empty response
     if "empty response stream" in msg.lower():

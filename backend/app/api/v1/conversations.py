@@ -342,7 +342,11 @@ async def stream_message(
 
     # 3. Stream SSE response
     return StreamingResponse(
-        runtime.stream_chat(conversation_id, payload.content),
+        runtime.stream_chat(
+            conversation_id,
+            payload.content,
+            model_override=payload.model,
+        ),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

@@ -10,7 +10,7 @@ from app.llm.providers.openai_provider import OpenAICompatibleLLMProvider
 logger = logging.getLogger("mmaip.llm.groq")
 
 GROQ_DEFAULT_BASE_URL = "https://api.groq.com/openai/v1"
-GROQ_DEFAULT_MODEL = os.environ.get("GROQ_DEFAULT_MODEL", "openai/gpt-oss-120b")
+GROQ_DEFAULT_MODEL = os.environ.get("GROQ_DEFAULT_MODEL", "openai/gpt-oss-20b")
 
 
 class GroqLLMProvider(OpenAICompatibleLLMProvider):

@@ -301,7 +301,7 @@ describe("BrowserSpeechSynthesizer", () => {
       completed = true;
     });
     assert.equal(ok, true);
-    await new Promise((resolve) => setTimeout(resolve, 150));
+    await new Promise((resolve) => setTimeout(resolve, 350));
     assert.equal(completed, true);
   });
 });

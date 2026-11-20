@@ -21,6 +21,7 @@ class LLMStreamChunk:
     content_delta: str
     finish_reason: Optional[str] = None
     tool_calls: Optional[list[dict[str, Any]]] = None
+    usage: Optional[dict[str, Any]] = None
 
 
 @dataclass
@@ -57,7 +58,20 @@ class LLMAuthenticationError(LLMException):
 
 class LLMRateLimitError(LLMException):
     """Raised when provider rate limit is exceeded (HTTP 429)."""
-    pass
+
+    def __init__(
+        self,
+        message: str,
+        retry_after: Optional[float] = None,
+        limit_type: Optional[str] = None,
+        model: Optional[str] = None,
+        provider: Optional[str] = None,
+    ):
+        super().__init__(message)
+        self.retry_after = retry_after
+        self.limit_type = limit_type
+        self.model = model
+        self.provider = provider
 
 
 class LLMProviderError(LLMException):
@@ -82,7 +96,16 @@ class LLMStreamInterruptedError(LLMConnectionError):
 
 class LLMModelUnavailableError(LLMProviderError, LLMConfigurationError):
     """Raised when the specified model ID is not available or rejected by the provider endpoint."""
-    pass
+
+    def __init__(
+        self,
+        message: str,
+        model: Optional[str] = None,
+        provider: Optional[str] = None,
+    ):
+        super().__init__(message)
+        self.model = model
+        self.provider = provider
 
 
 class LLMToolCallUnsupportedError(LLMProviderError):

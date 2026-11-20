@@ -352,9 +352,11 @@ export default function AssistantCreationWizard({
                           onChange={(e) => setDefaultModel(e.target.value)}
                           className="w-full p-1.5 text-xs bg-white border border-gray-300 rounded-lg text-gray-800 outline-none"
                         >
-                          <option value="auto">auto (OmniRoute default)</option>
-                          <option value="gpt-4o-mini">gpt-4o-mini</option>
-                          <option value="claude-3-5-sonnet">claude-3-5-sonnet</option>
+                          <option value="auto">auto (Provider default)</option>
+                          <option value="openai/gpt-oss-20b">openai/gpt-oss-20b (Groq Free Tier)</option>
+                          <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite (Gemini)</option>
+                          <option value="gpt-4o-mini">gpt-4o-mini (OpenAI)</option>
+                          <option value="claude-3-5-sonnet">claude-3-5-sonnet (Anthropic)</option>
                         </select>
                       </div>
 

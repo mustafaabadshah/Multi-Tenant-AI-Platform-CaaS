@@ -22,8 +22,20 @@ class ModelCapability:
 # Verified model catalog mapping current generation production models
 _VERIFIED_MODELS: list[ModelCapability] = [
     # -------------------------------------------------------------------------
-    # Groq (High-throughput OpenAI GPT-OSS, Llama 3 & Mixtral)
+    # Groq (GPT-OSS & Open Weights)
     # -------------------------------------------------------------------------
+    ModelCapability(
+        provider="groq",
+        model_id="openai/gpt-oss-20b",
+        display_name="GPT-OSS 20B (Groq LPU)",
+        context_window=131072,
+        max_output_tokens=8192,
+        supports_streaming=True,
+        supports_tools=True,
+        supports_vision=False,
+        supports_json_mode=True,
+        description="Recommended active open-weights model on Groq LPUs. Fast inference, native tool calling, and free-tier compatible.",
+    ),
     ModelCapability(
         provider="groq",
         model_id="openai/gpt-oss-120b",
@@ -34,31 +46,31 @@ _VERIFIED_MODELS: list[ModelCapability] = [
         supports_tools=True,
         supports_vision=False,
         supports_json_mode=True,
-        description="High-capacity open-weights model optimized for production reasoning and retrieval on Groq LPUs.",
+        description="High-capacity open-weights model on Groq LPUs. Subject to 8K TPM rate limits on free tiers.",
     ),
     ModelCapability(
         provider="groq",
         model_id="llama-3.3-70b-versatile",
-        display_name="Llama 3.3 70B Versatile",
+        display_name="Llama 3.3 70B (Phased Out Free Tier)",
         context_window=128000,
         max_output_tokens=32768,
         supports_streaming=True,
         supports_tools=True,
         supports_vision=False,
         supports_json_mode=True,
-        description="Open weights versatile model on Groq LPUs.",
+        description="Phased out on Groq Free/Developer tiers. Preserved for contracted enterprise tiers.",
     ),
     ModelCapability(
         provider="groq",
         model_id="llama-3.1-8b-instant",
-        display_name="Llama 3.1 8B Instant",
+        display_name="Llama 3.1 8B Instant (Phased Out Free Tier)",
         context_window=128000,
         max_output_tokens=8192,
         supports_streaming=True,
         supports_tools=True,
         supports_vision=False,
         supports_json_mode=True,
-        description="Extremely low-latency model for rapid Q&A, revision drills, and summarization.",
+        description="Phased out on Groq Free/Developer tiers. Preserved for contracted enterprise tiers.",
     ),
     ModelCapability(
         provider="groq",
@@ -112,12 +124,52 @@ _VERIFIED_MODELS: list[ModelCapability] = [
         description="Deep contextual understanding for complex research synthesis and policy analysis.",
     ),
     # -------------------------------------------------------------------------
-    # Google Gemini (1.5 and 2.0 Flash/Pro)
+    # -------------------------------------------------------------------------
+    # Google Gemini (3.5 and Flash Models)
     # -------------------------------------------------------------------------
     ModelCapability(
         provider="gemini",
+        model_id="gemini-3.5-flash-lite",
+        display_name="Gemini 3.5 Flash-Lite",
+        context_window=1000000,
+        max_output_tokens=8192,
+        supports_streaming=True,
+        supports_tools=True,
+        supports_vision=True,
+        supports_audio=False,
+        supports_json_mode=True,
+        description="Current recommended lightweight, high-throughput Google AI Studio free-tier model.",
+    ),
+    ModelCapability(
+        provider="gemini",
+        model_id="gemini-3.8-flash",
+        display_name="Gemini 3.8 Flash",
+        context_window=1000000,
+        max_output_tokens=8192,
+        supports_streaming=True,
+        supports_tools=True,
+        supports_vision=True,
+        supports_audio=False,
+        supports_json_mode=True,
+        description="Flagship reasoning Flash model on Google AI Studio for complex multimodal workflows.",
+    ),
+    ModelCapability(
+        provider="gemini",
+        model_id="gemini-2.0-flash",
+        display_name="Gemini 2.0 Flash (Retired)",
+        context_window=1000000,
+        max_output_tokens=8192,
+        supports_streaming=True,
+        supports_tools=True,
+        supports_vision=True,
+        supports_audio=False,
+        supports_json_mode=True,
+        description="Historical model retired on June 1, 2026. Returns HTTP 404 from active Google v1beta endpoints.",
+    ),
+    ModelCapability(
+        provider="gemini",
         model_id="gemini-1.5-pro",
-        display_name="Gemini 1.5 Pro",
+        display_name="Gemini 1.5 Pro (Retired)",
         context_window=2000000,
         max_output_tokens=8192,
         supports_streaming=True,
@@ -125,12 +177,12 @@ _VERIFIED_MODELS: list[ModelCapability] = [
         supports_vision=True,
         supports_audio=True,
         supports_json_mode=True,
-        description="Massive 2M token context window ideal for entire textbooks, video, and audio archives.",
+        description="Historical model retired from v1beta generateContent endpoints.",
     ),
     ModelCapability(
         provider="gemini",
         model_id="gemini-1.5-flash",
-        display_name="Gemini 1.5 Flash",
+        display_name="Gemini 1.5 Flash (Retired)",
         context_window=1000000,
         max_output_tokens=8192,
         supports_streaming=True,
@@ -138,12 +190,12 @@ _VERIFIED_MODELS: list[ModelCapability] = [
         supports_vision=True,
         supports_audio=False,
         supports_json_mode=True,
-        description="Cost-effective, multimodal workhorse for high-frequency knowledge retrieval.",
+        description="Historical model retired from v1beta generateContent endpoints.",
     ),
     ModelCapability(
         provider="gemini",
-        model_id="gemini-2.0-flash",
-        display_name="Gemini 2.0 Flash",
+        model_id="gemini-1.5-flash-8b",
+        display_name="Gemini 1.5 Flash-8B (Retired)",
         context_window=1000000,
         max_output_tokens=8192,
         supports_streaming=True,
@@ -151,7 +203,7 @@ _VERIFIED_MODELS: list[ModelCapability] = [
         supports_vision=True,
         supports_audio=False,
         supports_json_mode=True,
-        description="Next-generation Gemini model built for fast agentic workflows and tool use.",
+        description="High-volume lightweight model optimized for low-cost retrieval and summarization.",
     ),
     # -------------------------------------------------------------------------
     # OpenAI (GPT-4o & Reasoning Series)

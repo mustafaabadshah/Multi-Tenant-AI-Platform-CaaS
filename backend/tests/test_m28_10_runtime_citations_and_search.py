@@ -117,8 +117,9 @@ async def test_openai_provider_streaming_usage_only_chunk_does_not_crash():
         async for chunk in provider.generate_stream([LLMMessage(role="user", content="Hi")], fake_config):
             chunks.append(chunk)
 
-        assert len(chunks) == 1
+        assert len(chunks) == 2
         assert chunks[0].content_delta == "Hello world"
+        assert chunks[1].usage == {"prompt_tokens": 12, "completion_tokens": 2, "total_tokens": 14}
 
 
 @pytest.mark.asyncio

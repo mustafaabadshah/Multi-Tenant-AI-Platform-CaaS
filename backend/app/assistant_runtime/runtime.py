@@ -65,6 +65,9 @@ def format_user_facing_error(e: Exception, sanitized_diag: str = "") -> str:
         diag = f" ({sanitized_diag})" if sanitized_diag else ""
         return f"AI provider authentication failed{diag}. Please verify provider credentials or API key in settings."
     if isinstance(e, LLMRateLimitError):
+        retry_secs = getattr(e, "retry_after", None)
+        if retry_secs and retry_secs > 0:
+            return f"AI provider rate limit reached. Please wait {int(round(retry_secs))}s before retrying."
         return "AI provider rate limit reached. Please wait a moment before retrying."
     if isinstance(e, LLMTimeoutError):
         return "The request to the AI provider timed out. Please retry."
@@ -72,7 +75,7 @@ def format_user_facing_error(e: Exception, sanitized_diag: str = "") -> str:
         diag = f" ({sanitized_diag})" if sanitized_diag else ""
         return f"Could not connect to the AI provider{diag}. Please verify network connectivity or gateway status."
     if isinstance(e, LLMModelUnavailableError):
-        return "The requested AI model is unavailable or unsupported by the provider."
+        return "The requested AI model is unavailable or no longer supported by the provider. Please select a supported model in Assistant settings."
     if isinstance(e, LLMToolCallUnsupportedError):
         return "This model couldn't complete the requested tool action. Please retry or choose a compatible model."
 
@@ -182,6 +185,7 @@ class AssistantRuntime:
         traffic_type: str = "internal",
         expected_assistant_id: Optional[uuid.UUID] = None,
         require_conversation_owner: bool = False,
+        model_override: Optional[str] = None,
     ) -> AsyncIterator[str]:
         """Stream an assistant response with citations via Server-Sent Events."""
         start_time = time.perf_counter()
@@ -211,6 +215,49 @@ class AssistantRuntime:
             yield format_sse("message_error", {"error": "Assistant not found or unauthorized"})
             return
 
+        # Resolve effective model and provider (support user in-chat model switching)
+        from app.llm.capabilities import get_model_capability_registry
+        cap_reg = get_model_capability_registry()
+
+        effective_provider = asst.llm_provider
+        effective_model = (model_override or asst.default_model or "auto").strip()
+        if model_override and model_override.strip().lower() != "auto":
+            clean_m = model_override.strip()
+            clean_lower = clean_m.lower()
+            if any(k in clean_lower for k in ("gpt-oss", "llama", "mixtral")):
+                effective_provider = "groq"
+            elif "gemini" in clean_lower:
+                effective_provider = "gemini"
+            elif any(k in clean_lower for k in ("gpt-4", "gpt-3.5", "o1", "o3")):
+                effective_provider = "openai"
+            elif "claude" in clean_lower:
+                effective_provider = "anthropic"
+
+            # Per-Turn Model Selector Security & Capability Validation
+            known_model = cap_reg.get_model(effective_provider, clean_m)
+            if not known_model:
+                # Try finding across all providers to avoid misrouting
+                matched = [m for m in cap_reg.list_all() if m.model_id.lower() == clean_lower]
+                if matched:
+                    effective_provider = matched[0].provider
+                    effective_model = matched[0].model_id
+                    known_model = matched[0]
+                else:
+                    err_msg = (
+                        f"The requested model '{model_override}' is not recognized or supported by provider '{effective_provider}'. "
+                        f"Please select a supported model from Assistant settings or chat controls."
+                    )
+                    yield format_sse("message_error", {"error": err_msg})
+                    return
+
+            if known_model and ("retired" in (known_model.description or "").lower() or "retired" in (known_model.display_name or "").lower()):
+                err_msg = (
+                    f"The model '{model_override}' has been retired by {effective_provider}. "
+                    f"Please select 'auto' or an active supported model."
+                )
+                yield format_sse("message_error", {"error": err_msg})
+                return
+
         policy_svc = ObservabilityPolicyService(self.session, self.tenant_id)
         policy = await policy_svc.get_policy()
 
@@ -222,8 +269,8 @@ class AssistantRuntime:
             conversation_id=conversation_id,
             traffic_type=traffic_type,
         )
-        trace.provider = asst.llm_provider
-        trace.model = asst.default_model or "auto"
+        trace.provider = effective_provider
+        trace.model = effective_model
         trace.retrieval_mode = asst.retrieval_mode or "hybrid"
         if policy.capture_mode == "REDACTED_PREVIEW":
             trace.set_previews(user_input=user_message, max_length=policy.max_preview_length)
@@ -260,7 +307,7 @@ class AssistantRuntime:
         self.session.add(user_msg)
         await self.session.commit()
 
-        # 3. Retrieve conversation history (up to last 10 messages)
+        # 3. Retrieve conversation history (up to 25 messages for comprehensive conversational recall)
         hist_stmt = (
             select(Message)
             .where(
@@ -268,13 +315,22 @@ class AssistantRuntime:
                 Message.tenant_id == self.tenant_id,
             )
             .order_by(Message.created_at.desc())
-            .limit(10)
+            .limit(25)
         )
         hist_rows = (await self.session.execute(hist_stmt)).scalars().all()
         conversation_history = [
             {"role": m.sender_type, "content": m.content}
             for m in reversed(hist_rows)
         ]
+
+        # Scan conversation history for shared URLs so follow-up questions retain link context
+        conversation_urls: list[str] = []
+        for m in hist_rows:
+            clean_m = re.sub(r"```[\s\S]*?```", "", m.content or "")
+            for u in re.findall(r"https?://[^\s<>'\"{}|\\^`]+", clean_m):
+                u_clean = u.rstrip(".,;!?)]}")
+                if u_clean not in conversation_urls:
+                    conversation_urls.append(u_clean)
 
         # 4. Revalidate & resolve connected Knowledge Bases
         kb_assoc_stmt = select(AssistantKnowledgeBase).where(
@@ -295,7 +351,7 @@ class AssistantRuntime:
         web_preflight_triggered = False
         web_preflight_notice: str | None = None
 
-        # 4a. Deterministic Explicit Web URL Preflight (M28.1 & M28.2)
+        # 4a. Deterministic Explicit Web URL Preflight (M28.1, M28.2 & M28.16)
         # If user explicitly asks to read or query a public URL, fetch it immediately to guarantee grounded context.
         # Strips code blocks and blockquotes so URLs in code snippets or quotes never trigger unwanted egress.
         if not is_public:
@@ -303,10 +359,24 @@ class AssistantRuntime:
             clean_msg_for_url = re.sub(r"`[^`]*`", "", clean_msg_for_url)
             clean_msg_for_url = re.sub(r"^>.*$", "", clean_msg_for_url, flags=re.MULTILINE)
             url_matches = re.findall(r"https?://[^\s<>'\"{}|\\^`]+", clean_msg_for_url)
+
+            target_url = None
             if url_matches:
                 target_url = url_matches[0].rstrip(".,;!?)]}")
+            elif conversation_urls:
                 lower_msg = user_message.lower()
-                # Treat any URL present in untrusted message as an explicit web reading request
+                # If user refers to an earlier link/URL without pasting it again
+                refers_to_past_link = any(
+                    kw in lower_msg
+                    for kw in ("link", "url", "website", "site", "webpage", "page", "w3schools", "earlier", "previous", "given", "shared")
+                )
+                if refers_to_past_link:
+                    matched_url = next((u for u in conversation_urls if any(d in lower_msg for d in ("w3schools", "github", "wikipedia", "arxiv")) and any(d in u.lower() for d in ("w3schools", "github", "wikipedia", "arxiv"))), None)
+                    target_url = matched_url or conversation_urls[0]
+
+            if target_url:
+                lower_msg = user_message.lower()
+                # Treat any URL present or referenced in untrusted message as an explicit web reading request
                 # unless explicitly commanded to ignore it
                 is_explicit_read = not bool(re.search(r"\b(?:don't|do not|ignore)\b.*\b(?:url|link|page|web)\b", lower_msg))
                 if is_explicit_read:
@@ -537,12 +607,13 @@ class AssistantRuntime:
         # Academic preflight results take precedence for paper search requests.
         if academic_search_chunks:
             if academic_search_comparison:
-                retrieved_results = academic_search_chunks + [
+                kb_comparison_chunks = [
                     r for r in retrieved_results
                     if (r.score is not None and r.score >= 0.70)
-                ]
+                ][:2]
+                retrieved_results = academic_search_chunks[:2] + kb_comparison_chunks
             else:
-                retrieved_results = academic_search_chunks
+                retrieved_results = academic_search_chunks[:3]
         elif explicit_web_chunks:
             lower_user_msg = user_message.lower()
             wants_comparison = any(
@@ -584,7 +655,7 @@ class AssistantRuntime:
         from app.llm.capabilities import get_model_capability_registry
 
         cap_reg = get_model_capability_registry()
-        model_cap = cap_reg.get_model(asst.llm_provider, asst.default_model or "auto")
+        model_cap = cap_reg.get_model(effective_provider, effective_model)
         if model_cap and not model_cap.supports_tools:
             raw_tools = []
 
@@ -599,6 +670,7 @@ class AssistantRuntime:
             current_user_message=user_message,
             retrieved_results=retrieved_results,
             max_context_tokens=asst.max_tokens * 3,
+            max_knowledge_tokens=1200,
             audience_level=getattr(asst, "audience_level", "general"),
             response_style=getattr(asst, "response_style", "balanced"),
             uncertainty_behavior=getattr(asst, "uncertainty_behavior", "admit"),
@@ -646,12 +718,12 @@ class AssistantRuntime:
             return
 
         # Strict BYOK policy: Never silently fall back to platform keys for commercial providers
-        resolved_key, resolved_base_url = await byok_svc.resolve_plaintext_key(asst.llm_provider)
-        if asst.llm_provider in ("openai", "anthropic", "gemini", "groq") and not resolved_key:
+        resolved_key, resolved_base_url = await byok_svc.resolve_plaintext_key(effective_provider)
+        if effective_provider in ("openai", "anthropic", "gemini", "groq") and not resolved_key:
             quota_svc.release_reservation(reservation_id)
             await quota_svc.release_reservation_async(reservation_id)
             err_msg = (
-                f"Provider '{asst.llm_provider}' is not configured with an active BYOK credential for this workspace. "
+                f"Provider '{effective_provider}' is not configured with an active BYOK credential for this workspace. "
                 f"Please add your API key under Providers & Keys."
             )
             trace.finish(status="FAILED", error=err_msg)
@@ -671,11 +743,11 @@ class AssistantRuntime:
 
         # 7. Stream tokens via LLM Provider
         llm_registry = get_llm_registry()
-        provider = llm_registry.get_provider(asst.llm_provider)
+        provider = llm_registry.get_provider(effective_provider)
 
         llm_config = LLMConfig(
-            provider=asst.llm_provider,
-            model=asst.default_model or "auto",
+            provider=effective_provider,
+            model=effective_model,
             temperature=asst.temperature,
             max_tokens=asst.max_tokens,
             api_key=resolved_key,
@@ -687,12 +759,13 @@ class AssistantRuntime:
         full_content_chunks: list[str] = []
         dynamic_citations: list[dict[str, Any]] = []
         gen_span = trace.start_span("provider_generation")
-        gen_span.set_attribute("provider", asst.llm_provider)
-        gen_span.set_attribute("model", asst.default_model or "auto")
+        gen_span.set_attribute("provider", effective_provider)
+        gen_span.set_attribute("model", effective_model)
         gen_span.set_attribute("tools_advertised", len(raw_tools))
         fallback_attempted = False
 
         agent_steps = 0
+        provider_reported_usage: Optional[dict[str, Any]] = None
 
         try:
             while agent_steps < max_agent_steps:
@@ -702,6 +775,8 @@ class AssistantRuntime:
 
                 try:
                     async for chunk in provider.generate_stream(messages, llm_config):
+                        if getattr(chunk, "usage", None):
+                            provider_reported_usage = chunk.usage
                         if chunk.tool_calls:
                             has_tool_call = True
                             pending_tool_calls.extend(chunk.tool_calls)
@@ -719,6 +794,8 @@ class AssistantRuntime:
                         llm_config.tool_choice = None
                         gen_span.set_attribute("fallback_recovered", True)
                         async for chunk in provider.generate_stream(messages, llm_config):
+                            if getattr(chunk, "usage", None):
+                                provider_reported_usage = chunk.usage
                             if chunk.content_delta:
                                 trace.mark_first_token()
                                 full_content_chunks.append(chunk.content_delta)
@@ -901,6 +978,14 @@ class AssistantRuntime:
             await quota_svc.release_reservation_async(reservation_id)
             logger.exception("LLM generation stream failed")
             safe_diag_err = sanitize_error_message(str(e))
+            if hasattr(e, "retry_after") and getattr(e, "retry_after", None) is not None:
+                gen_span.set_attribute("rate_limit_retry_after", e.retry_after)
+            if hasattr(e, "limit_type") and getattr(e, "limit_type", None) is not None:
+                gen_span.set_attribute("rate_limit_type", e.limit_type)
+            if hasattr(e, "model") and getattr(e, "model", None) is not None:
+                gen_span.set_attribute("effective_model", e.model)
+                trace.model = e.model
+
             gen_span.finish(status="FAILED", error=safe_diag_err)
             trace.finish(status="FAILED", error=safe_diag_err)
             trace.citation_count = 0
@@ -1000,13 +1085,22 @@ class AssistantRuntime:
 
         await self.session.commit()
 
-        # 9. Record Atomic Usage
+        # 9. Record Atomic Usage with Distinction between Provider-Reported and Estimated Tokens
         output_token_estimate = len(final_content.split())
+        actual_input = provider_reported_usage.get("prompt_tokens") if provider_reported_usage else None
+        actual_output = provider_reported_usage.get("completion_tokens") if provider_reported_usage else None
+        actual_total = provider_reported_usage.get("total_tokens") if provider_reported_usage else None
+        is_estimated = (actual_input is None or actual_output is None)
+
+        final_input_tokens = actual_input if actual_input is not None else input_token_estimate
+        final_output_tokens = actual_output if actual_output is not None else output_token_estimate
+        final_total_tokens = actual_total if actual_total is not None else (final_input_tokens + final_output_tokens)
+
         await quota_svc.record_usage(
-            provider_name=asst.llm_provider,
-            model_name=asst.default_model or "auto",
-            prompt_tokens=input_token_estimate,
-            completion_tokens=output_token_estimate,
+            provider_name=effective_provider,
+            model_name=effective_model,
+            prompt_tokens=final_input_tokens,
+            completion_tokens=final_output_tokens,
             assistant_id=asst.id,
             user_id=self.user_id,
             is_preview=False,
@@ -1023,20 +1117,23 @@ class AssistantRuntime:
                 output_text=final_content,
                 max_length=policy.max_preview_length,
             )
-        trace.input_tokens = input_token_estimate
-        trace.output_tokens = output_token_estimate
-        trace.total_tokens = input_token_estimate + output_token_estimate
-        trace.is_token_estimated = True
+        trace.input_tokens = final_input_tokens
+        trace.output_tokens = final_output_tokens
+        trace.total_tokens = final_total_tokens
+        trace.is_token_estimated = is_estimated
         trace.finish(status="COMPLETED")
         await tracer.persist_to_database(trace, session=self.session)
 
         yield format_sse(
             "usage",
             {
-                "input_tokens": sum(len(m.content.split()) for m in messages),
-                "output_tokens": len(final_content.split()),
+                "input_tokens": final_input_tokens,
+                "output_tokens": final_output_tokens,
+                "total_tokens": final_total_tokens,
                 "duration_ms": duration,
-                "model": asst.default_model,
+                "model": effective_model,
+                "provider": effective_provider,
+                "is_estimated": is_estimated,
                 "trace_id": trace.trace_id,
             },
         )
@@ -1157,6 +1254,7 @@ class AssistantRuntime:
             current_user_message=user_message,
             retrieved_results=retrieved_results,
             max_context_tokens=max_tokens * 3,
+            max_knowledge_tokens=1200,
             audience_level=audience_level,
             response_style=response_style,
             uncertainty_behavior=uncertainty_behavior,

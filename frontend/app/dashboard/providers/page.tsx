@@ -602,7 +602,7 @@ export default function ProvidersPage() {
                 >
                   <option value="groq">Groq (Ultra-Fast LPUs)</option>
                   <option value="anthropic">Anthropic (Claude 3.5 Sonnet / Haiku)</option>
-                  <option value="gemini">Google Gemini (1.5 Pro / Flash & 2.0)</option>
+                  <option value="gemini">Google Gemini (3.5 Flash-Lite & Flash)</option>
                   <option value="openai">OpenAI (Direct BYOK)</option>
                   <option value="omniroute">OmniRoute (Local Gateway)</option>
                 </select>

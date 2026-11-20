@@ -132,7 +132,7 @@ class OpenAICompatibleLLMProvider(LLMProvider):
             async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
                 resp = await client.post(url, headers=headers, json=payload)
                 if resp.status_code != 200:
-                    self._handle_http_error(resp.status_code, resp.text)
+                    self._handle_http_error(resp.status_code, resp.text, headers=resp.headers, model=config.model)
 
                 try:
                     data = resp.json()
@@ -225,6 +225,7 @@ class OpenAICompatibleLLMProvider(LLMProvider):
             "temperature": config.temperature,
             "max_tokens": config.max_tokens,
             "stream": True,
+            "stream_options": {"include_usage": True},
         }
         if config.tools:
             payload["tools"] = [
@@ -248,7 +249,12 @@ class OpenAICompatibleLLMProvider(LLMProvider):
                 async with client.stream("POST", url, headers=headers, json=payload) as resp:
                     if resp.status_code != 200:
                         err_body = await resp.aread()
-                        self._handle_http_error(resp.status_code, err_body.decode(errors="replace"))
+                        self._handle_http_error(
+                            resp.status_code,
+                            err_body.decode(errors="replace"),
+                            headers=resp.headers,
+                            model=config.model,
+                        )
 
                     async for line in resp.aiter_lines():
                         line = line.strip()
@@ -283,9 +289,21 @@ class OpenAICompatibleLLMProvider(LLMProvider):
                                     f"Provider '{self._name}' stream error: {err_msg}"
                                 )
 
+                            # Capture provider-reported actual token usage if available
+                            reported_usage = None
+                            if "usage" in chunk_data and isinstance(chunk_data["usage"], dict):
+                                u = chunk_data["usage"]
+                                reported_usage = {
+                                    "prompt_tokens": u.get("prompt_tokens"),
+                                    "completion_tokens": u.get("completion_tokens"),
+                                    "total_tokens": u.get("total_tokens"),
+                                }
+
                             choices = chunk_data.get("choices")
                             if not choices or not isinstance(choices, list) or len(choices) == 0:
-                                # Safe metadata/ping/usage frame; skip without failing
+                                # Usage-only final chunk from OpenAI/Groq stream_options
+                                if reported_usage:
+                                    yield LLMStreamChunk(content_delta="", usage=reported_usage)
                                 continue
 
                             choice = choices[0]
@@ -328,11 +346,12 @@ class OpenAICompatibleLLMProvider(LLMProvider):
                                         "arguments": parsed_args,
                                     })
 
-                            if content_delta or finish_reason or parsed_tool_calls:
+                            if content_delta or finish_reason or parsed_tool_calls or reported_usage:
                                 yield LLMStreamChunk(
                                     content_delta=content_delta,
                                     finish_reason=finish_reason,
                                     tool_calls=parsed_tool_calls,
+                                    usage=reported_usage,
                                 )
         except httpx.ConnectTimeout as e:
             raise LLMTimeoutError(f"Connection to provider '{self._name}' timed out") from e
@@ -343,8 +362,16 @@ class OpenAICompatibleLLMProvider(LLMProvider):
         except (httpx.RemoteProtocolError, httpx.StreamError) as e:
             raise LLMStreamInterruptedError(f"Connection to provider '{self._name}' was interrupted mid-stream: {e}") from e
 
-    def _handle_http_error(self, status_code: int, err_text: str):
-        """Map HTTP error status codes to normalized LLM exceptions."""
+    def _handle_http_error(
+        self,
+        status_code: int,
+        err_text: str,
+        headers: Optional[Any] = None,
+        model: Optional[str] = None,
+    ):
+        """Map HTTP error status codes to normalized LLM exceptions with structured metadata."""
+        import re
+
         detail = ""
         try:
             parsed = json.loads(err_text)
@@ -362,16 +389,80 @@ class OpenAICompatibleLLMProvider(LLMProvider):
 
         logger.error(f"Provider '{self._name}' returned HTTP {status_code}{detail}")
         d_lower = detail.lower()
+
         if status_code in (401, 403):
             raise LLMAuthenticationError(f"Authentication failed with provider '{self._name}' (HTTP {status_code}){detail}")
+
         if status_code == 429:
-            raise LLMRateLimitError(f"Rate limit exceeded on provider '{self._name}' (HTTP 429){detail}")
+            retry_after: Optional[float] = None
+            limit_type: Optional[str] = None
+
+            # 1. Attempt extracting from headers (e.g. Retry-After, x-ratelimit-reset-requests, x-ratelimit-reset-tokens)
+            if headers:
+                raw_ra = headers.get("retry-after") or headers.get("Retry-After")
+                if raw_ra:
+                    try:
+                        retry_after = float(raw_ra)
+                    except ValueError:
+                        pass
+                if not retry_after:
+                    raw_reset = headers.get("x-ratelimit-reset-requests") or headers.get("x-ratelimit-reset-tokens")
+                    if raw_reset:
+                        try:
+                            # Format could be seconds or timestamp
+                            val = float(raw_reset)
+                            if val < 3600:
+                                retry_after = val
+                        except ValueError:
+                            pass
+
+            # 2. Extract from error body message (e.g. Groq "Please try again in 19.9425s" or "try again in 500ms")
+            if not retry_after and err_text:
+                m_sec = re.search(r"try again in\s+([0-9.]+)\s*s\b", err_text, re.IGNORECASE)
+                if m_sec:
+                    try:
+                        retry_after = float(m_sec.group(1))
+                    except ValueError:
+                        pass
+                else:
+                    m_ms = re.search(r"try again in\s+([0-9.]+)\s*ms\b", err_text, re.IGNORECASE)
+                    if m_ms:
+                        try:
+                            retry_after = round(float(m_ms.group(1)) / 1000.0, 3)
+                        except ValueError:
+                            pass
+
+            # 3. Classify limit type: TPM (tokens per minute) or RPM (requests per minute)
+            if "tpm" in d_lower or "token" in d_lower or "tokens per minute" in d_lower:
+                limit_type = "TPM"
+            elif "rpm" in d_lower or "requests per minute" in d_lower or ("request" in d_lower and "requested" not in d_lower):
+                limit_type = "RPM"
+
+            raise LLMRateLimitError(
+                f"Rate limit exceeded on provider '{self._name}' (HTTP 429){detail}",
+                retry_after=retry_after,
+                limit_type=limit_type,
+                model=model,
+                provider=self._name,
+            )
+
         if "model" in d_lower and ("not found" in d_lower or "does not exist" in d_lower or "unsupported" in d_lower or "invalid" in d_lower):
-            raise LLMModelUnavailableError(f"Model unavailable on provider '{self._name}' (HTTP {status_code}){detail}")
+            raise LLMModelUnavailableError(
+                f"Model unavailable on provider '{self._name}' (HTTP {status_code}){detail}",
+                model=model,
+                provider=self._name,
+            )
+
         if ("tool" in d_lower or "function" in d_lower) and ("not supported" in d_lower or "unsupported" in d_lower or "choice" in d_lower or "none" in d_lower or "failed" in d_lower or "invalid" in d_lower):
             raise LLMToolCallUnsupportedError(f"Tools unsupported or tool choice conflict on provider '{self._name}' (HTTP {status_code}){detail}")
+
         if status_code == 404:
-            raise LLMProviderError(f"Provider '{self._name}' error (HTTP 404){detail or ' endpoint or model not found'}")
+            raise LLMModelUnavailableError(
+                f"Provider '{self._name}' endpoint or model not found (HTTP 404){detail}",
+                model=model,
+                provider=self._name,
+            )
+
         raise LLMProviderError(f"Provider '{self._name}' server error (HTTP {status_code}){detail}")
 
     async def validate_key(self, config: LLMConfig) -> bool:

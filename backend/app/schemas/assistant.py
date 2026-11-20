@@ -173,3 +173,4 @@ class ConversationResponse(BaseModel):
 
 class SendMessageRequest(BaseModel):
     content: str = Field(min_length=1, max_length=16000)
+    model: Optional[str] = Field(default=None, description="Optional model override for this chat turn")

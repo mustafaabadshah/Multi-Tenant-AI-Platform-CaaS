@@ -143,8 +143,8 @@ async def execute_academic_search_preflight(
         updated_date = r.get("updated_date")
         snippet = r.get("snippet") or ""
 
-        # Safe bounded abstract representation (up to 900 chars)
-        clean_abstract = snippet[:900].strip()
+        # Safe bounded abstract representation (up to 650 chars for free-tier token economy)
+        clean_abstract = snippet[:650].strip()
 
         date_line = f"Published: {pub_date}" + (f" (Updated: {updated_date})" if updated_date and updated_date != pub_date else "")
         content = (
