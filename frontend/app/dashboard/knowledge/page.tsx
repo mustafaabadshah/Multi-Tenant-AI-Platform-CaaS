@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import {
   api,
@@ -39,11 +40,29 @@ import RetrievalSettingsTab from "./RetrievalSettingsTab";
 import RetrievalPreviewTab from "./RetrievalPreviewTab";
 import IndexStatusTab from "./IndexStatusTab";
 
-export default function KnowledgePage() {
+function KnowledgePageContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const queryKbId = searchParams?.get("kbId") || null;
+
   const { activeWorkspace } = useAuth();
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBaseItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedKB, setSelectedKB] = useState<KnowledgeBaseItem | null>(null);
+  const [selectedKbId, setSelectedKbId] = useState<string | null>(queryKbId);
+
+  // Derive selectedKB from collection to prevent infinite reference identity loops
+  const selectedKB = useMemo(() => {
+    if (!selectedKbId) return null;
+    return knowledgeBases.find((k) => k.id === selectedKbId) || null;
+  }, [knowledgeBases, selectedKbId]);
+
+  // Synchronize browser history / URL query parameter
+  useEffect(() => {
+    if (queryKbId !== selectedKbId) {
+      setSelectedKbId(queryKbId);
+    }
+  }, [queryKbId]);
+
   const [kbTab, setKbTab] = useState<"documents" | "retrieval" | "preview" | "index">("documents");
 
   // Create KB Modal State
@@ -95,23 +114,19 @@ export default function KnowledgePage() {
   const [savingConfig, setSavingConfig] = useState(false);
   const [configSuccess, setConfigSuccess] = useState(false);
 
-  // Load KBs
+  // Load KBs (stable callback, zero selectedKB dependency)
   const loadKBs = useCallback(async () => {
     if (!activeWorkspace) return;
     setLoading(true);
     try {
       const data = await api.listKnowledgeBases();
       setKnowledgeBases(data);
-      if (selectedKB) {
-        const refreshed = data.find((k) => k.id === selectedKB.id);
-        if (refreshed) setSelectedKB(refreshed);
-      }
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
     }
-  }, [activeWorkspace, selectedKB]);
+  }, [activeWorkspace?.tenant_id]);
 
   // Load Documents for selected KB
   const loadDocuments = useCallback(async (kbId: string) => {
@@ -126,30 +141,48 @@ export default function KnowledgePage() {
     }
   }, []);
 
+  // Fetch KBs when workspace changes
   useEffect(() => {
     loadKBs();
-  }, [activeWorkspace, loadKBs]);
+  }, [activeWorkspace?.tenant_id, loadKBs]);
 
+  // Fetch documents whenever selectedKbId changes
   useEffect(() => {
-    if (selectedKB) {
-      loadDocuments(selectedKB.id);
+    if (selectedKbId) {
+      loadDocuments(selectedKbId);
+    } else {
+      setDocuments([]);
     }
-  }, [selectedKB, loadDocuments]);
+  }, [selectedKbId, loadDocuments]);
 
-  // Auto-poll if any documents are in QUEUED or PROCESSING state
+  // Bounded auto-polling: only runs while documents are actively QUEUED or PROCESSING
   useEffect(() => {
-    if (!selectedKB) return;
+    if (!selectedKbId) return;
     const hasActiveJobs = documents.some((d) => d.status === "QUEUED" || d.status === "PROCESSING");
     if (!hasActiveJobs) return;
 
-    const interval = setInterval(() => {
-      api.listDocuments(selectedKB.id).then((docs) => {
+    const timer = setTimeout(async () => {
+      try {
+        const docs = await api.listDocuments(selectedKbId);
         setDocuments(docs);
-      }).catch(console.error);
-    }, 2500);
+      } catch (err) {
+        console.error("Knowledge ingestion poll error:", err);
+      }
+    }, 3000);
 
-    return () => clearInterval(interval);
-  }, [selectedKB, documents]);
+    return () => clearTimeout(timer);
+  }, [selectedKbId, documents]);
+
+  // Navigation handlers
+  const handleSelectKB = (kb: KnowledgeBaseItem) => {
+    setSelectedKbId(kb.id);
+    router.push(`/dashboard/knowledge?kbId=${kb.id}`);
+  };
+
+  const handleBackToList = () => {
+    setSelectedKbId(null);
+    router.push("/dashboard/knowledge");
+  };
 
   // Handle Create KB
   const handleCreateKB = async (e: React.FormEvent) => {
@@ -187,11 +220,10 @@ export default function KnowledgePage() {
     setSavingEditKB(true);
     setEditKbError(null);
     try {
-      const updated = await api.updateKnowledgeBase(selectedKB.id, {
+      await api.updateKnowledgeBase(selectedKB.id, {
         name: editKbName.trim(),
         description: editKbDescription.trim() || undefined,
       });
-      setSelectedKB(updated);
       setShowEditModal(false);
       await loadKBs();
     } catch (err: unknown) {
@@ -207,7 +239,7 @@ export default function KnowledgePage() {
     if (!confirm(`Are you sure you want to permanently delete knowledge base "${selectedKB.name}"? All associated documents and chunks will be removed.`)) return;
     try {
       await api.deleteKnowledgeBase(selectedKB.id);
-      setSelectedKB(null);
+      handleBackToList();
       await loadKBs();
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : "Failed to delete knowledge base");
@@ -443,7 +475,7 @@ export default function KnowledgePage() {
               {knowledgeBases.map((kb) => (
                 <div
                   key={kb.id}
-                  onClick={() => setSelectedKB(kb)}
+                  onClick={() => handleSelectKB(kb)}
                   className="p-5 rounded-2xl bg-white border border-gray-200 flex flex-col justify-between hover:border-amber-500/50 hover:shadow-md transition cursor-pointer group shadow-xs"
                 >
                   <div>
@@ -485,7 +517,7 @@ export default function KnowledgePage() {
             <div className="flex items-center gap-3">
               <button
                 type="button"
-                onClick={() => setSelectedKB(null)}
+                onClick={handleBackToList}
                 className="p-2 rounded-xl bg-white hover:bg-gray-50 text-gray-600 hover:text-gray-900 border border-gray-200 transition cursor-pointer shadow-xs"
                 title="Back to all Knowledge Bases"
               >
@@ -1454,5 +1486,22 @@ function docHistoryTabContent(docHistory: IngestionEventItem[]) {
         </div>
       )}
     </div>
+  );
+}
+
+export default function KnowledgePage() {
+  return (
+    <React.Suspense
+      fallback={
+        <div className="flex h-screen items-center justify-center bg-gray-50">
+          <div className="flex flex-col items-center gap-2">
+            <Loader2 className="w-6 h-6 animate-spin text-amber-600" />
+            <span className="text-xs text-gray-500">Loading knowledge bases...</span>
+          </div>
+        </div>
+      }
+    >
+      <KnowledgePageContent />
+    </React.Suspense>
   );
 }

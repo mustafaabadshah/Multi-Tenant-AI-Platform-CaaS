@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.assistant_runtime.context import build_rag_context, normalize_markdown
 from app.llm import LLMConfig, get_llm_registry
-from app.llm.base import LLMMessage
+from app.llm.base import LLMMessage, LLMToolCallUnsupportedError
 from app.models.assistant import Assistant, AssistantKnowledgeBase
 from app.models.conversation import Conversation, Message, MessageCitation
 from app.models.knowledge import KnowledgeBase
@@ -74,7 +74,7 @@ def format_user_facing_error(e: Exception, sanitized_diag: str = "") -> str:
     if isinstance(e, LLMModelUnavailableError):
         return "The requested AI model is unavailable or unsupported by the provider."
     if isinstance(e, LLMToolCallUnsupportedError):
-        return "The configured model does not support tool/function calling."
+        return "This model couldn't complete the requested tool action. Please retry or choose a compatible model."
 
     err_str = str(e)
     if "choices" in err_str or isinstance(e, KeyError):
@@ -287,6 +287,11 @@ class AssistantRuntime:
         retrieved_results: list[VectorSearchResult] = []
         citations_data: list[dict[str, Any]] = []
         explicit_web_chunks: list[VectorSearchResult] = []
+        academic_search_chunks: list[VectorSearchResult] = []
+        academic_search_triggered = False
+        academic_search_query = ""
+        academic_search_comparison = False
+        request_execution_ledger: dict[str, Any] = {}
         web_preflight_triggered = False
         web_preflight_notice: str | None = None
 
@@ -389,6 +394,47 @@ class AssistantRuntime:
                             "error": str(pre_err),
                         })
 
+        # 4a2. Deterministic Academic Literature Preflight (M28.12)
+        # If user explicitly asks to search for papers, arXiv preprints, or academic studies,
+        # fetch preprints immediately via arXiv so all models (even non-tool models) have verified literature context.
+        if not is_public and not web_preflight_triggered:
+            from app.services.research.academic_search import (
+                detect_academic_search_intent,
+                execute_academic_search_preflight,
+            )
+            is_acad, acad_query, acad_comp, acad_recent = detect_academic_search_intent(user_message)
+            if is_acad and acad_query:
+                academic_search_triggered = True
+                academic_search_query = acad_query
+                academic_search_comparison = acad_comp
+                request_execution_ledger["academic_search"] = acad_query
+                yield format_sse("academic_search_started", {
+                    "query": acad_query,
+                    "comparison": acad_comp,
+                    "recent": acad_recent,
+                })
+                try:
+                    acad_chunks = await execute_academic_search_preflight(
+                        query=acad_query,
+                        tenant_id=self.tenant_id,
+                        wants_recent=acad_recent,
+                        max_results=4,
+                    )
+                    academic_search_chunks.extend(acad_chunks)
+                    for ac in acad_chunks:
+                        yield format_sse("web_source_discovered", {
+                            "url": ac.document_id,
+                            "title": ac.document_title,
+                            "domain": "arxiv.org",
+                            "status": "SUCCESS",
+                        })
+                    yield format_sse("academic_search_completed", {
+                        "query": acad_query,
+                        "paper_count": len(acad_chunks),
+                    })
+                except Exception as acad_err:
+                    logger.warning(f"Error in academic search preflight: {acad_err}")
+
         if candidate_kb_ids:
             yield format_sse(
                 "retrieval_start",
@@ -487,10 +533,17 @@ class AssistantRuntime:
             except Exception as web_err:
                 logger.warning(f"Error loading conversation web context: {web_err}")
 
-        # 4d. Source-Aware Grounding & Citation Filtering (M28.1 & M28.2)
-        # For explicit webpage requests, requested web content is the primary context.
-        # Only retain KB documents if user explicitly requested comparison or document retrieval.
-        if explicit_web_chunks:
+        # 4d. Source-Aware Grounding & Citation Filtering (M28.1, M28.2 & M28.12)
+        # Academic preflight results take precedence for paper search requests.
+        if academic_search_chunks:
+            if academic_search_comparison:
+                retrieved_results = academic_search_chunks + [
+                    r for r in retrieved_results
+                    if (r.score is not None and r.score >= 0.70)
+                ]
+            else:
+                retrieved_results = academic_search_chunks
+        elif explicit_web_chunks:
             lower_user_msg = user_message.lower()
             wants_comparison = any(
                 w in lower_user_msg
@@ -514,6 +567,27 @@ class AssistantRuntime:
                     if (r.score is not None and r.score >= 0.75)
                 ]
 
+        # Resolve enabled tools for active assistant configuration before context assembly
+        tools_cfg = asst.tools_config or {}
+        enabled_ids = tools_cfg.get("enabled_tool_ids")
+        max_agent_steps = int(tools_cfg.get("max_execution_steps", 5))
+        require_approval_all = bool(tools_cfg.get("require_approval_all", False))
+
+        tool_svc = ToolRegistryService(self.session, self.tenant_id, user_id=self.user_id)
+        raw_tools = await tool_svc.list_tools()
+        if enabled_ids is not None:
+            raw_tools = [
+                t for t in raw_tools
+                if t["id"] in enabled_ids or t["name"] in enabled_ids or f"builtin_{t['name']}" in enabled_ids
+            ]
+
+        from app.llm.capabilities import get_model_capability_registry
+
+        cap_reg = get_model_capability_registry()
+        model_cap = cap_reg.get_model(asst.llm_provider, asst.default_model or "auto")
+        if model_cap and not model_cap.supports_tools:
+            raw_tools = []
+
         # 5. Assemble Context & Citations with 4-Tier Trust Hierarchy
         # Filter candidate results for substantive relevance to the user query
         retrieved_results = filter_substantive_relevance(user_message, retrieved_results)
@@ -530,6 +604,7 @@ class AssistantRuntime:
             uncertainty_behavior=getattr(asst, "uncertainty_behavior", "admit"),
             citation_style=getattr(asst, "citation_style", "strict"),
             web_notice=web_preflight_notice,
+            tools_enabled=bool(raw_tools),
         )
         ctx_span.set_attribute("candidates", len(citations_data))
         ctx_span.finish()
@@ -605,36 +680,17 @@ class AssistantRuntime:
             max_tokens=asst.max_tokens,
             api_key=resolved_key,
             base_url=resolved_base_url,
+            tools=raw_tools,
+            tool_choice="auto" if raw_tools else None,
         )
-
-        # Resolve enabled tools for active assistant configuration
-        tools_cfg = asst.tools_config or {}
-        enabled_ids = tools_cfg.get("enabled_tool_ids")
-        max_agent_steps = int(tools_cfg.get("max_execution_steps", 5))
-        require_approval_all = bool(tools_cfg.get("require_approval_all", False))
-
-        tool_svc = ToolRegistryService(self.session, self.tenant_id, user_id=self.user_id)
-        raw_tools = await tool_svc.list_tools()
-        if enabled_ids is not None:
-            raw_tools = [
-                t for t in raw_tools
-                if t["id"] in enabled_ids or t["name"] in enabled_ids or f"builtin_{t['name']}" in enabled_ids
-            ]
-
-        from app.llm.capabilities import get_model_capability_registry
-
-        cap_reg = get_model_capability_registry()
-        model_cap = cap_reg.get_model(asst.llm_provider, asst.default_model or "auto")
-        if model_cap and not model_cap.supports_tools:
-            raw_tools = []
-
-        llm_config.tools = raw_tools
 
         full_content_chunks: list[str] = []
         dynamic_citations: list[dict[str, Any]] = []
         gen_span = trace.start_span("provider_generation")
         gen_span.set_attribute("provider", asst.llm_provider)
         gen_span.set_attribute("model", asst.default_model or "auto")
+        gen_span.set_attribute("tools_advertised", len(raw_tools))
+        fallback_attempted = False
 
         agent_steps = 0
 
@@ -644,30 +700,86 @@ class AssistantRuntime:
                 has_tool_call = False
                 pending_tool_calls = []
 
-                async for chunk in provider.generate_stream(messages, llm_config):
-                    if chunk.tool_calls:
-                        has_tool_call = True
-                        pending_tool_calls.extend(chunk.tool_calls)
-                    elif chunk.content_delta:
-                        trace.mark_first_token()
-                        full_content_chunks.append(chunk.content_delta)
-                        yield format_sse("token", {"delta": chunk.content_delta})
+                try:
+                    async for chunk in provider.generate_stream(messages, llm_config):
+                        if chunk.tool_calls:
+                            has_tool_call = True
+                            pending_tool_calls.extend(chunk.tool_calls)
+                        elif chunk.content_delta:
+                            trace.mark_first_token()
+                            full_content_chunks.append(chunk.content_delta)
+                            yield format_sse("token", {"delta": chunk.content_delta})
+                except LLMToolCallUnsupportedError as tc_err:
+                    logger.warning(f"Provider tool-choice conflict or unsupported tools for trace {trace.trace_id}: {tc_err}")
+                    gen_span.set_attribute("tool_choice_error", str(tc_err))
+                    if llm_config.tools and not fallback_attempted:
+                        fallback_attempted = True
+                        logger.info("Executing safe fallback retry with tools disabled...")
+                        llm_config.tools = None
+                        llm_config.tool_choice = None
+                        gen_span.set_attribute("fallback_recovered", True)
+                        async for chunk in provider.generate_stream(messages, llm_config):
+                            if chunk.content_delta:
+                                trace.mark_first_token()
+                                full_content_chunks.append(chunk.content_delta)
+                                yield format_sse("token", {"delta": chunk.content_delta})
+                        break
+                    else:
+                        raise
 
                 if not has_tool_call:
                     break
+
+                # Append assistant message with tool_calls for valid OpenAI/Groq multi-turn schema
+                messages.append(LLMMessage(
+                    role="assistant",
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": tc.get("id", f"call_{tc_idx}"),
+                            "type": "function",
+                            "function": {
+                                "name": tc.get("name"),
+                                "arguments": json.dumps(tc.get("arguments", {})) if isinstance(tc.get("arguments"), dict) else str(tc.get("arguments", "")),
+                            },
+                        }
+                        for tc_idx, tc in enumerate(pending_tool_calls)
+                    ],
+                ))
 
                 pause_for_approval = False
                 for tc in pending_tool_calls:
                     tc_name = tc.get("name")
                     tc_args = tc.get("arguments", {})
+                    tc_id = tc.get("id")
                     yield format_sse("tool_call_proposed", {"tool_name": tc_name, "arguments": tc_args})
 
                     tool_def = next((t for t in raw_tools if t["name"] == tc_name), None)
-                    requires_approval = False
-                    risk_level = "READ_ONLY"
-                    if tool_def:
-                        requires_approval = tool_def.get("requires_approval", False)
-                        risk_level = tool_def.get("risk_level", "READ_ONLY")
+                    if not tool_def:
+                        logger.warning(f"Rejecting unregistered or unauthorized tool '{tc_name}' for tenant {self.tenant_id}")
+                        yield format_sse("tool_call_failed", {
+                            "tool_name": tc_name,
+                            "error": f"Tool '{tc_name}' is not registered or not permitted.",
+                        })
+                        messages.append(LLMMessage(role="tool", content=f"Error: Tool '{tc_name}' is not registered or not permitted.", tool_call_id=tc_id))
+                        continue
+
+                    # Avoid duplicate academic search if preflight already executed it
+                    if tc_name == "web_search" and "academic_search" in request_execution_ledger:
+                        search_q = tc_args.get("query", "").lower()
+                        prev_q = request_execution_ledger["academic_search"].lower()
+                        if not search_q or search_q in prev_q or prev_q in search_q or any(w in search_q for w in prev_q.split()):
+                            logger.info(f"Skipping duplicate academic search tool execution for '{search_q}'.")
+                            summary = json.dumps({
+                                "status": "ALREADY_COMPLETED",
+                                "message": f"Academic search for '{request_execution_ledger['academic_search']}' has already been executed and verified preprint literature is provided in the knowledge base context. Please synthesize using the provided literature.",
+                            })
+                            yield format_sse("tool_call_completed", {"tool_name": tc_name, "result_summary": "Preflight search results already in context"})
+                            messages.append(LLMMessage(role="tool", content=summary, tool_call_id=tc_id))
+                            continue
+
+                    requires_approval = tool_def.get("requires_approval", False)
+                    risk_level = tool_def.get("risk_level", "READ_ONLY")
 
                     if requires_approval or risk_level in ("WRITE", "HIGH_RISK") or require_approval_all:
                         approval_svc = ToolApprovalService(self.session, self.tenant_id)
@@ -675,7 +787,7 @@ class AssistantRuntime:
                             conversation_id=conversation_id,
                             assistant_id=asst.id,
                             user_id=self.user_id,
-                            tool_id=tool_def["id"] if tool_def else tc_name,
+                            tool_id=tool_def["id"],
                             tool_name=tc_name,
                             arguments=tc_args,
                         )
@@ -694,7 +806,7 @@ class AssistantRuntime:
                     yield format_sse("tool_call_started", {"tool_name": tc_name})
                     t_start = time.perf_counter()
                     try:
-                        tool_id_to_run = tool_def["id"] if tool_def else tc_name
+                        tool_id_to_run = tool_def["id"]
                         exec_result = await tool_svc.execute_tool(tool_id_to_run, tc_args)
                         duration_ms = int((time.perf_counter() - t_start) * 1000)
                         summary = json.dumps(exec_result.get("data", exec_result)) if isinstance(exec_result, dict) else str(exec_result)
@@ -707,7 +819,7 @@ class AssistantRuntime:
                             trace_id=trace.trace_id,
                             tool_id=tool_id_to_run,
                             tool_name=tc_name,
-                            tool_type=tool_def.get("tool_type", "CUSTOM") if tool_def else "BUILTIN",
+                            tool_type=tool_def.get("tool_type", "CUSTOM"),
                             arguments=tc_args,
                             result_summary=summary[:1000],
                             status="SUCCESS",
@@ -717,7 +829,7 @@ class AssistantRuntime:
                         await self.session.commit()
 
                         yield format_sse("tool_call_completed", {"tool_name": tc_name, "result_summary": summary[:500]})
-                        messages.append(LLMMessage(role="tool", content=summary))
+                        messages.append(LLMMessage(role="tool", content=summary, tool_call_id=tc_id))
 
                         # M27: Web Source Discovered Hook
                         if tc_name == "web_read_url" and isinstance(exec_result, dict) and exec_result.get("status") == "SUCCESS":
@@ -766,7 +878,7 @@ class AssistantRuntime:
                         duration_ms = int((time.perf_counter() - t_start) * 1000)
                         err_msg = str(t_err)
                         yield format_sse("tool_call_failed", {"tool_name": tc_name, "error": err_msg})
-                        messages.append(LLMMessage(role="tool", content=f"Error executing {tc_name}: {err_msg}"))
+                        messages.append(LLMMessage(role="tool", content=f"Error executing {tc_name}: {err_msg}", tool_call_id=tc_id))
 
                 if pause_for_approval:
                     break

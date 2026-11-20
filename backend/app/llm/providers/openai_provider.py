@@ -2,7 +2,7 @@ import json
 import logging
 import os
 from collections.abc import AsyncIterator
-from typing import Optional
+from typing import Any, Optional
 
 import httpx
 
@@ -82,6 +82,17 @@ class OpenAICompatibleLLMProvider(LLMProvider):
             return os.environ.get("OMNIROUTE_API_KEY") or os.environ.get("OPENAI_API_KEY") or ""
         return os.environ.get("OPENAI_API_KEY", "")
 
+    def _format_messages_payload(self, messages: list[LLMMessage]) -> list[dict[str, Any]]:
+        formatted: list[dict[str, Any]] = []
+        for m in messages:
+            msg: dict[str, Any] = {"role": m.role, "content": m.content}
+            if getattr(m, "tool_call_id", None):
+                msg["tool_call_id"] = m.tool_call_id
+            if getattr(m, "tool_calls", None):
+                msg["tool_calls"] = m.tool_calls
+            formatted.append(msg)
+        return formatted
+
     async def generate(self, messages: list[LLMMessage], config: LLMConfig) -> LLMResponse:
         api_key = self._resolve_api_key(config)
         if not api_key:
@@ -97,7 +108,7 @@ class OpenAICompatibleLLMProvider(LLMProvider):
         }
         payload = {
             "model": config.model or "auto",
-            "messages": [{"role": m.role, "content": m.content} for m in messages],
+            "messages": self._format_messages_payload(messages),
             "temperature": config.temperature,
             "max_tokens": config.max_tokens,
             "stream": False,
@@ -114,6 +125,7 @@ class OpenAICompatibleLLMProvider(LLMProvider):
                 }
                 for t in config.tools
             ]
+            payload["tool_choice"] = getattr(config, "tool_choice", None) or "auto"
 
         timeout = httpx.Timeout(connect=10.0, read=config.timeout_seconds, write=10.0, pool=10.0)
         try:
@@ -209,7 +221,7 @@ class OpenAICompatibleLLMProvider(LLMProvider):
         }
         payload = {
             "model": config.model or "auto",
-            "messages": [{"role": m.role, "content": m.content} for m in messages],
+            "messages": self._format_messages_payload(messages),
             "temperature": config.temperature,
             "max_tokens": config.max_tokens,
             "stream": True,
@@ -226,6 +238,7 @@ class OpenAICompatibleLLMProvider(LLMProvider):
                 }
                 for t in config.tools
             ]
+            payload["tool_choice"] = getattr(config, "tool_choice", None) or "auto"
 
         timeout = httpx.Timeout(connect=10.0, read=config.timeout_seconds, write=10.0, pool=10.0)
         accumulated_tool_calls: dict[int, dict[str, Any]] = {}
@@ -257,6 +270,15 @@ class OpenAICompatibleLLMProvider(LLMProvider):
                             if "error" in chunk_data:
                                 err_obj = chunk_data["error"]
                                 err_msg = err_obj.get("message") if isinstance(err_obj, dict) else str(err_obj)
+                                msg_lower = err_msg.lower()
+                                if (
+                                    "tool choice is none" in msg_lower
+                                    or "tool_use_failed" in msg_lower
+                                    or ("tool" in msg_lower and ("not supported" in msg_lower or "unsupported" in msg_lower or "conflict" in msg_lower or "invalid" in msg_lower or "choice" in msg_lower))
+                                ):
+                                    raise LLMToolCallUnsupportedError(
+                                        f"Provider '{self._name}' stream error: {err_msg}"
+                                    )
                                 raise LLMStreamInterruptedError(
                                     f"Provider '{self._name}' stream error: {err_msg}"
                                 )
@@ -346,8 +368,8 @@ class OpenAICompatibleLLMProvider(LLMProvider):
             raise LLMRateLimitError(f"Rate limit exceeded on provider '{self._name}' (HTTP 429){detail}")
         if "model" in d_lower and ("not found" in d_lower or "does not exist" in d_lower or "unsupported" in d_lower or "invalid" in d_lower):
             raise LLMModelUnavailableError(f"Model unavailable on provider '{self._name}' (HTTP {status_code}){detail}")
-        if "tool" in d_lower and ("not supported" in d_lower or "unsupported" in d_lower or "function" in d_lower):
-            raise LLMToolCallUnsupportedError(f"Tools unsupported on provider '{self._name}' (HTTP {status_code}){detail}")
+        if ("tool" in d_lower or "function" in d_lower) and ("not supported" in d_lower or "unsupported" in d_lower or "choice" in d_lower or "none" in d_lower or "failed" in d_lower or "invalid" in d_lower):
+            raise LLMToolCallUnsupportedError(f"Tools unsupported or tool choice conflict on provider '{self._name}' (HTTP {status_code}){detail}")
         if status_code == 404:
             raise LLMProviderError(f"Provider '{self._name}' error (HTTP 404){detail or ' endpoint or model not found'}")
         raise LLMProviderError(f"Provider '{self._name}' server error (HTTP {status_code}){detail}")

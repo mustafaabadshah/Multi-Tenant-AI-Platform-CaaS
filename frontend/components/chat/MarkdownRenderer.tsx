@@ -169,12 +169,13 @@ function parseBlocks(markdown: string): BlockType[] {
   while (i < lines.length) {
     const line = lines[i];
 
-    // Fenced code block
-    if (line.startsWith("```")) {
-      const lang = line.slice(3).trim();
+    // Fenced code block (handles whitespace before backticks)
+    if (line.trim().startsWith("```")) {
+      const trimmed = line.trim();
+      const lang = trimmed.slice(3).trim();
       const codeLines: string[] = [];
       i++;
-      while (i < lines.length && !lines[i].startsWith("```")) {
+      while (i < lines.length && !lines[i].trim().startsWith("```")) {
         codeLines.push(lines[i]);
         i++;
       }
@@ -405,6 +406,38 @@ function InlineView({
   );
 }
 
+function CodeBlockView({ lang, code }: { lang: string; code: string }) {
+  const [copied, setCopied] = React.useState(false);
+
+  const handleCopy = () => {
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(code).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      });
+    }
+  };
+
+  return (
+    <div className="my-3 rounded-lg overflow-hidden border border-gray-700/60 bg-gray-900 shadow-xs">
+      <div className="flex items-center justify-between px-3.5 py-1.5 bg-gray-800 text-xs text-gray-300 font-mono select-none border-b border-gray-700/40">
+        <span className="font-semibold text-gray-200">{lang || "code"}</span>
+        <button
+          type="button"
+          onClick={handleCopy}
+          aria-label="Copy code snippet to clipboard"
+          className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] text-gray-300 hover:text-white hover:bg-gray-700 transition-colors cursor-pointer"
+        >
+          {copied ? "Copied!" : "Copy"}
+        </button>
+      </div>
+      <pre className="p-3.5 text-xs font-mono overflow-x-auto text-gray-100 whitespace-pre leading-relaxed">
+        <code>{code}</code>
+      </pre>
+    </div>
+  );
+}
+
 function BlockView({
   block,
   citations,
@@ -486,18 +519,7 @@ function BlockView({
       );
 
     case "code_block":
-      return (
-        <div className="my-3 rounded-lg overflow-hidden border border-gray-200">
-          {block.lang && (
-            <div className="px-3 py-1.5 bg-gray-800 text-xs text-gray-400 font-mono">
-              {block.lang}
-            </div>
-          )}
-          <pre className="p-3 text-xs font-mono overflow-x-auto bg-gray-900 text-gray-100 whitespace-pre">
-            {block.code}
-          </pre>
-        </div>
-      );
+      return <CodeBlockView lang={block.lang} code={block.code} />;
 
     case "hr":
       return <hr className="my-3 border-gray-200" />;

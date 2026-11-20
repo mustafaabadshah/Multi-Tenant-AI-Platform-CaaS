@@ -525,6 +525,13 @@ async def promote_attachment(
     if not conv or conv.status == "DELETED" or (not ctx.is_admin and conv.user_id != current_user.id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
 
+    if payload.knowledge_base_id and payload.target_knowledge_base_id:
+        if payload.knowledge_base_id != payload.target_knowledge_base_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Conflicting target Knowledge Base IDs provided in payload",
+            )
+
     target_kb = payload.knowledge_base_id or payload.target_knowledge_base_id
     if not target_kb:
         raise HTTPException(

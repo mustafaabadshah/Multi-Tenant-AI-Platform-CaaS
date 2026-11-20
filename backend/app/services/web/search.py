@@ -201,8 +201,17 @@ class ArxivSearchProvider(WebSearchProvider):
             "sortOrder": "descending",
         }
 
+        contact_email = os.environ.get("ARXIV_CONTACT_EMAIL", "").strip()
+        custom_ua = os.environ.get("ARXIV_USER_AGENT", "").strip()
+        if custom_ua:
+            user_agent = custom_ua
+        elif contact_email:
+            user_agent = f"MultiTenantAIPlatform/1.0 (academic search; terms-compliant; mailto:{contact_email})"
+        else:
+            user_agent = "MultiTenantAIPlatform/1.0 (academic search; terms-compliant; https://github.com/mustafaabadshah/Multi-Tenant-AI-Platform-CaaS)"
+
         headers = {
-            "User-Agent": "MultiTenantAIPlatform/1.0 (academic search; terms-compliant; mailto:platform-admin@example.org)",
+            "User-Agent": user_agent,
             "Accept": "application/atom+xml",
         }
 

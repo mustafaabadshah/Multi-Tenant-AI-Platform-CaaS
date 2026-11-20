@@ -52,6 +52,7 @@ import {
   Bookmark,
   Upload,
   AlertCircle,
+  CheckCircle2,
   FileUp,
   Globe,
   Activity,
@@ -409,6 +410,19 @@ function ConversationsContent() {
     return assistants.find((a) => a.id === activeConversation.assistant_id) || null;
   }, [activeConversation, assistants]);
 
+  // Assistant connected Knowledge Bases vs other workspace KBs
+  const connectedKbIds = useMemo(() => {
+    return activeAssistant?.connected_kb_ids || [];
+  }, [activeAssistant]);
+
+  const connectedKBs = useMemo(() => {
+    return knowledgeBases.filter((kb) => connectedKbIds.includes(kb.id));
+  }, [knowledgeBases, connectedKbIds]);
+
+  const otherKBs = useMemo(() => {
+    return knowledgeBases.filter((kb) => !connectedKbIds.includes(kb.id));
+  }, [knowledgeBases, connectedKbIds]);
+
   // Filtered conversations
   const filteredConversations = useMemo(() => {
     return conversations.filter((c) => {
@@ -516,14 +530,30 @@ function ConversationsContent() {
     }
   };
 
-  // M22: Promote Attachment Handler
+  // M22 / M28.13: Save to Knowledge Handlers with Deterministic Destination Policy
+  const handleOpenSaveAttachment = (att: ConversationAttachmentItem) => {
+    setPromoteAttachment(att);
+    setPromoteTitle(att.filename || (att as any).original_filename || "");
+    if (connectedKBs.length === 1) {
+      // Case A: Exactly one connected KB -> preselect it
+      setTargetKbId(connectedKBs[0].id);
+    } else {
+      // Case B (multiple) or Case C (no connected KBs) -> require explicit destination selection
+      setTargetKbId("");
+    }
+  };
+
   const handleOpenSaveWebSource = (cit: MessageCitationItem) => {
     setSaveWebCitation(cit);
     setSaveWebTitle(cit.document_name || "");
     setSaveWebMode("REFERENCE");
     setSaveWebNotes("");
-    if (knowledgeBases.length > 0) {
-      setSaveWebKbId(knowledgeBases[0].id);
+    if (connectedKBs.length === 1) {
+      // Case A: Exactly one connected KB -> preselect it
+      setSaveWebKbId(connectedKBs[0].id);
+    } else {
+      // Case B (multiple) or Case C (no connected KBs) -> require explicit destination selection
+      setSaveWebKbId("");
     }
   };
 
@@ -533,7 +563,7 @@ function ConversationsContent() {
     try {
       const url = saveWebCitation.source_url || (saveWebCitation.document_name.startsWith("http") ? saveWebCitation.document_name : "");
       if (!url) {
-        alert("No valid URL found for this web source.");
+        setErrorMessage("No valid URL found for this web source.");
         return;
       }
       await api.saveWebSourceToKB(
@@ -543,13 +573,14 @@ function ConversationsContent() {
         saveWebMode,
         saveWebNotes.trim() || undefined
       );
-      alert("Web source successfully saved to Knowledge Base!");
       setSaveWebCitation(null);
+      setSaveWebKbId("");
       setSaveWebTitle("");
       setSaveWebNotes("");
+      setErrorMessage(null);
     } catch (err: any) {
       console.error("Failed to save web source to KB", err);
-      alert(`Failed to save to Knowledge Base: ${err.message}`);
+      setErrorMessage(err.message || "Failed to save web source to Knowledge Base.");
     } finally {
       setIsSavingWebSource(false);
     }
@@ -581,6 +612,7 @@ function ConversationsContent() {
       setPromoteAttachment(null);
       setTargetKbId("");
       setPromoteTitle("");
+      setErrorMessage(null);
     } catch (err: any) {
       console.error("Failed to promote attachment", err);
       setErrorMessage(err.message || "Failed to promote document to Knowledge Base.");
@@ -1798,27 +1830,24 @@ function ConversationsContent() {
                         </span>
                       )}
 
-                      {/* Promote to KB action */}
+                      {/* Save to Knowledge action */}
                       {att.is_promoted ? (
-                        <span className="text-[10px] flex items-center gap-0.5 text-blue-600 font-medium" title="Promoted to Knowledge Base">
-                          <Check size={11} />
-                          <span>Saved to KB</span>
+                        <span
+                          className="text-[10px] flex items-center gap-1 text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded font-medium border border-emerald-200/60"
+                          title={`Saved to ${knowledgeBases.find((k) => k.id === att.promoted_knowledge_base_id)?.name || "Knowledge Base"}`}
+                        >
+                          <Check size={11} className="text-emerald-600" />
+                          <span>Saved to {knowledgeBases.find((k) => k.id === att.promoted_knowledge_base_id)?.name || "Knowledge Base"}</span>
                         </span>
                       ) : (
                         <button
                           type="button"
-                          onClick={() => {
-                            setPromoteAttachment(att);
-                            setPromoteTitle(att.filename || (att as any).original_filename || "");
-                            if (knowledgeBases.length > 0) {
-                              setTargetKbId(knowledgeBases[0].id);
-                            }
-                          }}
-                          className="text-[11px] text-blue-600 hover:text-blue-800 font-medium hover:underline flex items-center gap-0.5"
-                          title="Promote document to Knowledge Base"
+                          onClick={() => handleOpenSaveAttachment(att)}
+                          className="text-[11px] text-blue-600 hover:text-blue-800 font-medium hover:underline flex items-center gap-0.5 cursor-pointer"
+                          title="Save document to Knowledge Base"
                         >
                           <Bookmark size={11} />
-                          <span>Save to KB</span>
+                          <span>Save to Knowledge</span>
                         </button>
                       )}
 
@@ -2430,25 +2459,71 @@ function ConversationsContent() {
             </div>
 
             <div className="space-y-2">
-              <label className="block text-xs font-medium text-gray-700">
-                Destination Knowledge Base
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-medium text-gray-700">
+                  Destination Knowledge Base
+                </label>
+                {activeAssistant && (
+                  <span className="text-[10px] text-gray-500 font-medium">
+                    Assistant: {activeAssistant.name}
+                  </span>
+                )}
+              </div>
               {knowledgeBases.length === 0 ? (
                 <p className="text-xs text-rose-600">
                   No Knowledge Bases found in this workspace. Please create a Knowledge Base first.
                 </p>
               ) : (
-                <select
-                  value={saveWebKbId}
-                  onChange={(e) => setSaveWebKbId(e.target.value)}
-                  className="w-full text-xs bg-white border border-gray-300 rounded-lg p-2 text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                >
-                  {knowledgeBases.map((kb) => (
-                    <option key={kb.id} value={kb.id}>
-                      {kb.name} ({kb.status || "ACTIVE"})
-                    </option>
-                  ))}
-                </select>
+                <div className="space-y-1.5">
+                  <select
+                    value={saveWebKbId}
+                    onChange={(e) => setSaveWebKbId(e.target.value)}
+                    className="w-full text-xs bg-white border border-gray-300 rounded-lg p-2 text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  >
+                    <option value="">-- Select destination Knowledge Base --</option>
+                    {connectedKBs.length > 0 && (
+                      <optgroup label={`Connected to ${activeAssistant?.name || "Assistant"}`}>
+                        {connectedKBs.map((kb) => (
+                          <option key={kb.id} value={kb.id}>
+                            ★ {kb.name} (Connected)
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {otherKBs.length > 0 && (
+                      <optgroup label="Other Workspace Knowledge Bases">
+                        {otherKBs.map((kb) => (
+                          <option key={kb.id} value={kb.id}>
+                            {kb.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </select>
+
+                  {/* Destination Status Indicator */}
+                  {saveWebKbId ? (
+                    connectedKbIds.includes(saveWebKbId) ? (
+                      <p className="text-[11px] text-emerald-700 flex items-center gap-1 font-medium">
+                        <CheckCircle2 size={12} className="text-emerald-600 shrink-0" />
+                        <span>Connected to <strong>{activeAssistant?.name}</strong>. This assistant will be able to search and cite this source.</span>
+                      </p>
+                    ) : (
+                      <div className="p-2 rounded bg-amber-50 border border-amber-200/70 text-[11px] text-amber-800 flex items-start gap-1.5">
+                        <AlertCircle size={13} className="text-amber-600 shrink-0 mt-0.5" />
+                        <span>Notice: <strong>{knowledgeBases.find((k) => k.id === saveWebKbId)?.name}</strong> is not connected to <strong>{activeAssistant?.name}</strong>. This assistant will not be able to retrieve from it until connected.</span>
+                      </div>
+                    )
+                  ) : connectedKBs.length === 0 ? (
+                    <div className="p-2 rounded bg-gray-50 border border-gray-200 text-[11px] text-gray-600">
+                      This assistant doesn't have a connected Knowledge Base. Please choose a workspace Knowledge Base.
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-gray-500">
+                      Please select a destination Knowledge Base to save this web source.
+                    </p>
+                  )}
+                </div>
               )}
             </div>
 
@@ -2562,12 +2637,12 @@ function ConversationsContent() {
         </Modal>
       )}
 
-      {/* M22: Knowledge Base Promotion Modal */}
+      {/* M22 / M28.13: Knowledge Base Save / Promotion Modal */}
       {promoteAttachment && (
         <Modal
           isOpen={true}
           onClose={() => setPromoteAttachment(null)}
-          title="Promote Document to Knowledge Base"
+          title="Save to Knowledge"
           description="Permanently index this conversation attachment into a shared Knowledge Base."
           maxWidth="md"
         >
@@ -2582,25 +2657,71 @@ function ConversationsContent() {
             </div>
 
             <div className="space-y-2">
-              <label className="block text-xs font-medium text-gray-700">
-                Destination Knowledge Base
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-medium text-gray-700">
+                  Destination Knowledge Base
+                </label>
+                {activeAssistant && (
+                  <span className="text-[10px] text-gray-500 font-medium">
+                    Assistant: {activeAssistant.name}
+                  </span>
+                )}
+              </div>
               {knowledgeBases.length === 0 ? (
                 <p className="text-xs text-rose-600">
                   No Knowledge Bases found in this workspace. Please create a Knowledge Base first.
                 </p>
               ) : (
-                <select
-                  value={targetKbId}
-                  onChange={(e) => setTargetKbId(e.target.value)}
-                  className="w-full text-xs bg-white border border-gray-300 rounded-lg p-2 text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                >
-                  {knowledgeBases.map((kb) => (
-                    <option key={kb.id} value={kb.id}>
-                      {kb.name} ({kb.status || "ACTIVE"})
-                    </option>
-                  ))}
-                </select>
+                <div className="space-y-1.5">
+                  <select
+                    value={targetKbId}
+                    onChange={(e) => setTargetKbId(e.target.value)}
+                    className="w-full text-xs bg-white border border-gray-300 rounded-lg p-2 text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  >
+                    <option value="">-- Select destination Knowledge Base --</option>
+                    {connectedKBs.length > 0 && (
+                      <optgroup label={`Connected to ${activeAssistant?.name || "Assistant"}`}>
+                        {connectedKBs.map((kb) => (
+                          <option key={kb.id} value={kb.id}>
+                            ★ {kb.name} (Connected)
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {otherKBs.length > 0 && (
+                      <optgroup label="Other Workspace Knowledge Bases">
+                        {otherKBs.map((kb) => (
+                          <option key={kb.id} value={kb.id}>
+                            {kb.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </select>
+
+                  {/* Destination Status Indicator */}
+                  {targetKbId ? (
+                    connectedKbIds.includes(targetKbId) ? (
+                      <p className="text-[11px] text-emerald-700 flex items-center gap-1 font-medium">
+                        <CheckCircle2 size={12} className="text-emerald-600 shrink-0" />
+                        <span>Connected to <strong>{activeAssistant?.name}</strong>. This assistant will be able to search and cite this document.</span>
+                      </p>
+                    ) : (
+                      <div className="p-2 rounded bg-amber-50 border border-amber-200/70 text-[11px] text-amber-800 flex items-start gap-1.5">
+                        <AlertCircle size={13} className="text-amber-600 shrink-0 mt-0.5" />
+                        <span>Notice: <strong>{knowledgeBases.find((k) => k.id === targetKbId)?.name}</strong> is not connected to <strong>{activeAssistant?.name}</strong>. This assistant will not be able to retrieve answers from it until connected.</span>
+                      </div>
+                    )
+                  ) : connectedKBs.length === 0 ? (
+                    <div className="p-2 rounded bg-gray-50 border border-gray-200 text-[11px] text-gray-600">
+                      This assistant doesn't have a connected Knowledge Base. Please choose a workspace Knowledge Base.
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-gray-500">
+                      Please select a destination Knowledge Base to save this document.
+                    </p>
+                  )}
+                </div>
               )}
             </div>
 
@@ -2633,7 +2754,7 @@ function ConversationsContent() {
                 onClick={handlePromoteAttachment}
                 disabled={isPromoting || !targetKbId}
               >
-                {isPromoting ? "Promoting..." : "Promote to KB"}
+                {isPromoting ? "Saving..." : "Save to Knowledge"}
               </Button>
             </div>
           </div>

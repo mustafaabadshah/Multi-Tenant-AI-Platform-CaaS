@@ -1,4 +1,4 @@
-﻿"""Canonical Markdown normalization for assistant output.
+"""Canonical Markdown normalization for assistant output.
 
 Single implementation combining:
 - bibliography/source-footer stripping (duplicate of the structured citation tray),
@@ -46,7 +46,7 @@ def _unescape_markdown(text: str) -> str:
     - Sequences inside fenced code blocks (``` ... ```) are never modified.
     - True literal escapes (e.g. \\\\) are left intact.
     """
-    code_fence_re = re.compile(r"```[\s\S]*?```", re.MULTILINE)
+    code_fence_re = re.compile(r"```[\s\S]*?(?:```|$)", re.MULTILINE)
     protected_blocks: list[str] = []
     placeholders: list[str] = []
 

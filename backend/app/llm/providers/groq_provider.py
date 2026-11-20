@@ -45,6 +45,8 @@ class GroqLLMProvider(OpenAICompatibleLLMProvider):
             base_url=config.base_url,
             timeout_seconds=config.timeout_seconds,
             extra_headers=extra_h,
+            tools=config.tools,
+            tool_choice=getattr(config, "tool_choice", None),
         )
 
     async def generate(self, messages: list[LLMMessage], config: LLMConfig) -> LLMResponse:

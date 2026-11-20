@@ -9,8 +9,10 @@ from typing import Any, Optional
 @dataclass
 class LLMMessage:
     """Chat completion message."""
-    role: str  # "system", "user", "assistant"
+    role: str  # "system", "user", "assistant", "tool"
     content: str
+    tool_call_id: Optional[str] = None
+    tool_calls: Optional[list[dict[str, Any]]] = None
 
 
 @dataclass
@@ -100,6 +102,7 @@ class LLMConfig:
     timeout_seconds: int = 45
     extra_headers: dict[str, str] = field(default_factory=dict)
     tools: Optional[list[dict[str, Any]]] = None
+    tool_choice: Optional[str] = None
 
 
 

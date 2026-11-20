@@ -22,6 +22,8 @@ class ErrorCategory:
     RETRIEVAL_ERROR = "RETRIEVAL_ERROR"
     CANCELLED_STREAM = "CANCELLED_STREAM"
     EMPTY_RESPONSE = "EMPTY_RESPONSE"
+    TOOL_ERROR = "TOOL_ERROR"
+    GENERATION_FAILED = "GENERATION_FAILED"
     INTERNAL_ERROR = "INTERNAL_ERROR"
 
 
@@ -73,7 +75,15 @@ def categorize_error(err: Any) -> tuple[str, str]:
     if "retrieval" in msg.lower() or "vector store" in msg.lower() or "embedding" in msg.lower():
         return ErrorCategory.RETRIEVAL_ERROR, "Knowledge retrieval failed during request execution."
 
-    # 9. Generic / Internal
+    # 9. Tool execution or tool choice conflict
+    if "tool choice" in msg.lower() or "tool_use_failed" in msg.lower() or "tool action" in msg.lower() or "tool error" in msg.lower() or "unsupported function" in msg.lower() or "unregistered tool" in msg.lower():
+        return ErrorCategory.TOOL_ERROR, "AI provider tool choice conflict or tool action failed."
+
+    # 10. Explicit generation failed
+    if "generation failed" in msg.lower():
+        return ErrorCategory.GENERATION_FAILED, "Response generation failed after retrieval."
+
+    # 11. Generic / Internal
     sanitized = sanitize_value(msg)
     # Strip any potential internal file paths
     sanitized = re.sub(r"[A-Za-z]:\\[\w\-\\]+\.py", "[internal_code]", str(sanitized))
