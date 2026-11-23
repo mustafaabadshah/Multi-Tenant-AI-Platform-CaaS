@@ -306,7 +306,7 @@ Open [http://localhost:3000](http://localhost:3000) to access the application.
 
 ## Security Invariants
 
-1. **Zero Client Trust:** Tenant IDs passed in headers or payloads are never trusted without validating active user membership in the database.
+1. **Zero Client Trust:** Tenant ID passed in headers or payloads are never trusted without validating active user membership in the database.
 2. **Explicit Query Scoping:** Every tenant-owned repository query strictly includes `tenant_id = :active_tenant_id`.
 3. **SSRF Boundary Protection:** Custom HTTP tools and MCP URLs reject loopback, link-local, private RFC 1918 subnets, and cloud metadata endpoints.
 4. **Idempotent Approvals:** Write-like actions require single-use approval tokens authorized by an administrator; LLMs cannot self-authorize.
