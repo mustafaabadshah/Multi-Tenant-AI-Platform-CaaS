@@ -195,6 +195,7 @@ flowchart LR
 
 ## Retrieval & Ingestion Pipeline
 
+```mermaid
 flowchart LR
     subgraph Ingestion["Document Ingestion"]
         INPUT["Document Upload / URL"] --> VALIDATE["Magic Byte & Limit Validation"]
