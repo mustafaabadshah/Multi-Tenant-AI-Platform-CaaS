@@ -195,28 +195,33 @@ flowchart LR
 
 ## Retrieval & Ingestion Pipeline
 
-```mermaid
 flowchart LR
-    INPUT["Document Upload / URL"] --> VALIDATE["Magic Byte & Limit Validation"]
-    VALIDATE --> PARSE["Multi-Format Parser<br/>PDF · DOCX · XLSX · PPTX · CSV · JSON · MD"]
-    PARSE --> OCR{"Scanned PDF?"}
-    OCR -->|Yes (Opt-in)| TESS["OCR Processing"]
-    OCR -->|No| TEXT["Raw Extracted Text"]
-    TESS --> TEXT
-    TEXT --> CHUNK["Structure-Aware Chunking<br/>500 Tokens + 50 Overlap"]
-    CHUNK --> EMBED["Local Embedding<br/>384-Dimensional Vectors"]
-    EMBED --> STORE[("PostgreSQL 16<br/>pgvector + FTS Indexes")]
+    subgraph Ingestion["Document Ingestion"]
+        INPUT["Document Upload / URL"] --> VALIDATE["Magic Byte & Limit Validation"]
+        VALIDATE --> PARSE["Multi-Format Parser<br/>PDF · DOCX · XLSX · PPTX · CSV · JSON · MD"]
+        PARSE --> OCR{"Scanned PDF?"}
+        OCR -->|Yes - Opt-in| TESS["OCR Processing"]
+        OCR -->|No| TEXT["Raw Extracted Text"]
+        TESS --> TEXT
+        TEXT --> CHUNK["Structure-Aware Chunking<br/>500 Tokens + 50 Overlap"]
+        CHUNK --> EMBED["Embedding Generation<br/>384-Dimensional Vectors"]
+        EMBED --> STORE[("PostgreSQL 16<br/>pgvector + FTS Indexes")]
+        EMBED -.-> B2[("Backblaze B2 / S3<br/>Encrypted Document Storage")]
+    end
 
-    QUERY["User Question"] --> ACL["Pre-Retrieval ACL Check<br/>Tenant & Dept Scoping"]
-    ACL --> SEARCH_LEX["Lexical FTS Search"]
-    ACL --> SEARCH_VEC["pgvector Cosine Search"]
-    STORE --> SEARCH_LEX
-    STORE --> SEARCH_VEC
-    SEARCH_LEX --> RRF["Reciprocal Rank Fusion (RRF)<br/>k = 60"]
-    SEARCH_VEC --> RRF
-    RRF --> BUDGET["Token Budgeting Gate<br/>Combined KB $\le$ 1,200 Tokens"]
-    BUDGET --> PROMPT["Context Assembly & Streaming"]
-```
+    subgraph Retrieval["Tenant-Scoped Retrieval"]
+        QUERY["User Question"] --> ACL["Pre-Retrieval ACL Check<br/>Tenant & Department Scoping"]
+        ACL --> SEARCH_LEX["Lexical FTS Search"]
+        ACL --> SEARCH_VEC["pgvector Cosine Search"]
+        STORE --> SEARCH_LEX
+        STORE --> SEARCH_VEC
+        SEARCH_LEX --> RRF["Reciprocal Rank Fusion<br/>RRF - k = 60"]
+        SEARCH_VEC --> RRF
+        RRF --> BUDGET["Token Budgeting Gate<br/>Combined KB Limit: 1,200 Tokens"]
+        BUDGET --> GUARD["Anti-Hallucination Guardrail"]
+        GUARD --> PROMPT["Context Assembly"]
+        PROMPT --> STREAM["Streaming SSE Response"]
+    end
 
 ---
 
