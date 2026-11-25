@@ -2,7 +2,7 @@
 
 ## Overview
 
-**Multi-Tenant AI Platform (CaaS)** is an enterprise-grade, security-first, multi-tenant AI knowledge and assistant platform designed for modern organizations and power users. It combines private multi-format document ingestion, hybrid vector retrieval, configurable AI assistants, custom tool registries, Model Context Protocol (MCP) integrations, human-in-the-loop approvals, Web Speech voice interaction, disciplined token budgeting, in-chat model switching, and multi-provider streaming chat with strict tenant isolation, end-to-end request observability, and production reliability.
+**Multi-Tenant AI Platform (CaaS)** is an enterprise-grade, security--first, multi-tenant AI knowledge and assistant platform designed for modern organizations and power users. It combines private multi-format document ingestion, hybrid vector retrieval, configurable AI assistants, custom tool registries, Model Context Protocol (MCP) integrations, human-in-the-loop approvals, Web Speech voice interaction, disciplined token budgeting, in-chat model switching, and multi-provider streaming chat with strict tenant isolation, end-to-end request observability, and production reliability.
 
 ---
 
