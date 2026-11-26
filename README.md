@@ -281,7 +281,7 @@ The codebase enforces strict quality gates across both backend and frontend laye
 ### Prerequisites
 - Python 3.12+
 - Node.js 20+
-- PostgreSQL 16 with `pgvector` (or Docker Desktop)
+- PostgreSQL 16 with `pgvector` (or Dockers Desktop)
 
 ### Backend Setup
 ```powershell
