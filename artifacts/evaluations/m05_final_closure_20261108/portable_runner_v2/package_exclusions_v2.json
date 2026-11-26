@@ -1,0 +1,32 @@
+{
+  "total_excluded": 0,
+  "excluded_directories": [
+    ".git",
+    ".mypy_cache",
+    ".next",
+    ".obsidian",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".system_generated",
+    ".venv",
+    "__pycache__",
+    "coverage",
+    "node_modules",
+    "storage",
+    "test_storage",
+    "test_storage_disposable",
+    "test_storage_restored",
+    "venv"
+  ],
+  "excluded_extensions": [
+    ".db",
+    ".log",
+    ".pyc",
+    ".pyd",
+    ".pyo",
+    ".sqlite",
+    ".sqlite3",
+    ".tmp"
+  ],
+  "exclusions_sample": []
+}

@@ -1,4 +1,4 @@
-"""Base models and abstract interface for MM AI Platform document parsers."""
+"""Base models and abstract interface for Multi-Tenant AI Platform (CaaS) document parsers."""
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field

@@ -1,0 +1,42 @@
+{
+  "suite": "Staging Smoke Tests Checklist",
+  "tests": [
+    {
+      "name": "test_staging_health_and_version",
+      "endpoint": "/health",
+      "expected": 200,
+      "status": "READY"
+    },
+    {
+      "name": "test_staging_db_connectivity",
+      "endpoint": "/ready",
+      "expected": 200,
+      "status": "READY"
+    },
+    {
+      "name": "test_staging_registration_and_jwt",
+      "endpoint": "/api/v1/auth/register",
+      "expected": 201,
+      "status": "READY"
+    },
+    {
+      "name": "test_staging_login_and_profile",
+      "endpoint": "/api/v1/auth/login",
+      "expected": 200,
+      "status": "READY"
+    },
+    {
+      "name": "test_staging_workspace_isolation",
+      "endpoint": "/api/v1/tenants/current",
+      "expected": 200,
+      "status": "READY"
+    },
+    {
+      "name": "test_staging_cross_tenant_rejection",
+      "endpoint": "/api/v1/tenants/other",
+      "expected": 403,
+      "status": "READY"
+    }
+  ],
+  "status": "PLANNED_POST_DEPLOYMENT"
+}

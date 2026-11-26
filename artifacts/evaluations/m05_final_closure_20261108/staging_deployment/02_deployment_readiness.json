@@ -1,0 +1,43 @@
+{
+  "audit_timestamp": "2026-11-08T19:50:00+05:00",
+  "deployment_targets": {
+    "backend": {
+      "platform": "Render",
+      "type": "web_service",
+      "runtime": "python 3.12",
+      "framework": "FastAPI",
+      "blueprint_file": "render.yaml",
+      "health_check_path": "/health",
+      "pre_deploy_command": "alembic upgrade head",
+      "start_command": "uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 2",
+      "url_scheme_normalizer": "CONFIGURED_ASYNC_COMPATIBLE"
+    },
+    "frontend": {
+      "platform": "Vercel",
+      "framework": "nextjs",
+      "version": "16.4.5",
+      "build_command": "next build",
+      "config_file": "frontend/vercel.json",
+      "api_url_env_key": "NEXT_PUBLIC_API_URL",
+      "typescript_errors": 0,
+      "build_status": "PASS"
+    },
+    "database": {
+      "platform": "Render Managed PostgreSQL",
+      "version": "16",
+      "extensions_required": [
+        "vector",
+        "uuid-ossp"
+      ],
+      "migrations_pending": "0001_to_0005"
+    }
+  },
+  "security_audit": {
+    "secrets_committed_to_git": false,
+    "jwt_secret_configured": "AUTO_GENERATED_ON_RENDER",
+    "secret_key_configured": "AUTO_GENERATED_ON_RENDER",
+    "cors_origin_regex": "^https://mmaip-frontend(-[a-zA-Z0-9_-]+)?\\.vercel\\.app$",
+    "backend_secrets_in_next_public": false
+  },
+  "verdict": "READY_FOR_STAGING_DEPLOYMENT"
+}

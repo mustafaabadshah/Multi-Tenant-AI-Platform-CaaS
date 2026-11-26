@@ -1,0 +1,265 @@
+{
+  "dataset_metadata": {
+    "name": "Multi-Tenant AI Platform Benchmark",
+    "version": "1.0.0",
+    "sha256": "3A636AF79C1FFF32011D2D2D558A60F909BB7381913F1A3966152E987670E6C5",
+    "total_documents": 6,
+    "total_chunks": 18,
+    "total_queries": 25,
+    "answerable_queries": 22,
+    "unanswerable_queries": 3,
+    "categories": {
+      "direct_keyword": 6,
+      "paraphrase": 5,
+      "semantic_synonym": 6,
+      "fact_lookup": 5,
+      "unanswerable": 3
+    }
+  },
+  "query_accounting": [
+    {
+      "query_id": "q01",
+      "query_text": "How many days of paid vacation do employees receive each year?",
+      "category": "direct_keyword",
+      "answerable": true,
+      "relevant_chunk_ids": [
+        "chunk-hr-1"
+      ],
+      "evaluation_status": "EVALUATED_RANKING"
+    },
+    {
+      "query_id": "q02",
+      "query_text": "What is the doctor note requirement when someone is out sick?",
+      "category": "paraphrase",
+      "answerable": true,
+      "relevant_chunk_ids": [
+        "chunk-hr-2"
+      ],
+      "evaluation_status": "EVALUATED_RANKING"
+    },
+    {
+      "query_id": "q03",
+      "query_text": "Can unused holiday time be carried over to the following year?",
+      "category": "semantic_synonym",
+      "answerable": true,
+      "relevant_chunk_ids": [
+        "chunk-hr-3"
+      ],
+      "evaluation_status": "EVALUATED_RANKING"
+    },
+    {
+      "query_id": "q04",
+      "query_text": "What hardware authentication is required for remote network connection?",
+      "category": "direct_keyword",
+      "answerable": true,
+      "relevant_chunk_ids": [
+        "chunk-it-1"
+      ],
+      "evaluation_status": "EVALUATED_RANKING"
+    },
+    {
+      "query_id": "q05",
+      "query_text": "What kind of cryptographic keys are required to connect to production jump servers?",
+      "category": "paraphrase",
+      "answerable": true,
+      "relevant_chunk_ids": [
+        "chunk-it-2"
+      ],
+      "evaluation_status": "EVALUATED_RANKING"
+    },
+    {
+      "query_id": "q06",
+      "query_text": "How quickly must an employee report a misplaced or stolen company laptop?",
+      "category": "fact_lookup",
+      "answerable": true,
+      "relevant_chunk_ids": [
+        "chunk-it-3"
+      ],
+      "evaluation_status": "EVALUATED_RANKING"
+    },
+    {
+      "query_id": "q07",
+      "query_text": "Which version of Python and SQLAlchemy is standard for backend services?",
+      "category": "direct_keyword",
+      "answerable": true,
+      "relevant_chunk_ids": [
+        "chunk-eng-1"
+      ],
+      "evaluation_status": "EVALUATED_RANKING"
+    },
+    {
+      "query_id": "q08",
+      "query_text": "How is multi-tenant database isolation enforced in SQL queries and schemas?",
+      "category": "semantic_synonym",
+      "answerable": true,
+      "relevant_chunk_ids": [
+        "chunk-eng-2"
+      ],
+      "evaluation_status": "EVALUATED_RANKING"
+    },
+    {
+      "query_id": "q09",
+      "query_text": "How many code reviews are needed before merging a feature into main?",
+      "category": "fact_lookup",
+      "answerable": true,
+      "relevant_chunk_ids": [
+        "chunk-eng-3"
+      ],
+      "evaluation_status": "EVALUATED_RANKING"
+    },
+    {
+      "query_id": "q10",
+      "query_text": "What is the deadline for submitting travel expense claims?",
+      "category": "direct_keyword",
+      "answerable": true,
+      "relevant_chunk_ids": [
+        "chunk-fin-1"
+      ],
+      "evaluation_status": "EVALUATED_RANKING"
+    },
+    {
+      "query_id": "q11",
+      "query_text": "What is the daily meal budget when traveling internationally for business?",
+      "category": "fact_lookup",
+      "answerable": true,
+      "relevant_chunk_ids": [
+        "chunk-fin-2"
+      ],
+      "evaluation_status": "EVALUATED_RANKING"
+    },
+    {
+      "query_id": "q12",
+      "query_text": "How much money per mile is paid when driving your personal car for company work?",
+      "category": "semantic_synonym",
+      "answerable": true,
+      "relevant_chunk_ids": [
+        "chunk-fin-3"
+      ],
+      "evaluation_status": "EVALUATED_RANKING"
+    },
+    {
+      "query_id": "q13",
+      "query_text": "What is the response time requirement for a Sev-1 service outage?",
+      "category": "direct_keyword",
+      "answerable": true,
+      "relevant_chunk_ids": [
+        "chunk-inc-1"
+      ],
+      "evaluation_status": "EVALUATED_RANKING"
+    },
+    {
+      "query_id": "q14",
+      "query_text": "What is the update frequency and SLA for major feature degradation?",
+      "category": "paraphrase",
+      "answerable": true,
+      "relevant_chunk_ids": [
+        "chunk-inc-2"
+      ],
+      "evaluation_status": "EVALUATED_RANKING"
+    },
+    {
+      "query_id": "q15",
+      "query_text": "When must a blameless post-mortem draft be published following an incident?",
+      "category": "fact_lookup",
+      "answerable": true,
+      "relevant_chunk_ids": [
+        "chunk-inc-3"
+      ],
+      "evaluation_status": "EVALUATED_RANKING"
+    },
+    {
+      "query_id": "q16",
+      "query_text": "How does the platform combine lexical search and vector similarity scores?",
+      "category": "semantic_synonym",
+      "answerable": true,
+      "relevant_chunk_ids": [
+        "chunk-ai-1"
+      ],
+      "evaluation_status": "EVALUATED_RANKING"
+    },
+    {
+      "query_id": "q17",
+      "query_text": "What optical character recognition tool is used when PDFs have no selectable text?",
+      "category": "semantic_synonym",
+      "answerable": true,
+      "relevant_chunk_ids": [
+        "chunk-ai-2"
+      ],
+      "evaluation_status": "EVALUATED_RANKING"
+    },
+    {
+      "query_id": "q18",
+      "query_text": "How are customer third-party LLM credentials protected at rest?",
+      "category": "direct_keyword",
+      "answerable": true,
+      "relevant_chunk_ids": [
+        "chunk-ai-3"
+      ],
+      "evaluation_status": "EVALUATED_RANKING"
+    },
+    {
+      "query_id": "q19",
+      "query_text": "taking time off for holiday rest and vacation guidelines",
+      "category": "semantic_synonym",
+      "answerable": true,
+      "relevant_chunk_ids": [
+        "chunk-hr-1"
+      ],
+      "evaluation_status": "EVALUATED_RANKING"
+    },
+    {
+      "query_id": "q20",
+      "query_text": "What happens if my vacation days exceed the rollover limit on New Year's Eve?",
+      "category": "paraphrase",
+      "answerable": true,
+      "relevant_chunk_ids": [
+        "chunk-hr-3"
+      ],
+      "evaluation_status": "EVALUATED_RANKING"
+    },
+    {
+      "query_id": "q21",
+      "query_text": "Can employees buy beer or wine during business travel?",
+      "category": "fact_lookup",
+      "answerable": true,
+      "relevant_chunk_ids": [
+        "chunk-fin-2"
+      ],
+      "evaluation_status": "EVALUATED_RANKING"
+    },
+    {
+      "query_id": "q22",
+      "query_text": "What are the rules for hard drive encryption on employee computers?",
+      "category": "paraphrase",
+      "answerable": true,
+      "relevant_chunk_ids": [
+        "chunk-it-3"
+      ],
+      "evaluation_status": "EVALUATED_RANKING"
+    },
+    {
+      "query_id": "q23",
+      "query_text": "What is the best recipe for baking homemade sourdough bread?",
+      "category": "unanswerable",
+      "answerable": false,
+      "relevant_chunk_ids": [],
+      "evaluation_status": "EVALUATED_REJECTION"
+    },
+    {
+      "query_id": "q24",
+      "query_text": "Does the company allow cryptocurrency mining in the office data center?",
+      "category": "unanswerable",
+      "answerable": false,
+      "relevant_chunk_ids": [],
+      "evaluation_status": "EVALUATED_REJECTION"
+    },
+    {
+      "query_id": "q25",
+      "query_text": "What is the tuition reimbursement policy for master degree programs?",
+      "category": "unanswerable",
+      "answerable": false,
+      "relevant_chunk_ids": [],
+      "evaluation_status": "EVALUATED_REJECTION"
+    }
+  ]
+}

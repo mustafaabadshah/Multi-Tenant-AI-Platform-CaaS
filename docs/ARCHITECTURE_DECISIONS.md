@@ -1,6 +1,6 @@
-# MM AI Platform — Architecture Decision Records (ADR)
+# Multi-Tenant AI Platform (CaaS) — Architecture Decision Records (ADR)
 
-This document tracks significant architectural decisions made during the design and implementation of the MM AI Platform.
+This document tracks significant architectural decisions made during the design and implementation of the Multi-Tenant AI Platform (CaaS).
 
 ---
 

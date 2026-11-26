@@ -1,0 +1,24 @@
+Stage 2 — Docker Existing Data Audit:
+Docker Desktop Version: 4.28.0 (Build 4.28.0.139021)
+Backend: WSL2 Engine (wslEngineEnabled: true)
+Settings File: C:\Users\Mustafa Badshah\AppData\Roaming\Docker\settings.json
+
+WSL Registered Distros:
+1. docker-desktop-data:
+   - GUID: {fdfbaab9-b72e-46ea-a989-f001a72af1a7}
+   - Base Path: C:\Users\Mustafa Badshah\AppData\Local\Docker\wsl\data
+   - VHDX: C:\Users\Mustafa Badshah\AppData\Local\Docker\wsl\data\ext4.vhdx
+   - Size: 2,735,734,784 bytes (2.55 GB)
+   - Status: Existing user data preserved. Must NOT be deleted or unregistered without explicit approval.
+
+2. docker-desktop:
+   - GUID: {8bae074e-e864-4ceb-84c4-f470ce54116f}
+   - Base Path: C:\Users\Mustafa Badshah\AppData\Local\Docker\wsl\distro
+   - VHDX: C:\Users\Mustafa Badshah\AppData\Local\Docker\wsl\distro\ext4.vhdx
+   - Size: 123,731,968 bytes (118.00 MB)
+
+Docker Settings Current Values:
+- dataFolder: "C:\\ProgramData\\DockerDesktop\\vm-data"
+- customWslDistroDir: ""
+- memoryMiB: 2048
+- swapMiB: 1024

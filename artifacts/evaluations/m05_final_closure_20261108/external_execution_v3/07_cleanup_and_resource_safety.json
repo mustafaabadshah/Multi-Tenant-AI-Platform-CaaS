@@ -1,0 +1,13 @@
+{
+  "audit_timestamp": "2026-11-08T14:15:00+05:00",
+  "cleanup_actions": {
+    "docker_containers_created": 0,
+    "docker_containers_cleaned": 0,
+    "docker_volumes_created": 0,
+    "docker_volumes_cleaned": 0,
+    "shared_databases_altered": false,
+    "shared_collections_altered": false,
+    "temporary_verification_extract_cleaned": true
+  },
+  "resource_safety_verdict": "SAFE_NO_SIDE_EFFECTS"
+}

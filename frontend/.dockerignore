@@ -1,0 +1,10 @@
+# Frontend Docker build context exclusions
+
+node_modules/
+.next/
+out/
+.env
+.env.*
+*.tsbuildinfo
+next-env.d.ts
+.git/

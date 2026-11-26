@@ -1,5 +1,6 @@
 import uuid
 from collections.abc import Sequence
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -55,3 +56,72 @@ class GroupRepository(TenantScopedRepository[EmployeeGroup]):
             group.department_id = department_id
         await self.session.flush()
         return group
+
+    async def add_member(self, group_id: uuid.UUID, membership_id: uuid.UUID) -> GroupMembership:
+        from app.models.membership import TenantMembership
+
+        group = await self.get_by_id(group_id)
+        if not group:
+            raise ValueError("Group not found in active workspace")
+
+        stmt_mem = select(TenantMembership).where(
+            TenantMembership.id == membership_id,
+            TenantMembership.tenant_id == self.tenant_id,
+        )
+        mem_res = await self.session.execute(stmt_mem)
+        mem = mem_res.scalar_one_or_none()
+        if not mem:
+            raise ValueError("Membership not found in active workspace")
+
+        stmt_existing = select(GroupMembership).where(
+            GroupMembership.group_id == group_id,
+            GroupMembership.membership_id == membership_id,
+        )
+        existing = (await self.session.execute(stmt_existing)).scalar_one_or_none()
+        if existing:
+            return existing
+
+        enrollment = GroupMembership(group_id=group_id, membership_id=membership_id)
+        self.session.add(enrollment)
+        await self.session.flush()
+        return enrollment
+
+    async def remove_member(self, group_id: uuid.UUID, membership_id: uuid.UUID) -> bool:
+        group = await self.get_by_id(group_id)
+        if not group:
+            return False
+
+        stmt = select(GroupMembership).where(
+            GroupMembership.group_id == group_id,
+            GroupMembership.membership_id == membership_id,
+        )
+        membership = (await self.session.execute(stmt)).scalar_one_or_none()
+        if not membership:
+            return False
+
+        await self.session.delete(membership)
+        await self.session.flush()
+        return True
+
+    async def list_members(
+        self, group_id: uuid.UUID
+    ) -> Sequence[tuple[GroupMembership, Any, Any]]:
+        from app.models.membership import TenantMembership
+        from app.models.user import User
+
+        group = await self.get_by_id(group_id)
+        if not group:
+            return []
+
+        stmt = (
+            select(GroupMembership, TenantMembership, User)
+            .join(TenantMembership, GroupMembership.membership_id == TenantMembership.id)
+            .join(User, TenantMembership.user_id == User.id)
+            .where(
+                GroupMembership.group_id == group_id,
+                TenantMembership.tenant_id == self.tenant_id,
+            )
+        )
+        res = await self.session.execute(stmt)
+        return res.all()
+

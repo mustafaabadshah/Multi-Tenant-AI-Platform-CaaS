@@ -1,0 +1,13 @@
+{
+  "timestamp": "2026-11-07T21:03:51.104439+00:00",
+  "status": "PASS (OFFLINE VERIFIED)",
+  "algorithms": [
+    "Fernet",
+    "MultiFernet"
+  ],
+  "tests_passed": [
+    "test_m05_database_recovery.py::test_fernet_byok_encryption_tamper_rejection PASSED",
+    "test_m05_database_recovery.py::test_multifernet_fallback_decryption_with_previous_keys PASSED",
+    "test_m05_database_recovery.py::test_rotate_tenant_byok_secrets_in_database PASSED"
+  ]
+}

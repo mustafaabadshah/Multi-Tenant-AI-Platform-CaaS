@@ -45,6 +45,7 @@ class DocumentResponse(BaseModel):
     current_version_num: int
     total_pages: int
     total_chunks: int
+    metadata_json: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
 

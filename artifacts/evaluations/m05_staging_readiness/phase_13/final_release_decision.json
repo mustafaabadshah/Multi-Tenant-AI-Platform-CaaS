@@ -1,0 +1,32 @@
+{
+  "milestone": "M05",
+  "phase": 13,
+  "phase_name": "Final M05 Release Sign-Off",
+  "timestamp": "2026-11-08T01:00:00Z",
+  "decision": "CONDITIONAL PASS",
+  "staging_authorization": "NOT_AUTHORIZED",
+  "summary": "All 144 offline application regression tests pass with zero failures and zero regressions. Frontend Next.js Turbopack build renders 15/15 static pages with 0 TypeScript and 0 ESLint errors. All 9 operational runbooks and architecture specifications are delivered. However, final staging deployment to Render and Vercel is conditionally withheld pending the execution of the 17 live container integration tests on a runner with >= 2048 MB physical RAM, and explicit user confirmation.",
+  "closure_conditions": [
+    {
+      "id": "COND-01",
+      "severity": "BLOCKER_FOR_PRODUCTION",
+      "item": "Live Container Integration Suite (PostgreSQL 16 + pgvector and Qdrant)",
+      "validation_command": "docker compose -f docker-compose.m05-postgres.yml up -d; pytest tests/integration/test_postgres_*.py -v; docker compose -f docker-compose.m05-postgres.yml down -v; docker compose -f docker-compose.m05-qdrant.yml up -d; pytest tests/integration/test_qdrant_live_integration.py -v; docker compose -f docker-compose.m05-qdrant.yml down -v",
+      "closure_threshold": ">= 2048 MB free physical RAM on CI runner or host"
+    },
+    {
+      "id": "COND-02",
+      "severity": "OPERATIONAL_REQUIREMENT",
+      "item": "Paired Storage Volume Snapshotting",
+      "validation_command": "Verify that STORAGE_PATH volume or S3 bucket is snapshotted concurrently with pg_dump backups",
+      "closure_threshold": "Pre-deployment staging checklist sign-off"
+    },
+    {
+      "id": "COND-03",
+      "severity": "DEPLOYMENT_AUTHORIZATION",
+      "item": "Explicit User Authorization",
+      "validation_command": "User explicitly enters confirmation to initiate cloud staging deployment",
+      "closure_threshold": "User command required"
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "milestone": "M05",
+  "phase": 11,
+  "component": "Data Architecture & Lifecycle Review",
+  "timestamp": "2026-11-08T00:50:00Z",
+  "entities_reviewed": [
+    {
+      "entity": "Tenant & Workspace",
+      "lifecycle_states": ["ACTIVE", "SUSPENDED", "ARCHIVED"],
+      "cascading_rules": "Deleting a tenant cascades to all members, departments, documents, assistants, and conversations via foreign keys.",
+      "status": "PASS"
+    },
+    {
+      "entity": "KnowledgeBase & Documents",
+      "lifecycle_states": ["PENDING", "PROCESSING", "COMPLETED", "FAILED"],
+      "cascading_rules": "Document deletion cascades to document_versions, document_chunks, and chunk_embeddings in PostgreSQL; storage provider deletes raw files.",
+      "status": "PASS"
+    },
+    {
+      "entity": "Vector Embeddings & Dimension Isolation",
+      "lifecycle_states": ["ACTIVE", "SUPERSEDED"],
+      "dimension_handling": "pgvector isolates vector columns by dimension; Qdrant isolates collections by dimension (e.g. mmaip_chunks_384d, mmaip_chunks_1536d); reindexing uses separate version collections.",
+      "status": "PASS"
+    },
+    {
+      "entity": "Conversations & Citations",
+      "lifecycle_states": ["ACTIVE", "ARCHIVED"],
+      "cascading_rules": "Deleting a conversation cascades to messages and message_citations in PostgreSQL.",
+      "status": "PASS"
+    },
+    {
+      "entity": "Audit Logs",
+      "lifecycle_states": ["IMMUTABLE_APPEND_ONLY"],
+      "retention": "Audit records have no update/delete methods in repository; protected against tenant tampering.",
+      "status": "PASS"
+    }
+  ]
+}

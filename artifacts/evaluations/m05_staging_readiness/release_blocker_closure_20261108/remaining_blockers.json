@@ -1,0 +1,31 @@
+[
+  {
+    "id": "BLK-01",
+    "category": "INFRASTRUCTURE",
+    "severity": "MEDIUM",
+    "title": "Live Container Integration Suite Withheld on Small Host",
+    "description": "17 container-dependent integration tests in backend/tests/integration/ require a live PostgreSQL 16 and Qdrant instance. Execution was withheld because host available physical RAM (~1041 MB) is below the mandatory 2048 MB memory safety threshold.",
+    "exact_validation_commands": [
+      "docker compose -f docker-compose.m05-postgres.yml up -d",
+      "pytest tests/integration/test_postgres_connection.py tests/integration/test_postgres_migrations.py tests/integration/test_pgvector_operations.py tests/integration/test_postgres_fts.py tests/integration/test_postgres_tenant_isolation.py -v",
+      "docker compose -f docker-compose.m05-postgres.yml down -v",
+      "docker compose -f docker-compose.m05-qdrant.yml up -d",
+      "pytest tests/integration/test_qdrant_live_integration.py -v",
+      "docker compose -f docker-compose.m05-qdrant.yml down -v"
+    ],
+    "blocks_staging": true,
+    "closure_requirement": "Run on CI runner (GitHub Actions / Linux runner with >= 4 GB RAM) or host with >= 2048 MB free RAM."
+  },
+  {
+    "id": "BLK-02",
+    "category": "FEATURE_SCOPE",
+    "severity": "LOW",
+    "title": "Source-Derived PDF Word/Span Bounding Box Extraction Deferred",
+    "description": "PDF citation highlighting currently renders preserved ingestion bounding boxes with synthetic standard US Letter geometry fallback. Word-level span extraction via PyMuPDF get_text('words') is deferred to post-M05.",
+    "exact_validation_commands": [
+      "pytest tests/test_m05_citation_highlighting.py -v"
+    ],
+    "blocks_staging": false,
+    "closure_requirement": "Enhance PyMuPDF parser in Milestone 06."
+  }
+]

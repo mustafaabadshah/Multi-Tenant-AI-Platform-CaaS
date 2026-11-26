@@ -1,0 +1,26 @@
+{
+  "timestamp": "2026-11-08T04:10:35Z",
+  "python_compilation": {
+    "command": "python -m py_compile app/commands/drill_postgres_recovery.py app/commands/drill_qdrant_rebuild.py app/core/crypto.py app/models/assistant.py alembic/versions/0004_assistants_and_conversations.py tests/test_m05_recovery_drills_unit.py",
+    "status": "PASSED",
+    "exit_code": 0,
+    "files_checked": [
+      "backend/app/commands/drill_postgres_recovery.py",
+      "backend/app/commands/drill_qdrant_rebuild.py",
+      "backend/app/core/crypto.py",
+      "backend/app/models/assistant.py",
+      "backend/alembic/versions/0004_assistants_and_conversations.py",
+      "backend/tests/test_m05_recovery_drills_unit.py"
+    ]
+  },
+  "shell_syntax_validation": {
+    "command": "bash -n infrastructure/scripts/run-live-integration-tests.sh infrastructure/scripts/drill-live-postgres-backup-restore.sh infrastructure/scripts/drill-live-qdrant-rebuild.sh",
+    "status": "PASSED",
+    "exit_code": 0,
+    "files_checked": [
+      "infrastructure/scripts/run-live-integration-tests.sh",
+      "infrastructure/scripts/drill-live-postgres-backup-restore.sh",
+      "infrastructure/scripts/drill-live-qdrant-rebuild.sh"
+    ]
+  }
+}

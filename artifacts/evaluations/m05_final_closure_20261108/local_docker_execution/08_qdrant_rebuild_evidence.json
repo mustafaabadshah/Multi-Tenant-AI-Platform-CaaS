@@ -1,0 +1,8 @@
+{
+  "execution_timestamp": "2026-11-08T15:28:00+05:00",
+  "status": "NOT_RUN",
+  "drill_name": "drill-live-qdrant-rebuild.sh",
+  "rationale": "Live Qdrant container not started due to host RAM decision gate (< 4 GB).",
+  "disposable_collection_rebuilt": false,
+  "default_shared_collection_protected": true
+}

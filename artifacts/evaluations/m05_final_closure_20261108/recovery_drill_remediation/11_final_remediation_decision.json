@@ -1,0 +1,58 @@
+{
+  "timestamp": "2026-11-08T04:16:00Z",
+  "project": "Multi-Tenant AI Platform / CaaS",
+  "repository": "https://github.com/mustafaabadshah/Multi-Tenant-AI-Platform-CaaS",
+  "branch": "main",
+  "head": "448431c4b004dc4b134dc94705b7dd96d0f2a9f5",
+  "remediation_decision": "REMEDIATION_COMPLETE_PENDING_EXTERNAL_EXECUTION",
+  "milestone_status": "CONDITIONAL_PASS",
+  "authorizations": {
+    "staging_deployment_authorized": false,
+    "production_deployment_authorized": false,
+    "git_push_authorized": false,
+    "paid_cloud_provisioning_authorized": false
+  },
+  "defects_remediated": [
+    {
+      "defect_id": "DEFECT_A",
+      "component": "PostgreSQL live backup/restore drill",
+      "resolution": "Created backend/app/commands/drill_postgres_recovery.py and updated drill-live-postgres-backup-restore.sh with production crypto encrypt_credential and in-memory decrypt_credential plaintext comparison against original test token. Structured pass markers emitted.",
+      "status": "RESOLVED"
+    },
+    {
+      "defect_id": "DEFECT_B",
+      "component": "Qdrant live rebuild drill",
+      "resolution": "Replaced synthetic curl vector restoration with backend/app/commands/drill_qdrant_rebuild.py invoking genuine IngestionService.reindex_knowledge_base entrypoint from PostgreSQL source chunks. Rebuild promoted to APPLICATION_REBUILD_READY.",
+      "status": "RESOLVED"
+    },
+    {
+      "defect_id": "DEFECT_C",
+      "component": "Runner dependency instructions",
+      "resolution": "Updated README_RUNNER.md to document pip install -e \".[dev]\" and Ubuntu host package prerequisites.",
+      "status": "RESOLVED"
+    }
+  ],
+  "authoritative_snapshot_v2": {
+    "archive_path": "artifacts/evaluations/m05_final_closure_20261108/portable_runner_v2/m05_live_test_snapshot_v2.zip",
+    "physical_size_bytes": 755050,
+    "sha256": "24aa3baebfcabbd22d62cca967376f2b2469dc9b1c6798c316c91c1465fb77f4",
+    "manifest_file": "artifacts/evaluations/m05_final_closure_20261108/portable_runner_v2/snapshot_manifest_v2.json",
+    "total_files": 433,
+    "sandbox_extraction_integrity": "100% MATCH",
+    "secret_scanner_status": "PASSED"
+  },
+  "immutable_snapshot_v1_preservation": {
+    "archive_path": "artifacts/evaluations/m05_final_closure_20261108/portable_runner/m05_live_test_snapshot.zip",
+    "physical_size_bytes": 710948,
+    "sha256": "3c97b830261542a6a27dd1d0ee93cc76b63cebbb91f99fa9f54e50dcc8eeed6f",
+    "preserved_unmodified": true
+  },
+  "validation_results": {
+    "unit_tests_passed": 14,
+    "offline_regression_passed": 39,
+    "offline_regression_skipped": 1,
+    "python_compile_errors": 0,
+    "shell_syntax_errors": 0
+  },
+  "recommended_external_execution_command": "./infrastructure/scripts/run-live-integration-tests.sh --mode all --output-dir ./test_results"
+}

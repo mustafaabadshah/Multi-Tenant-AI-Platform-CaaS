@@ -1,0 +1,40 @@
+{
+  "milestone": "M05",
+  "phase": 10,
+  "component": "PDF Citation Provenance Verification",
+  "timestamp": "2026-11-07T18:59:00Z",
+  "audit_findings": {
+    "geometry_source_classification": {
+      "SOURCE_DERIVED": {
+        "status": "NOT_YET_IMPLEMENTED",
+        "description": "Extraction of exact word and line bounding boxes directly from the PDF text layer or OCR engine at character/span level.",
+        "analysis": "PyMuPDF (fitz) is currently invoked with page.get_text('text') which returns raw strings and linebreaks, but not raw bounding rects (get_text('blocks') or get_text('words')). Thus, chunk ingestion currently records page_number and chunk_index, but does not extract source-derived PDF coordinates."
+      },
+      "PRESERVED_METADATA": {
+        "status": "VERIFIED_SUPPORTED",
+        "description": "Preservation of custom bounding box coordinates supplied in chunk metadata during ingestion.",
+        "analysis": "Verified via test_citation_bounding_box_custom_metadata_preservation. When chunk metadata contains a valid bounding_box dict with keys (page, x, y, width, height), build_rag_context preserves the exact coordinates verbatim and serializes them to the frontend."
+      },
+      "FALLBACK_SYNTHETIC": {
+        "status": "VERIFIED_ACTIVE",
+        "description": "Standard deterministic US Letter viewport geometry generated when source-derived coordinates are absent.",
+        "analysis": "Verified via test_citation_bounding_box_default_generation and test_multi_chunk_vertical_slot_distribution. For standard US Letter pages (612x792 pt, 72 pt margins), the system computes x=72, y=90 + (chunk_idx % 7)*85, width=468, height=65 pt, guaranteeing non-overlapping distribution and page containment."
+      },
+      "UNAVAILABLE": {
+        "status": "HANDLED_SAFELY",
+        "description": "Handling when neither metadata nor page geometry is available.",
+        "analysis": "Defaults cleanly to page 1 standard viewport bounding box without raising exceptions or breaking UI rendering."
+      }
+    },
+    "provenance_security_audit": {
+      "page_number_tampering": "VERIFIED — Ingestion validates page_number as a positive integer; negative or out-of-bounds page numbers fall back to page 1.",
+      "coordinate_boundary_confinement": "VERIFIED — All synthetic coordinates are strictly bounded within 0 <= x < 612 and 0 <= y < 792 pt.",
+      "tenant_isolation_on_citation_access": "VERIFIED — Message citations are scoped to tenant_id via MessageCitation model and conversation parent relationships."
+    },
+    "future_roadmap_requirement": {
+      "item": "PyMuPDF Word-Level Span Bounding Box Ingestion",
+      "priority": "Post-M05 / High",
+      "implementation_note": "Update app/parsers/pdf.py to call page.get_text('words') or page.get_text('blocks'), compute bounding box union for each chunk, and store in DocumentChunk.metadata['bounding_box'] to enable true SOURCE_DERIVED highlighting."
+    }
+  }
+}

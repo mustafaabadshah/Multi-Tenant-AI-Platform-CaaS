@@ -1,0 +1,25 @@
+{
+  "timestamp": "2026-11-07T17:35:00+05:00",
+  "milestone": "M05",
+  "phase": "Phase 7",
+  "backup_restore_tooling": {
+    "backup_script": "infrastructure/scripts/backup-postgres.ps1",
+    "restore_script": "infrastructure/scripts/restore-postgres.ps1",
+    "verify_script": "infrastructure/scripts/verify-backup.ps1",
+    "dump_format": "PostgreSQL Custom Archive (-Fc)",
+    "integrity_checksum": "SHA-256",
+    "manifest_companion": "JSON manifest with timestamp, byte size, and hash",
+    "safety_controls": [
+      "Explicit -ConfirmRestore switch required",
+      "No passwords echoed in logs or console output",
+      "pg_restore --clean --if-exists used for non-destructive pre-cleaning",
+      "Non-zero exit codes on any failure"
+    ]
+  },
+  "live_pg_dump_restore_status": "SKIPPED_HOST_RAM_PRESSURE",
+  "recovery_objectives": {
+    "RPO": "1 hour (automated hourly custom-format dumps)",
+    "RTO": "15 minutes (direct pg_restore into warm standby or fresh database)",
+    "retention_policy": "Daily for 30 days, weekly for 12 weeks, monthly for 12 months"
+  }
+}

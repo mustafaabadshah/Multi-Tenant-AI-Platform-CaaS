@@ -1,0 +1,17 @@
+{
+  "nextjs_version": "16.4.5 (Turbopack)",
+  "build_status": "PASSED",
+  "static_routes_prerendered": "15/15",
+  "build_time_seconds": 4.0,
+  "typescript_check": {
+    "command": "npx tsc --noEmit",
+    "status": "PASSED",
+    "errors": 0
+  },
+  "eslint_check": {
+    "command": "npm run lint",
+    "status": "PASSED",
+    "errors": 0,
+    "baseline_warnings": 19
+  }
+}

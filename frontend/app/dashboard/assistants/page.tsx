@@ -1,237 +1,318 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { api, AssistantItem } from "@/lib/api";
-import { Bot, Plus, Sparkles, Terminal, CheckCircle2 } from "lucide-react";
+import {
+  api,
+  AssistantItem,
+  KnowledgeBaseItem,
+} from "@/lib/api";
+import AssistantCreationWizard from "./AssistantCreationWizard";
+import AssistantWorkspaceView from "./AssistantWorkspaceView";
+import {
+  Bot,
+  Plus,
+  Search,
+  Sliders,
+  MessageSquare,
+  ArrowRight,
+  ChevronRight,
+  Database,
+  Layers,
+  Sparkles,
+  ChevronLeft,
+} from "lucide-react";
+import Button from "@/components/ui/Button";
+import Spinner from "@/components/ui/Spinner";
 
-export default function AssistantsPage() {
+function AssistantsContent() {
   const { activeWorkspace } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
   const [assistants, setAssistants] = useState<AssistantItem[]>([]);
+  const [activeAssistant, setActiveAssistant] = useState<AssistantItem | null>(null);
+  const [tenantKBs, setTenantKBs] = useState<KnowledgeBaseItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showWizard, setShowWizard] = useState(false);
 
-  // Modal State
-  const [showModal, setShowModal] = useState(false);
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [systemPrompt, setSystemPrompt] = useState("");
-  const [defaultModel, setDefaultModel] = useState("auto");
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const loadAssistants = async () => {
-    if (!activeWorkspace) return;
-    setLoading(true);
-    try {
-      const data = await api.listAssistants();
-      setAssistants(data);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Check URL query parameters
+  const queryCreate = searchParams?.get("create");
+  const queryAssistantId = searchParams?.get("assistantId");
 
   useEffect(() => {
-    loadAssistants();
-  }, [activeWorkspace]);
+    if (queryCreate === "true") {
+      setShowWizard(true);
+    }
+  }, [queryCreate]);
 
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setSubmitting(true);
-    try {
-      await api.createAssistant({
-        name: name.trim(),
-        description: description.trim() || undefined,
-        default_model: defaultModel,
-        system_prompt: systemPrompt.trim() || undefined,
-      });
-      setShowModal(false);
-      setName("");
-      setDescription("");
-      setSystemPrompt("");
-      await loadAssistants();
-    } catch (err: unknown) {
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("Failed to create assistant");
+  // Initial Data Load
+  useEffect(() => {
+    async function loadData() {
+      if (!activeWorkspace) return;
+      setLoading(true);
+      try {
+        const [assts, kbs] = await Promise.all([
+          api.listAssistants(),
+          api.listKnowledgeBases().catch(() => []),
+        ]);
+        setAssistants(assts);
+        setTenantKBs(kbs);
+
+        if (queryAssistantId) {
+          const match = assts.find((a) => a.id === queryAssistantId);
+          if (match) {
+            setActiveAssistant(match);
+          } else if (assts.length > 0) {
+            setActiveAssistant(assts[0]);
+          }
+        } else if (assts.length > 0) {
+          // Default to first assistant on desktop
+          setActiveAssistant(assts[0]);
+        }
+      } catch (err) {
+        console.error("Failed to load assistants", err);
+      } finally {
+        setLoading(false);
       }
-    } finally {
-      setSubmitting(false);
+    }
+    loadData();
+  }, [activeWorkspace, queryAssistantId]);
+
+  // Filtered Assistants
+  const filteredAssistants = useMemo(() => {
+    if (!searchQuery.trim()) return assistants;
+    const q = searchQuery.toLowerCase();
+    return assistants.filter(
+      (a) =>
+        a.name.toLowerCase().includes(q) ||
+        (a.description && a.description.toLowerCase().includes(q))
+    );
+  }, [assistants, searchQuery]);
+
+  const handleStartChat = (assistant: AssistantItem) => {
+    router.push(`/dashboard/conversations?assistantId=${assistant.id}`);
+  };
+
+  const handleAssistantUpdated = (updated: AssistantItem) => {
+    setAssistants((prev) =>
+      prev.map((a) => (a.id === updated.id ? updated : a))
+    );
+    setActiveAssistant(updated);
+  };
+
+  const handleAssistantDeleted = (deletedId: string) => {
+    setAssistants((prev) => prev.filter((a) => a.id !== deletedId));
+    if (activeAssistant?.id === deletedId) {
+      const remaining = assistants.filter((a) => a.id !== deletedId);
+      setActiveAssistant(remaining.length > 0 ? remaining[0] : null);
     }
   };
 
   return (
-    <div className="space-y-6 max-w-6xl">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-4 max-w-7xl mx-auto">
+      {/* Header Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-200 pb-3">
         <div>
-          <h1 className="text-xl font-bold text-white tracking-tight">AI Assistants</h1>
-          <p className="text-xs text-slate-400 mt-1">
-            Configure purpose-built AI agents with specialized system prompts and OmniRoute dynamic model selection.
+          <h1 className="text-xl font-semibold text-gray-900 tracking-tight">
+            AI Assistants
+          </h1>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Configure specialized AI personas, tool policies, instructions, and connected knowledge.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowModal(true)}
-          className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs shadow-lg shadow-emerald-600/25 flex items-center gap-2 transition cursor-pointer self-start"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Create Assistant</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="primary"
+            size="sm"
+            icon={Plus}
+            onClick={() => setShowWizard(true)}
+          >
+            Create Assistant
+          </Button>
+        </div>
       </div>
 
       {loading ? (
-        <div className="p-12 text-center text-xs text-slate-400">Loading AI assistants...</div>
+        <div className="p-12 text-center bg-white rounded-xl border border-gray-200">
+          <Spinner size="md" />
+          <p className="text-xs text-gray-500 mt-2">Loading assistants...</p>
+        </div>
       ) : assistants.length === 0 ? (
-        <div className="p-16 text-center border border-dashed border-slate-800 rounded-2xl bg-slate-900/30">
-          <Bot className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-          <h3 className="text-sm font-semibold text-slate-200">No AI Assistants configured</h3>
-          <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-            Create assistants tailored for study prep, HR policy retrieval, finance audits, or technical support.
+        /* Empty State */
+        <div className="p-12 rounded-2xl bg-white border border-dashed border-gray-300 text-center space-y-3">
+          <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto border border-blue-100">
+            <Bot size={24} />
+          </div>
+          <h3 className="text-sm font-semibold text-gray-900">No Assistants Yet</h3>
+          <p className="text-xs text-gray-500 max-w-sm mx-auto">
+            Create your first assistant to begin chatting, searching internal documents, or querying web pages.
           </p>
-          <button
-            type="button"
-            onClick={() => setShowModal(true)}
-            className="mt-4 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition cursor-pointer inline-flex items-center gap-2"
+          <Button
+            variant="primary"
+            size="sm"
+            icon={Plus}
+            onClick={() => setShowWizard(true)}
           >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Create First Assistant</span>
-          </button>
+            Create Your First Assistant
+          </Button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {assistants.map((assistant) => (
-            <div
-              key={assistant.id}
-              className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 backdrop-blur-xl flex flex-col justify-between hover:border-slate-700 transition"
-            >
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <div className="w-9 h-9 rounded-xl bg-emerald-600/20 text-emerald-400 flex items-center justify-center font-bold">
-                    <Bot className="w-4 h-4" />
+        /* Responsive Hybrid Layout: List & Detail Pane */
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 min-h-[calc(100vh-180px)]">
+          {/* Assistant List Pane (Desktop col-4, Mobile full if no active assistant selected) */}
+          <div
+            className={`lg:col-span-4 space-y-3 ${
+              activeAssistant ? "hidden lg:block" : "block"
+            }`}
+          >
+            {/* Search Input */}
+            <div className="relative">
+              <Search
+                size={14}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+              />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search assistants..."
+                className="w-full pl-9 pr-3 py-2 text-xs bg-white border border-gray-200 rounded-xl text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+
+            {/* List of Assistants */}
+            <div className="space-y-2 overflow-y-auto max-h-[calc(100vh-250px)] pr-1">
+              {filteredAssistants.map((a) => {
+                const isSelected = activeAssistant?.id === a.id;
+                return (
+                  <div
+                    key={a.id}
+                    onClick={() => setActiveAssistant(a)}
+                    className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer group ${
+                      isSelected
+                        ? "bg-blue-50/60 border-blue-400 shadow-xs ring-1 ring-blue-400/20"
+                        : "bg-white border-gray-200 hover:border-gray-300 hover:shadow-xs"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 pr-1">
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={`font-semibold text-xs truncate ${
+                              isSelected ? "text-blue-900" : "text-gray-900"
+                            }`}
+                          >
+                            {a.name}
+                          </span>
+                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-gray-100 text-gray-600 font-mono">
+                            {a.llm_provider || "omniroute"}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-gray-500 line-clamp-2 mt-1">
+                          {a.description || "Grounded assistant for your workspace."}
+                        </p>
+                      </div>
+                      <ChevronRight
+                        size={14}
+                        className={`text-gray-400 shrink-0 transition-transform ${
+                          isSelected ? "text-blue-600 translate-x-0.5" : "group-hover:translate-x-0.5"
+                        }`}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between mt-3 pt-2 border-t border-gray-100 text-[10px] text-gray-500">
+                      <div className="flex items-center gap-1">
+                        <Database size={11} className="text-gray-400" />
+                        <span>{a.connected_kb_ids?.length || 0} KBs</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleStartChat(a);
+                          }}
+                          className="px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white font-medium text-[10px] flex items-center gap-1 transition-colors"
+                        >
+                          <MessageSquare size={10} />
+                          <span>Chat</span>
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800">
-                    model: {assistant.default_model}
-                  </span>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Assistant Detail Viewport (Desktop col-8) */}
+          <div
+            className={`lg:col-span-8 bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-xs flex flex-col ${
+              !activeAssistant ? "hidden lg:flex items-center justify-center p-8 text-gray-400" : "block"
+            }`}
+          >
+            {activeAssistant ? (
+              <div className="h-full flex flex-col">
+                {/* Mobile Back button */}
+                <div className="lg:hidden p-3 border-b border-gray-100 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setActiveAssistant(null)}
+                    className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 flex items-center gap-1 text-xs font-medium"
+                  >
+                    <ChevronLeft size={16} />
+                    <span>Back to all assistants</span>
+                  </button>
                 </div>
-                <h3 className="text-sm font-bold text-white tracking-tight">{assistant.name}</h3>
-                <p className="text-xs text-slate-400 mt-1 line-clamp-2">
-                  {assistant.description || "No description provided."}
-                </p>
 
-                {assistant.system_prompt && (
-                  <div className="mt-3 p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-[11px] text-slate-400 font-mono line-clamp-3">
-                    {assistant.system_prompt}
-                  </div>
-                )}
+                <AssistantWorkspaceView
+                  assistant={activeAssistant}
+                  tenantKBs={tenantKBs}
+                  onUpdate={handleAssistantUpdated}
+                  onDelete={handleAssistantDeleted}
+                  onStartChat={handleStartChat}
+                />
               </div>
-
-              <div className="pt-4 mt-4 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
-                <span className="flex items-center gap-1.5 text-blue-400">
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>OmniRoute Ready</span>
-                </span>
-                <span className="text-[11px] text-slate-500 font-mono">
-                  {new Date(assistant.created_at).toLocaleDateString()}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Create Assistant Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-md w-full shadow-2xl animate-fadeIn">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl bg-emerald-600/20 text-emerald-400 flex items-center justify-center">
-                <Bot className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-slate-100">Configure AI Assistant</h3>
-                <p className="text-xs text-slate-400">Set persona, system prompt, and LLM model</p>
-              </div>
-            </div>
-
-            {error && (
-              <div className="mb-4 p-2.5 rounded-xl bg-red-950/60 border border-red-800 text-red-300 text-xs">
-                {error}
+            ) : (
+              <div className="text-center p-8">
+                <Bot size={28} className="mx-auto mb-2 text-gray-300" />
+                <p className="text-xs text-gray-500">Select an assistant to view or configure its details.</p>
               </div>
             )}
-
-            <form onSubmit={handleCreate} className="space-y-3.5 text-xs">
-              <div>
-                <label className="block text-slate-300 font-medium mb-1">Assistant Name</label>
-                <input
-                  type="text"
-                  required
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. HR Policy Advisor, Study Tutor, Code Reviewer"
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 focus:border-emerald-500 outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-300 font-medium mb-1">Default AI Model</label>
-                <select
-                  value={defaultModel}
-                  onChange={(e) => setDefaultModel(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 focus:border-emerald-500 outline-none font-mono"
-                >
-                  <option value="auto">auto (OmniRoute Dynamic Gateway Routing)</option>
-                  <option value="gpt-4o">gpt-4o</option>
-                  <option value="claude-3-5-sonnet">claude-3-5-sonnet</option>
-                  <option value="gemini-1.5-pro">gemini-1.5-pro</option>
-                  <option value="llama-3.1-70b">llama-3.1-70b</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-slate-300 font-medium mb-1">Description (Optional)</label>
-                <input
-                  type="text"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Brief summary of what this assistant does"
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 focus:border-emerald-500 outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-300 font-medium mb-1">System Instructions / Prompt</label>
-                <textarea
-                  rows={4}
-                  value={systemPrompt}
-                  onChange={(e) => setSystemPrompt(e.target.value)}
-                  placeholder="You are an expert enterprise assistant dedicated to helping employees..."
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 focus:border-emerald-500 outline-none resize-none font-mono text-[11px]"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="px-3 py-2 rounded-xl text-slate-400 hover:text-slate-200 transition cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-medium transition cursor-pointer disabled:opacity-50"
-                >
-                  {submitting ? "Saving..." : "Create Assistant"}
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}
+
+      {/* Creation Wizard Modal */}
+      <AssistantCreationWizard
+        isOpen={showWizard}
+        onClose={() => setShowWizard(false)}
+        onSuccess={(newAsst) => {
+          setAssistants((prev) => [newAsst, ...prev]);
+          setActiveAssistant(newAsst);
+          setShowWizard(false);
+        }}
+        onStartChat={handleStartChat}
+        tenantKBs={tenantKBs}
+      />
     </div>
+  );
+}
+
+export default function AssistantsChatPage() {
+  return (
+    <React.Suspense
+      fallback={
+        <div className="flex h-screen items-center justify-center bg-gray-50">
+          <Spinner size="lg" />
+        </div>
+      }
+    >
+      <AssistantsContent />
+    </React.Suspense>
   );
 }

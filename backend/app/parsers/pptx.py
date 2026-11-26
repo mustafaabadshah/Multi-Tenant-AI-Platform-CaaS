@@ -2,6 +2,7 @@
 
 import io
 import time
+
 from pptx import Presentation
 
 from app.parsers.base import (

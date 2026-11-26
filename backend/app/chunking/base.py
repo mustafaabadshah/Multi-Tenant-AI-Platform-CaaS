@@ -1,11 +1,10 @@
 """Base classes, metadata models, and abstract interface for chunking strategies."""
 
-from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
 import hashlib
 import re
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from typing import Any
-import uuid
 
 from app.parsers.base import ExtractedDocument
 

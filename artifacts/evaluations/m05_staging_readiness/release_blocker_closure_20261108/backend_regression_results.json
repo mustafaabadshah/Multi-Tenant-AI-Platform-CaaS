@@ -1,0 +1,11 @@
+{
+  "timestamp": "2026-11-07T20:45:49.179007+00:00",
+  "total_collected": 165,
+  "passed": 147,
+  "skipped": 1,
+  "deselected": 17,
+  "failed": 0,
+  "duration_seconds": 146.35,
+  "ruff_lint_status": "PASS (0 errors)",
+  "skipped_test": "test_m05_database_recovery.py::test_live_postgres_container_safety_check (Host available RAM < 2048 MB threshold)"
+}

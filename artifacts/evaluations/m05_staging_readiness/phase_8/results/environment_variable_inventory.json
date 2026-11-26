@@ -1,0 +1,116 @@
+{
+  "timestamp": "2026-11-07T18:05:00+05:00",
+  "milestone": "M05",
+  "phase": "Phase 8",
+  "template_path": ".env.production.example",
+  "variables": [
+    {
+      "name": "ENVIRONMENT",
+      "staging_value": "staging",
+      "production_value": "production",
+      "required": true,
+      "sensitive": false
+    },
+    {
+      "name": "DEBUG",
+      "staging_value": "false",
+      "production_value": "false",
+      "required": true,
+      "sensitive": false
+    },
+    {
+      "name": "FRONTEND_URL",
+      "staging_value": "https://multi-tenant-ai-platform.vercel.app",
+      "production_value": "https://app.yourdomain.com",
+      "required": true,
+      "sensitive": false
+    },
+    {
+      "name": "BACKEND_URL",
+      "staging_value": "https://mmaip-backend.onrender.com",
+      "production_value": "https://api.yourdomain.com",
+      "required": true,
+      "sensitive": false
+    },
+    {
+      "name": "SECRET_KEY",
+      "generation_method": "python -c \"import secrets; print(secrets.token_hex(32))\"",
+      "required": true,
+      "sensitive": true
+    },
+    {
+      "name": "JWT_SECRET",
+      "generation_method": "python -c \"import secrets; print(secrets.token_hex(32))\"",
+      "required": true,
+      "sensitive": true
+    },
+    {
+      "name": "SECRET_ENCRYPTION_KEY",
+      "generation_method": "python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\"",
+      "required": true,
+      "sensitive": true
+    },
+    {
+      "name": "PREVIOUS_SECRET_KEYS",
+      "description": "Comma-separated previous secret keys during Fernet rotation",
+      "required": false,
+      "sensitive": true
+    },
+    {
+      "name": "DATABASE_URL",
+      "format": "postgresql+asyncpg://user:password@host:port/dbname",
+      "required": true,
+      "sensitive": true
+    },
+    {
+      "name": "DATABASE_SYNC_URL",
+      "format": "postgresql://user:password@host:port/dbname",
+      "required": true,
+      "sensitive": true
+    },
+    {
+      "name": "STORAGE_BACKEND",
+      "staging_value": "local",
+      "production_value": "local / s3",
+      "required": true,
+      "sensitive": false
+    },
+    {
+      "name": "DEFAULT_RETRIEVAL_MODE",
+      "default": "hybrid",
+      "required": true,
+      "sensitive": false
+    },
+    {
+      "name": "DEFAULT_VECTOR_STORE",
+      "default": "pgvector",
+      "required": true,
+      "sensitive": false
+    },
+    {
+      "name": "DEFAULT_EMBEDDING_PROVIDER",
+      "default": "sentence-transformers",
+      "required": true,
+      "sensitive": false
+    },
+    {
+      "name": "LLM_BASE_URL",
+      "staging_value": "https://api.openai.com/v1",
+      "required": true,
+      "sensitive": false
+    },
+    {
+      "name": "OPENAI_API_KEY",
+      "description": "Platform or fallback OpenAI BYOK key",
+      "required": false,
+      "sensitive": true
+    },
+    {
+      "name": "NEXT_PUBLIC_API_URL",
+      "host_service": "Vercel",
+      "value": "https://mmaip-backend.onrender.com",
+      "required": true,
+      "sensitive": false
+    }
+  ]
+}

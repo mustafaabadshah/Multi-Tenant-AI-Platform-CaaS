@@ -9,6 +9,7 @@ from app.database.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 if TYPE_CHECKING:
     from app.models.administration import AuditLog
     from app.models.membership import TenantMembership
+    from app.models.session import AuthSession
 
 
 class User(Base, UUIDPrimaryKeyMixin, TimestampMixin):
@@ -28,3 +29,7 @@ class User(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     audit_logs: Mapped[list["AuditLog"]] = relationship(
         "AuditLog", back_populates="actor", cascade="all, delete-orphan"
     )
+    auth_sessions: Mapped[list["AuthSession"]] = relationship(
+        "AuthSession", back_populates="user", cascade="all, delete-orphan"
+    )
+

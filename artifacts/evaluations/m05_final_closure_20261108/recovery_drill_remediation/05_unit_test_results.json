@@ -1,0 +1,82 @@
+{
+  "timestamp": "2026-11-08T04:08:45Z",
+  "test_suite": "backend/tests/test_m05_recovery_drills_unit.py",
+  "platform": "win32 -- Python 3.12.3",
+  "total_collected": 14,
+  "total_passed": 14,
+  "total_failed": 0,
+  "total_skipped": 0,
+  "duration_seconds": 2.46,
+  "tests": [
+    {
+      "nodeid": "tests/test_m05_recovery_drills_unit.py::test_postgres_drill_crypto_roundtrip",
+      "outcome": "PASSED",
+      "description": "Verifies encrypt_credential and decrypt_credential perform exact in-memory roundtrip"
+    },
+    {
+      "nodeid": "tests/test_m05_recovery_drills_unit.py::test_postgres_drill_wrong_key_fails_safely",
+      "outcome": "PASSED",
+      "description": "Verifies decryption with mismatched Fernet key returns None safely"
+    },
+    {
+      "nodeid": "tests/test_m05_recovery_drills_unit.py::test_postgres_drill_tampered_ciphertext_fails_safely",
+      "outcome": "PASSED",
+      "description": "Verifies tampered ciphertext returns None without leaking or crashing"
+    },
+    {
+      "nodeid": "tests/test_m05_recovery_drills_unit.py::test_postgres_drill_plaintext_mismatch_fails",
+      "outcome": "PASSED",
+      "description": "Verifies in-memory token equality check fails on mismatched value"
+    },
+    {
+      "nodeid": "tests/test_m05_recovery_drills_unit.py::test_postgres_drill_no_secrets_in_logs",
+      "outcome": "PASSED",
+      "description": "Verifies mask_secret prevents credential leakage into logs"
+    },
+    {
+      "nodeid": "tests/test_m05_recovery_drills_unit.py::test_postgres_drill_safety_guard_rejects_source_as_restore_target",
+      "outcome": "PASSED",
+      "description": "Verifies safety guard rejects source database (m05_integration) as restore target"
+    },
+    {
+      "nodeid": "tests/test_m05_recovery_drills_unit.py::test_postgres_drill_safety_guard_rejects_unexpected_database_name",
+      "outcome": "PASSED",
+      "description": "Verifies safety guard rejects non-disposable target database names"
+    },
+    {
+      "nodeid": "tests/test_m05_recovery_drills_unit.py::test_postgres_drill_seed_safety_guard_rejects_non_source_database",
+      "outcome": "PASSED",
+      "description": "Verifies seeding safety guard refuses to seed any non-source database"
+    },
+    {
+      "nodeid": "tests/test_m05_recovery_drills_unit.py::test_postgres_drill_restore_target_is_separate_from_source",
+      "outcome": "PASSED",
+      "description": "Asserts source and restore target names are strictly distinct constants"
+    },
+    {
+      "nodeid": "tests/test_m05_recovery_drills_unit.py::test_qdrant_drill_invokes_application_reindex_entrypoint",
+      "outcome": "PASSED",
+      "description": "Verifies IngestionService.reindex_knowledge_base is genuinely invoked"
+    },
+    {
+      "nodeid": "tests/test_m05_recovery_drills_unit.py::test_qdrant_drill_reads_postgresql_persisted_chunks",
+      "outcome": "PASSED",
+      "description": "Verifies reindex reads active chunks from database and excludes DELETED docs"
+    },
+    {
+      "nodeid": "tests/test_m05_recovery_drills_unit.py::test_qdrant_drill_tenant_filter_enforced_in_vector_search",
+      "outcome": "PASSED",
+      "description": "Verifies vector search filter criteria strictly enforces tenant_id"
+    },
+    {
+      "nodeid": "tests/test_m05_recovery_drills_unit.py::test_qdrant_drill_idempotent_reindex_does_not_duplicate_points",
+      "outcome": "PASSED",
+      "description": "Verifies repeated reindexing produces matching point IDs for upsert idempotency"
+    },
+    {
+      "nodeid": "tests/test_m05_recovery_drills_unit.py::test_qdrant_drill_fixture_only_path_cannot_report_rebuild_success",
+      "outcome": "PASSED",
+      "description": "Asserts fixture-only path cannot be classified as application-driven rebuild"
+    }
+  ]
+}

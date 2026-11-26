@@ -1,0 +1,13 @@
+{
+  "status": "PASS",
+  "archive_path": "artifacts\\evaluations\\m05_final_closure_20261108\\portable_runner_v3\\m05_live_test_snapshot_v3.zip",
+  "size_bytes": 760423,
+  "size_matches": true,
+  "sha256": "6776cf077941c913d794076bcd076340211c00c2d263291791169170a609f64e",
+  "sha256_matches": true,
+  "total_archive_members": 434,
+  "manifest_entries_verified": 434,
+  "hash_mismatches": 0,
+  "traversal_paths_detected": 0,
+  "secrets_detected": 0
+}

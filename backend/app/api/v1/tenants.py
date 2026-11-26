@@ -93,6 +93,11 @@ async def get_workspace(
     tenant_id: uuid.UUID,
     ctx: TenantContext = Depends(require_permission(PermissionName.TENANT_READ.value)),
 ) -> TenantResponse:
+    if tenant_id != ctx.tenant.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Path workspace ID does not match active X-Tenant-ID context",
+        )
     # TenantContext already guarantees the user has active membership in this tenant
     tenant = ctx.tenant
     return TenantResponse(
@@ -115,6 +120,11 @@ async def update_workspace(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> TenantResponse:
+    if tenant_id != ctx.tenant.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Path workspace ID does not match active X-Tenant-ID context",
+        )
     tenant = ctx.tenant
 
     if payload.name is not None and payload.name.strip():

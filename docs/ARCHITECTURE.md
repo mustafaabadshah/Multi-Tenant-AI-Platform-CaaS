@@ -1,8 +1,8 @@
-# MM AI Platform — System Architecture
+# Multi-Tenant AI Platform (CaaS) — System Architecture
 
 ## 1. Architectural Philosophy
 
-The **MM AI Platform** is designed as a **Modular Monolith** prioritizing:
+The **Multi-Tenant AI Platform (CaaS)** is designed as a **Modular Monolith** prioritizing:
 1. **Security-First Multi-Tenancy:** Hard tenant isolation at every layer (database constraints, repository filters, middleware validation, and RBAC).
 2. **Local-First & Resource Efficient:** Designed to operate smoothly on resource-constrained development environments (~8GB RAM, no dedicated GPU) without sacrificing enterprise production-readiness.
 3. **Pluggable & Provider-Agnostic Extensibility:** Clean abstractions for vector stores (pgvector, Qdrant), LLMs (OmniRoute Gateway, OpenAI-compatible APIs), embeddings, and document parsers/OCR (Badho OCR, local parsers).

@@ -1,0 +1,117 @@
+{
+  "timestamp": "2026-11-07T21:03:51.104439+00:00",
+  "total_collected_tests": 165,
+  "offline_executable_tests": 148,
+  "offline_passed": 147,
+  "offline_skipped": 1,
+  "container_integration_tests_deselected": 17,
+  "unique_tests": {
+    "postgresql_pgvector_suite": 12,
+    "qdrant_suite": 5,
+    "offline_functional_and_security": 148
+  },
+  "integration_test_suite": [
+    {
+      "node_id": "tests/integration/test_postgres_connection.py::test_postgres_version_is_16",
+      "marker": "postgres_integration",
+      "service": "PostgreSQL 16",
+      "status": "NOT RUN \u2014 ENVIRONMENT CONSTRAINT"
+    },
+    {
+      "node_id": "tests/integration/test_postgres_connection.py::test_pgvector_extension_loaded_and_functional",
+      "marker": "postgres_integration",
+      "service": "PostgreSQL 16 + pgvector",
+      "status": "NOT RUN \u2014 ENVIRONMENT CONSTRAINT"
+    },
+    {
+      "node_id": "tests/integration/test_postgres_connection.py::test_transaction_rollback_and_commit_behavior",
+      "marker": "postgres_integration",
+      "service": "PostgreSQL 16",
+      "status": "NOT RUN \u2014 ENVIRONMENT CONSTRAINT"
+    },
+    {
+      "node_id": "tests/integration/test_postgres_migrations.py::test_migration_head_and_schema_tables",
+      "marker": "postgres_integration",
+      "service": "PostgreSQL 16",
+      "status": "NOT RUN \u2014 ENVIRONMENT CONSTRAINT"
+    },
+    {
+      "node_id": "tests/integration/test_postgres_migrations.py::test_vector_column_data_type_in_postgresql",
+      "marker": "postgres_integration",
+      "service": "PostgreSQL 16 + pgvector",
+      "status": "NOT RUN \u2014 ENVIRONMENT CONSTRAINT"
+    },
+    {
+      "node_id": "tests/integration/test_postgres_migrations.py::test_foreign_key_and_tenant_composite_constraints",
+      "marker": "postgres_integration",
+      "service": "PostgreSQL 16",
+      "status": "NOT RUN \u2014 ENVIRONMENT CONSTRAINT"
+    },
+    {
+      "node_id": "tests/integration/test_postgres_fts.py::test_native_postgresql_fts_query_and_ranking",
+      "marker": "postgres_integration",
+      "service": "PostgreSQL 16 FTS",
+      "status": "NOT RUN \u2014 ENVIRONMENT CONSTRAINT"
+    },
+    {
+      "node_id": "tests/integration/test_postgres_fts.py::test_native_postgresql_fts_sql_injection_safety",
+      "marker": "postgres_integration",
+      "service": "PostgreSQL 16 FTS",
+      "status": "NOT RUN \u2014 ENVIRONMENT CONSTRAINT"
+    },
+    {
+      "node_id": "tests/integration/test_pgvector_operations.py::test_real_pgvector_insert_and_cosine_distance_ranking",
+      "marker": "postgres_integration",
+      "service": "PostgreSQL 16 + pgvector",
+      "status": "NOT RUN \u2014 ENVIRONMENT CONSTRAINT"
+    },
+    {
+      "node_id": "tests/integration/test_pgvector_operations.py::test_pgvector_rejects_dimension_mismatch",
+      "marker": "postgres_integration",
+      "service": "PostgreSQL 16 + pgvector",
+      "status": "NOT RUN \u2014 ENVIRONMENT CONSTRAINT"
+    },
+    {
+      "node_id": "tests/integration/test_postgres_tenant_isolation.py::test_cross_tenant_isolation_on_real_postgresql",
+      "marker": "postgres_integration",
+      "service": "PostgreSQL 16",
+      "status": "NOT RUN \u2014 ENVIRONMENT CONSTRAINT"
+    },
+    {
+      "node_id": "tests/integration/test_postgres_tenant_isolation.py::test_department_isolation_on_real_postgresql",
+      "marker": "postgres_integration",
+      "service": "PostgreSQL 16",
+      "status": "NOT RUN \u2014 ENVIRONMENT CONSTRAINT"
+    },
+    {
+      "node_id": "tests/integration/test_qdrant_live_integration.py::test_qdrant_service_connectivity_and_health",
+      "marker": "qdrant_integration",
+      "service": "Qdrant v1.9.0",
+      "status": "NOT RUN \u2014 ENVIRONMENT CONSTRAINT"
+    },
+    {
+      "node_id": "tests/integration/test_qdrant_live_integration.py::test_qdrant_collection_creation_and_dimension_isolation",
+      "marker": "qdrant_integration",
+      "service": "Qdrant v1.9.0",
+      "status": "NOT RUN \u2014 ENVIRONMENT CONSTRAINT"
+    },
+    {
+      "node_id": "tests/integration/test_qdrant_live_integration.py::test_qdrant_upsert_and_filtered_search",
+      "marker": "qdrant_integration",
+      "service": "Qdrant v1.9.0",
+      "status": "NOT RUN \u2014 ENVIRONMENT CONSTRAINT"
+    },
+    {
+      "node_id": "tests/integration/test_qdrant_live_integration.py::test_qdrant_cross_tenant_payload_isolation",
+      "marker": "qdrant_integration",
+      "service": "Qdrant v1.9.0",
+      "status": "NOT RUN \u2014 ENVIRONMENT CONSTRAINT"
+    },
+    {
+      "node_id": "tests/integration/test_qdrant_live_integration.py::test_qdrant_scoped_deletion",
+      "marker": "qdrant_integration",
+      "service": "Qdrant v1.9.0",
+      "status": "NOT RUN \u2014 ENVIRONMENT CONSTRAINT"
+    }
+  ]
+}

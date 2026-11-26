@@ -1,0 +1,121 @@
+{
+  "timestamp": "2026-11-08T03:26:00Z",
+  "project": "Multi-Tenant AI Platform / CaaS",
+  "repository": "https://github.com/mustafaabadshah/Multi-Tenant-AI-Platform-CaaS",
+  "branch": "main",
+  "head": "448431c4b004dc4b134dc94705b7dd96d0f2a9f5",
+  "audit_phase": "M05 External Linux Runner Handover: Final Package Audit & Execution Readiness",
+  "handover_decision": "HANDOVER_READY_WITH_WARNINGS",
+  "milestone_status": "CONDITIONAL_PASS",
+  "authorizations": {
+    "staging_deployment_authorized": false,
+    "production_deployment_authorized": false,
+    "git_push_authorized": false,
+    "paid_cloud_provisioning_authorized": false
+  },
+  "authoritative_snapshot": {
+    "archive_path": "artifacts/evaluations/m05_final_closure_20261108/portable_runner/m05_live_test_snapshot.zip",
+    "physical_size_bytes": 710948,
+    "expected_size_bytes": 710948,
+    "size_match": true,
+    "sha256": "3c97b830261542a6a27dd1d0ee93cc76b63cebbb91f99fa9f54e50dcc8eeed6f",
+    "expected_sha256": "3c97b830261542a6a27dd1d0ee93cc76b63cebbb91f99fa9f54e50dcc8eeed6f",
+    "sha256_match": true,
+    "manifest_entries_count": 406,
+    "extracted_files_count": 406,
+    "missing_files_count": 0,
+    "hash_mismatches_count": 0,
+    "path_traversal_entries": 0,
+    "duplicate_entries": 0,
+    "integrity_status": "VERIFIED_IDENTICAL"
+  },
+  "test_selection_audit": {
+    "postgres_pgvector": {
+      "required_nodes_count": 12,
+      "verified_in_runner_script": 12,
+      "status": "NOT_RUN",
+      "node_ids": [
+        "tests/integration/test_postgres_connection.py::test_postgres_version_is_16",
+        "tests/integration/test_postgres_connection.py::test_pgvector_extension_loaded_and_functional",
+        "tests/integration/test_postgres_connection.py::test_transaction_rollback_and_commit_behavior",
+        "tests/integration/test_postgres_migrations.py::test_migration_head_and_schema_tables",
+        "tests/integration/test_postgres_migrations.py::test_vector_column_data_type_in_postgresql",
+        "tests/integration/test_postgres_migrations.py::test_foreign_key_and_tenant_composite_constraints",
+        "tests/integration/test_postgres_fts.py::test_native_postgresql_fts_query_and_ranking",
+        "tests/integration/test_postgres_fts.py::test_native_postgresql_fts_sql_injection_safety",
+        "tests/integration/test_pgvector_operations.py::test_real_pgvector_insert_and_cosine_distance_ranking",
+        "tests/integration/test_pgvector_operations.py::test_pgvector_rejects_dimension_mismatch",
+        "tests/integration/test_postgres_tenant_isolation.py::test_cross_tenant_isolation_on_real_postgresql",
+        "tests/integration/test_postgres_tenant_isolation.py::test_department_isolation_on_real_postgresql"
+      ]
+    },
+    "qdrant": {
+      "required_nodes_count": 5,
+      "verified_in_runner_script": 5,
+      "status": "NOT_RUN",
+      "node_ids": [
+        "tests/integration/test_qdrant_live_integration.py::test_qdrant_service_connectivity_and_health",
+        "tests/integration/test_qdrant_live_integration.py::test_qdrant_collection_creation_and_dimension_isolation",
+        "tests/integration/test_qdrant_live_integration.py::test_qdrant_upsert_and_filtered_search",
+        "tests/integration/test_qdrant_live_integration.py::test_qdrant_cross_tenant_payload_isolation",
+        "tests/integration/test_qdrant_live_integration.py::test_qdrant_scoped_deletion"
+      ]
+    }
+  },
+  "recovery_drills_audit": {
+    "postgres_backup_restore": {
+      "script_path": "infrastructure/scripts/drill-live-postgres-backup-restore.sh",
+      "classification": "NOT_READY",
+      "source_database": "m05_integration",
+      "restore_target_database": "m05_restore_drill_disposable",
+      "source_database_overwritten": false,
+      "backup_format": "pg_dump -Fc (custom format)",
+      "backup_checksum_generated": true,
+      "ciphertext_equality_verified": true,
+      "in_memory_decryption_verified": false,
+      "defect_reason": "Script compares ciphertext string equality in the database, but omits invoking app.core.crypto.decrypt_credential to verify in-memory plaintext recovery against original test token."
+    },
+    "qdrant_application_rebuild": {
+      "script_path": "infrastructure/scripts/drill-live-qdrant-rebuild.sh",
+      "target_application_entrypoint": "app.services.ingestion.service.IngestionService.reindex_knowledge_base",
+      "classification": "FIXTURE_RESTORE_ONLY",
+      "collection_loss_simulated": true,
+      "collection_recreated": true,
+      "tenant_filtered_search_verified": true,
+      "driven_by_application_service": false,
+      "defect_reason": "Script recreates collections and synthetic vectors using raw curl and hardcoded Python vectors rather than invoking the real application IngestionService.reindex_knowledge_base entrypoint against PostgreSQL source chunks."
+    }
+  },
+  "operational_warnings": [
+    {
+      "code": "WARN-01-DEPENDENCY-SYNTAX",
+      "severity": "HIGH",
+      "message": "README_RUNNER.md specifies 'pip install -e .', but pytest and pytest-asyncio are declared under [project.optional-dependencies] dev in backend/pyproject.toml. The operator must execute 'pip install -e \".[dev]\"' to avoid immediate missing module crashes."
+    },
+    {
+      "code": "WARN-02-POSTGRES-DECRYPTION-OMISSION",
+      "severity": "MEDIUM",
+      "message": "PostgreSQL backup/restore drill does not invoke Python decrypt_credential to verify plaintext recovery; classified as NOT_READY for cryptographic proof. Operator should run supplementary Python decryption check."
+    },
+    {
+      "code": "WARN-03-QDRANT-FIXTURE-ONLY-REBUILD",
+      "severity": "MEDIUM",
+      "message": "Qdrant rebuild drill uses synthetic curl point injection instead of application IngestionService; classified as FIXTURE_RESTORE_ONLY. Operator should execute application-driven reindex validation."
+    }
+  ],
+  "safety_assessment": {
+    "force_flag_used": false,
+    "skip_drills_flag_used": false,
+    "docker_volume_pruning_risk": "NONE (docker compose down strictly omits -v/--volumes)",
+    "target_isolation": "127.0.0.1 loopback only; disposable DBs m05_integration and m05_restore_drill_disposable",
+    "paid_cloud_dependency": false,
+    "real_credential_exposure": false,
+    "git_mutation_risk": "NONE (independent directory execution)"
+  },
+  "handover_readiness_summary": {
+    "can_external_operator_execute_safely": true,
+    "external_runbook_path": "artifacts/evaluations/m05_final_closure_20261108/handover_readiness_audit/09_external_operator_runbook.md",
+    "recommended_runner_command": "./infrastructure/scripts/run-live-integration-tests.sh --mode all --output-dir ./test_results",
+    "next_steps": "Transfer m05_live_test_snapshot.zip to Linux runner, execute runbook, and return m05_live_evidence_results.tar.gz with SHA-256 checksum for conclusive M05 closure."
+  }
+}

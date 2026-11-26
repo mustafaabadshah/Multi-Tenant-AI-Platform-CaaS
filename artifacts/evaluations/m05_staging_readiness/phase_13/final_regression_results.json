@@ -1,0 +1,28 @@
+{
+  "milestone": "M05",
+  "phase": 13,
+  "component": "Final Regression Results",
+  "timestamp": "2026-11-08T01:00:00Z",
+  "backend_totals": {
+    "total_collected": 162,
+    "executed": 145,
+    "passed": 144,
+    "failed": 0,
+    "skipped": 1,
+    "deselected_live_containers": 17,
+    "duration_seconds": 140.57,
+    "pass_rate_executed_pct": 99.31,
+    "pass_rate_non_skipped_pct": 100.0
+  },
+  "frontend_totals": {
+    "static_pages_prerendered": 15,
+    "total_pages": 15,
+    "typescript_errors": 0,
+    "eslint_errors": 0,
+    "eslint_warnings": 19
+  },
+  "static_analysis": {
+    "ruff_errors": 0,
+    "status": "PASS"
+  }
+}

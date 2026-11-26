@@ -1,0 +1,13 @@
+Client:
+ Version:    25.0.3
+ Context:    default
+ Debug Mode: false
+ Plugins:
+  buildx: Docker Buildx (Docker Inc.)
+    Version:  v0.12.1-desktop.4
+  compose: Docker Compose (Docker Inc.)
+    Version:  v2.24.6-desktop.1
+
+Server:
+ERROR: error during connect: this error may indicate that the docker daemon is not running: Get "http://%2F%2F.%2Fpipe%2Fdocker_engine/v1.24/info": open //./pipe/docker_engine: The system cannot find the file specified.
+errors pretty printing info

@@ -1,0 +1,26 @@
+{
+  "status": "NOT_RUN",
+  "reason": "ENVIRONMENT_MEMORY_CONSTRAINT",
+  "host_available_ram_mb": 914.25,
+  "safety_threshold_ram_mb": 2048,
+  "target_service": "pgvector/pgvector:pg16",
+  "target_port": 55432,
+  "compose_file": "docker-compose.m05-postgres.yml",
+  "test_nodes_count": 12,
+  "test_nodes": [
+    "tests/integration/test_postgres_connection.py::test_postgres_version_is_16",
+    "tests/integration/test_postgres_connection.py::test_pgvector_extension_loaded_and_functional",
+    "tests/integration/test_postgres_connection.py::test_transaction_rollback_and_commit_behavior",
+    "tests/integration/test_postgres_migrations.py::test_migration_head_and_schema_tables",
+    "tests/integration/test_postgres_migrations.py::test_vector_column_data_type_in_postgresql",
+    "tests/integration/test_postgres_migrations.py::test_foreign_key_and_tenant_composite_constraints",
+    "tests/integration/test_postgres_fts.py::test_native_postgresql_fts_query_and_ranking",
+    "tests/integration/test_postgres_fts.py::test_native_postgresql_fts_sql_injection_safety",
+    "tests/integration/test_pgvector_operations.py::test_real_pgvector_insert_and_cosine_distance_ranking",
+    "tests/integration/test_pgvector_operations.py::test_pgvector_rejects_dimension_mismatch",
+    "tests/integration/test_postgres_tenant_isolation.py::test_cross_tenant_isolation_on_real_postgresql",
+    "tests/integration/test_postgres_tenant_isolation.py::test_department_isolation_on_real_postgresql"
+  ],
+  "portable_runner_ready": true,
+  "portable_runner_command": "bash infrastructure/scripts/run-live-integration-tests.sh --mode postgres"
+}

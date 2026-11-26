@@ -3,7 +3,13 @@
 import React, { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { api, Department, Member, RoleItem } from "@/lib/api";
-import { Users, UserPlus, Trash2, Shield, Mail, Briefcase, Search, Sparkles } from "lucide-react";
+import { Users, UserPlus, Trash2, Search, Mail, Briefcase } from "lucide-react";
+import Button from "@/components/ui/Button";
+import Input from "@/components/ui/Input";
+import Modal from "@/components/ui/Modal";
+import Badge from "@/components/ui/Badge";
+import EmptyState from "@/components/ui/EmptyState";
+import Spinner from "@/components/ui/Spinner";
 
 export default function EmployeesPage() {
   const { activeWorkspace, user } = useAuth();
@@ -35,7 +41,7 @@ export default function EmployeesPage() {
       setDepartments(deptsData);
       setRoles(rolesData);
     } catch (err) {
-      console.error(err);
+      console.error("Failed to load employees data", err);
     } finally {
       setLoading(false);
     }
@@ -92,156 +98,190 @@ export default function EmployeesPage() {
     <div className="space-y-6 max-w-6xl">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-white tracking-tight">Employee Directory & Access</h1>
-          <p className="text-xs text-slate-400 mt-1">
+          <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">
+            Employees & Team Members
+          </h1>
+          <p className="text-sm text-gray-600 mt-1">
             Manage authorized employees, roles, and department assignments in this workspace.
           </p>
         </div>
-        <button
-          type="button"
+        <Button
           onClick={() => setShowInviteModal(true)}
-          className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs shadow-lg shadow-blue-600/25 flex items-center gap-2 transition cursor-pointer self-start"
+          icon={UserPlus}
+          iconPosition="left"
+          variant="primary"
+          size="sm"
         >
-          <UserPlus className="w-4 h-4" />
-          <span>Invite Member</span>
-        </button>
+          Invite Member
+        </Button>
       </div>
 
       {/* Search Bar */}
       <div className="relative max-w-md">
-        <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+        <Search size={16} className="text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
         <input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search by name, email, or role..."
-          className="w-full pl-10 pr-3.5 py-2 rounded-xl bg-slate-900 border border-slate-800 focus:border-blue-500 text-xs text-slate-100 placeholder:text-slate-500 outline-none"
+          className="w-full pl-10 pr-3.5 py-2 rounded-lg bg-white border border-gray-300 focus:border-blue-600 focus:ring-2 focus:ring-blue-500/20 text-sm text-gray-900 placeholder:text-gray-400 outline-none"
         />
       </div>
 
       {/* Members Table */}
-      <div className="bg-slate-900/60 border border-slate-800 rounded-2xl overflow-hidden backdrop-blur-xl">
+      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-xs">
         {loading ? (
-          <div className="p-12 text-center text-xs text-slate-400">Loading employee roster...</div>
-        ) : filteredMembers.length === 0 ? (
-          <div className="p-12 text-center">
-            <Users className="w-8 h-8 text-slate-600 mx-auto mb-2" />
-            <p className="text-xs text-slate-300">No members found</p>
-            <p className="text-[11px] text-slate-500 mt-0.5">Invite colleagues to begin collaborating.</p>
+          <div className="p-12 flex items-center justify-center">
+            <Spinner size="lg" />
           </div>
+        ) : filteredMembers.length === 0 ? (
+          <EmptyState
+            icon={Users}
+            title="No members found"
+            description="Invite colleagues to begin collaborating in this workspace."
+            action={{
+              label: "Invite First Member",
+              onClick: () => setShowInviteModal(true),
+              icon: UserPlus,
+            }}
+          />
         ) : (
-          <table className="w-full text-left border-collapse text-xs">
-            <thead>
-              <tr className="border-b border-slate-800 bg-slate-950/40 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                <th className="py-3 px-4">Employee</th>
-                <th className="py-3 px-4">Role</th>
-                <th className="py-3 px-4">Department</th>
-                <th className="py-3 px-4">Status</th>
-                <th className="py-3 px-4">Joined</th>
-                <th className="py-3 px-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/60">
-              {filteredMembers.map((m) => (
-                <tr key={m.id} className="hover:bg-slate-800/30 transition">
-                  <td className="py-3 px-4">
-                    <div className="font-semibold text-slate-200">{m.full_name}</div>
-                    <div className="text-[11px] text-slate-400 font-mono">{m.email}</div>
-                    {m.title && <div className="text-[10px] text-blue-400 mt-0.5">{m.title}</div>}
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider bg-blue-950 text-blue-400 border border-blue-800/80">
-                      {m.role}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 text-slate-300">
-                    {m.department_name ? (
-                      <span className="flex items-center gap-1.5">
-                        <Briefcase className="w-3.5 h-3.5 text-purple-400" />
-                        <span>{m.department_name}</span>
-                      </span>
-                    ) : (
-                      <span className="text-slate-500 italic">Unassigned</span>
-                    )}
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-950/80 text-emerald-400 border border-emerald-800">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                      {m.status}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 text-slate-400 font-mono text-[11px]">
-                    {new Date(m.created_at).toLocaleDateString()}
-                  </td>
-                  <td className="py-3 px-4 text-right">
-                    {m.user_id !== user?.id && m.role !== "tenant_owner" && (
-                      <button
-                        type="button"
-                        onClick={() => handleRemove(m.id, m.email)}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-slate-800 transition cursor-pointer"
-                        title="Remove member"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="border-b border-gray-200 bg-gray-50/80 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+                  <th className="py-3 px-4">Employee</th>
+                  <th className="py-3 px-4">Role</th>
+                  <th className="py-3 px-4">Department</th>
+                  <th className="py-3 px-4">Status</th>
+                  <th className="py-3 px-4">Joined</th>
+                  <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filteredMembers.map((m) => {
+                  const isCurrentUser = m.email === user?.email;
+                  return (
+                    <tr key={m.id} className="hover:bg-gray-50/60 transition-colors">
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xs uppercase">
+                            {m.full_name?.charAt(0) || m.email.charAt(0)}
+                          </div>
+                          <div>
+                            <div className="font-semibold text-gray-900 flex items-center gap-1.5">
+                              <span>{m.full_name}</span>
+                              {isCurrentUser && (
+                                <Badge variant="blue" size="xs">
+                                  You
+                                </Badge>
+                              )}
+                            </div>
+                            <span className="text-gray-500 text-[11px]">{m.email}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <Badge
+                          variant={
+                            m.role === "org_admin" || m.role === "tenant_owner"
+                              ? "purple"
+                              : m.role === "dept_admin" ||
+                                  m.role === "assistant_manager" ||
+                                  m.role === "knowledge_editor"
+                                ? "blue"
+                                : "gray"
+                          }
+                          size="xs"
+                        >
+                          {m.role}
+                        </Badge>
+                      </td>
+                      <td className="py-3 px-4 text-gray-600">
+                        {m.department_name ? (
+                          <span className="inline-flex items-center gap-1">
+                            <Briefcase size={12} className="text-gray-400" />
+                            <span>{m.department_name}</span>
+                          </span>
+                        ) : (
+                          <span className="text-gray-400 italic">None</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4">
+                        <Badge
+                          variant={m.status === "ACTIVE" ? "green" : "amber"}
+                          size="xs"
+                        >
+                          {m.status || "ACTIVE"}
+                        </Badge>
+                      </td>
+                      <td className="py-3 px-4 text-gray-500 font-mono text-[11px]">
+                        {new Date(m.created_at).toLocaleDateString([], {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        {!isCurrentUser && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemove(m.id, m.email)}
+                            className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-gray-100 transition-colors"
+                            title="Remove from workspace"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
       {/* Invite Member Modal */}
       {showInviteModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-md w-full shadow-2xl animate-fadeIn">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl bg-blue-600/20 text-blue-400 flex items-center justify-center">
-                <UserPlus className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-slate-100">Invite New Employee</h3>
-                <p className="text-xs text-slate-400">Assign role and organizational department</p>
-              </div>
-            </div>
-
+        <Modal
+          isOpen={true}
+          onClose={() => setShowInviteModal(false)}
+          title="Invite Team Member"
+          description="Grant an employee access to this workspace and its authorized assistants."
+          maxWidth="md"
+        >
+          <form onSubmit={handleInvite} className="space-y-4">
             {error && (
-              <div className="mb-4 p-2.5 rounded-xl bg-red-950/60 border border-red-800 text-red-300 text-xs">
+              <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700">
                 {error}
               </div>
             )}
 
-            <form onSubmit={handleInvite} className="space-y-3.5 text-xs">
-              <div>
-                <label className="block text-slate-300 font-medium mb-1">Email Address</label>
-                <input
-                  type="email"
-                  required
-                  value={inviteEmail}
-                  onChange={(e) => setInviteEmail(e.target.value)}
-                  placeholder="employee@company.com"
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 focus:border-blue-500 outline-none"
-                />
-              </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Email Address *
+              </label>
+              <Input
+                type="email"
+                required
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                placeholder="colleague@company.com"
+                icon={Mail}
+              />
+            </div>
 
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-slate-300 font-medium mb-1">Job Title (Optional)</label>
-                <input
-                  type="text"
-                  value={inviteTitle}
-                  onChange={(e) => setInviteTitle(e.target.value)}
-                  placeholder="e.g. Senior Research Analyst"
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 focus:border-blue-500 outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-300 font-medium mb-1">Assigned Role</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Workspace Role
+                </label>
                 <select
                   value={inviteRole}
                   onChange={(e) => setInviteRole(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 focus:border-blue-500 outline-none"
+                  className="w-full px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-500/20"
                 >
                   <option value="employee">Employee (Standard Access)</option>
                   <option value="org_admin">Organization Admin</option>
@@ -253,13 +293,15 @@ export default function EmployeesPage() {
               </div>
 
               <div>
-                <label className="block text-slate-300 font-medium mb-1">Department</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Department
+                </label>
                 <select
                   value={inviteDept}
                   onChange={(e) => setInviteDept(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 focus:border-blue-500 outline-none"
+                  className="w-full px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-500/20"
                 >
-                  <option value="">None (Unassigned)</option>
+                  <option value="">No Department</option>
                   {departments.map((d) => (
                     <option key={d.id} value={d.id}>
                       {d.name}
@@ -267,26 +309,40 @@ export default function EmployeesPage() {
                   ))}
                 </select>
               </div>
+            </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setShowInviteModal(false)}
-                  className="px-3 py-2 rounded-xl text-slate-400 hover:text-slate-200 transition cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium transition cursor-pointer disabled:opacity-50"
-                >
-                  {submitting ? "Inviting..." : "Send Invitation"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Job Title (Optional)
+              </label>
+              <Input
+                type="text"
+                value={inviteTitle}
+                onChange={(e) => setInviteTitle(e.target.value)}
+                placeholder="e.g. Senior Research Analyst"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-gray-100">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => setShowInviteModal(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="primary"
+                size="sm"
+                isLoading={submitting}
+              >
+                Send Invitation
+              </Button>
+            </div>
+          </form>
+        </Modal>
       )}
     </div>
   );

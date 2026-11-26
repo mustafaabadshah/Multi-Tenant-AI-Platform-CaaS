@@ -22,6 +22,15 @@ class RefreshTokenRequest(BaseModel):
     refresh_token: str
 
 
+class AcceptInviteRequest(BaseModel):
+    token: str = Field(min_length=1)
+    password: str = Field(min_length=8, description="Password must be at least 8 characters")
+
+
+class DeclineInviteRequest(BaseModel):
+    token: str = Field(min_length=1)
+
+
 class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str

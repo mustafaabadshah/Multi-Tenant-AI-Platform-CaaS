@@ -1,0 +1,11 @@
+{
+  "encryption_algorithm": "Fernet / MultiFernet (AES-128-CBC + HMAC-SHA256)",
+  "rotation_command": "backend/app/commands/rotate_encryption_keys.py",
+  "rotation_features": {
+    "backward_compatibility": "Decryption fallback using secondary key in MultiFernet keyring",
+    "resumability": "Batch processing with atomic per-record update",
+    "idempotency": "Re-encrypts records with active primary key",
+    "secret_masking": "Zero plaintext keys or credentials output to logs or stdout"
+  },
+  "regression_tests": "PASSED (test_m05_provider_reliability.py::test_byok_encryption_and_tamper_resistance)"
+}

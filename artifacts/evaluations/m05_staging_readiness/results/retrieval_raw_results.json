@@ -1,0 +1,1096 @@
+[
+  {
+    "query_id": "q01",
+    "query": "How many days of paid vacation do employees receive each year?",
+    "category": "direct_keyword",
+    "answerable": true,
+    "relevant_chunk_ids": [
+      "chunk-hr-1"
+    ],
+    "rankings": {
+      "lexical": {
+        "top_5": [
+          "chunk-hr-1",
+          "chunk-hr-2",
+          "chunk-hr-3",
+          "chunk-fin-1",
+          "chunk-fin-3"
+        ],
+        "target_rank": 1,
+        "top_score": 5.637974717422139
+      },
+      "semantic": {
+        "top_5": [
+          "chunk-hr-1",
+          "chunk-hr-3",
+          "chunk-hr-2",
+          "chunk-fin-1",
+          "chunk-fin-3"
+        ],
+        "target_rank": 1,
+        "top_score": 0.7201824457672201
+      },
+      "hybrid_rrf": {
+        "top_5": [
+          "chunk-hr-1",
+          "chunk-hr-2",
+          "chunk-hr-3",
+          "chunk-fin-1",
+          "chunk-fin-3"
+        ],
+        "target_rank": 1,
+        "top_score": 0.03278688524590164
+      }
+    }
+  },
+  {
+    "query_id": "q02",
+    "query": "What is the doctor note requirement when someone is out sick?",
+    "category": "paraphrase",
+    "answerable": true,
+    "relevant_chunk_ids": [
+      "chunk-hr-2"
+    ],
+    "rankings": {
+      "lexical": {
+        "top_5": [
+          "chunk-it-1",
+          "chunk-inc-2",
+          "chunk-fin-2",
+          "chunk-inc-3",
+          "chunk-fin-3"
+        ],
+        "target_rank": 12,
+        "top_score": 2.326283987915408
+      },
+      "semantic": {
+        "top_5": [
+          "chunk-hr-2",
+          "chunk-inc-3",
+          "chunk-inc-1",
+          "chunk-hr-3",
+          "chunk-eng-1"
+        ],
+        "target_rank": 1,
+        "top_score": 0.46937665959214925
+      },
+      "hybrid_rrf": {
+        "top_5": [
+          "chunk-inc-3",
+          "chunk-inc-2",
+          "chunk-fin-2",
+          "chunk-hr-2",
+          "chunk-inc-1"
+        ],
+        "target_rank": 4,
+        "top_score": 0.031754032258064516
+      }
+    }
+  },
+  {
+    "query_id": "q03",
+    "query": "Can unused holiday time be carried over to the following year?",
+    "category": "semantic_synonym",
+    "answerable": true,
+    "relevant_chunk_ids": [
+      "chunk-hr-3"
+    ],
+    "rankings": {
+      "lexical": {
+        "top_5": [
+          "chunk-hr-3",
+          "chunk-hr-2",
+          "chunk-it-3",
+          "chunk-it-1",
+          "chunk-inc-3"
+        ],
+        "target_rank": 1,
+        "top_score": 6.306272605404718
+      },
+      "semantic": {
+        "top_5": [
+          "chunk-hr-3",
+          "chunk-hr-1",
+          "chunk-fin-1",
+          "chunk-hr-2",
+          "chunk-fin-2"
+        ],
+        "target_rank": 1,
+        "top_score": 0.6489326680464667
+      },
+      "hybrid_rrf": {
+        "top_5": [
+          "chunk-hr-3",
+          "chunk-hr-2",
+          "chunk-hr-1",
+          "chunk-it-3",
+          "chunk-fin-3"
+        ],
+        "target_rank": 1,
+        "top_score": 0.03278688524590164
+      }
+    }
+  },
+  {
+    "query_id": "q04",
+    "query": "What hardware authentication is required for remote network connection?",
+    "category": "direct_keyword",
+    "answerable": true,
+    "relevant_chunk_ids": [
+      "chunk-it-1"
+    ],
+    "rankings": {
+      "lexical": {
+        "top_5": [
+          "chunk-it-1",
+          "chunk-fin-2",
+          "chunk-fin-1",
+          "chunk-ai-2",
+          "chunk-ai-3"
+        ],
+        "target_rank": 1,
+        "top_score": 3.8480231183501905
+      },
+      "semantic": {
+        "top_5": [
+          "chunk-it-1",
+          "chunk-it-2",
+          "chunk-it-3",
+          "chunk-ai-3",
+          "chunk-eng-3"
+        ],
+        "target_rank": 1,
+        "top_score": 0.5413584274071834
+      },
+      "hybrid_rrf": {
+        "top_5": [
+          "chunk-it-1",
+          "chunk-ai-3",
+          "chunk-it-2",
+          "chunk-fin-2",
+          "chunk-fin-1"
+        ],
+        "target_rank": 1,
+        "top_score": 0.03278688524590164
+      }
+    }
+  },
+  {
+    "query_id": "q05",
+    "query": "What kind of cryptographic keys are required to connect to production jump servers?",
+    "category": "paraphrase",
+    "answerable": true,
+    "relevant_chunk_ids": [
+      "chunk-it-2"
+    ],
+    "rankings": {
+      "lexical": {
+        "top_5": [
+          "chunk-it-2",
+          "chunk-hr-2",
+          "chunk-fin-1",
+          "chunk-eng-3",
+          "chunk-ai-3"
+        ],
+        "target_rank": 1,
+        "top_score": 4.0473061760841
+      },
+      "semantic": {
+        "top_5": [
+          "chunk-it-2",
+          "chunk-it-1",
+          "chunk-ai-3",
+          "chunk-it-3",
+          "chunk-eng-2"
+        ],
+        "target_rank": 1,
+        "top_score": 0.5614663263802734
+      },
+      "hybrid_rrf": {
+        "top_5": [
+          "chunk-it-2",
+          "chunk-ai-3",
+          "chunk-eng-3",
+          "chunk-it-3",
+          "chunk-it-1"
+        ],
+        "target_rank": 1,
+        "top_score": 0.03278688524590164
+      }
+    }
+  },
+  {
+    "query_id": "q06",
+    "query": "How quickly must an employee report a misplaced or stolen company laptop?",
+    "category": "fact_lookup",
+    "answerable": true,
+    "relevant_chunk_ids": [
+      "chunk-it-3"
+    ],
+    "rankings": {
+      "lexical": {
+        "top_5": [
+          "chunk-it-3",
+          "chunk-eng-2",
+          "chunk-fin-1",
+          "chunk-hr-2",
+          "chunk-it-2"
+        ],
+        "target_rank": 1,
+        "top_score": 3.964724810548493
+      },
+      "semantic": {
+        "top_5": [
+          "chunk-it-3",
+          "chunk-fin-1",
+          "chunk-inc-2",
+          "chunk-inc-1",
+          "chunk-inc-3"
+        ],
+        "target_rank": 1,
+        "top_score": 0.5174759501910434
+      },
+      "hybrid_rrf": {
+        "top_5": [
+          "chunk-it-3",
+          "chunk-fin-1",
+          "chunk-hr-2",
+          "chunk-inc-3",
+          "chunk-inc-1"
+        ],
+        "target_rank": 1,
+        "top_score": 0.03278688524590164
+      }
+    }
+  },
+  {
+    "query_id": "q07",
+    "query": "Which version of Python and SQLAlchemy is standard for backend services?",
+    "category": "direct_keyword",
+    "answerable": true,
+    "relevant_chunk_ids": [
+      "chunk-eng-1"
+    ],
+    "rankings": {
+      "lexical": {
+        "top_5": [
+          "chunk-eng-1",
+          "chunk-fin-3",
+          "chunk-fin-2",
+          "chunk-ai-3",
+          "chunk-inc-3"
+        ],
+        "target_rank": 1,
+        "top_score": 4.807259528130672
+      },
+      "semantic": {
+        "top_5": [
+          "chunk-eng-1",
+          "chunk-ai-1",
+          "chunk-eng-3",
+          "chunk-inc-3",
+          "chunk-inc-1"
+        ],
+        "target_rank": 1,
+        "top_score": 0.7844918052686318
+      },
+      "hybrid_rrf": {
+        "top_5": [
+          "chunk-eng-1",
+          "chunk-inc-3",
+          "chunk-ai-3",
+          "chunk-fin-3",
+          "chunk-fin-2"
+        ],
+        "target_rank": 1,
+        "top_score": 0.03278688524590164
+      }
+    }
+  },
+  {
+    "query_id": "q08",
+    "query": "How is multi-tenant database isolation enforced in SQL queries and schemas?",
+    "category": "semantic_synonym",
+    "answerable": true,
+    "relevant_chunk_ids": [
+      "chunk-eng-2"
+    ],
+    "rankings": {
+      "lexical": {
+        "top_5": [
+          "chunk-eng-2",
+          "chunk-ai-3",
+          "chunk-inc-3",
+          "chunk-ai-2",
+          "chunk-fin-2"
+        ],
+        "target_rank": 1,
+        "top_score": 4.0473061760841
+      },
+      "semantic": {
+        "top_5": [
+          "chunk-eng-2",
+          "chunk-inc-2",
+          "chunk-ai-3",
+          "chunk-ai-1",
+          "chunk-eng-3"
+        ],
+        "target_rank": 1,
+        "top_score": 0.6329767624626287
+      },
+      "hybrid_rrf": {
+        "top_5": [
+          "chunk-eng-2",
+          "chunk-ai-3",
+          "chunk-inc-3",
+          "chunk-inc-2",
+          "chunk-it-2"
+        ],
+        "target_rank": 1,
+        "top_score": 0.03278688524590164
+      }
+    }
+  },
+  {
+    "query_id": "q09",
+    "query": "How many code reviews are needed before merging a feature into main?",
+    "category": "fact_lookup",
+    "answerable": true,
+    "relevant_chunk_ids": [
+      "chunk-eng-3"
+    ],
+    "rankings": {
+      "lexical": {
+        "top_5": [
+          "chunk-eng-3",
+          "chunk-eng-2",
+          "chunk-inc-3",
+          "chunk-hr-3",
+          "chunk-ai-3"
+        ],
+        "target_rank": 1,
+        "top_score": 5.310344827586207
+      },
+      "semantic": {
+        "top_5": [
+          "chunk-eng-3",
+          "chunk-inc-3",
+          "chunk-inc-2",
+          "chunk-inc-1",
+          "chunk-eng-2"
+        ],
+        "target_rank": 1,
+        "top_score": 0.4917463823072488
+      },
+      "hybrid_rrf": {
+        "top_5": [
+          "chunk-eng-3",
+          "chunk-inc-3",
+          "chunk-eng-2",
+          "chunk-inc-2",
+          "chunk-eng-1"
+        ],
+        "target_rank": 1,
+        "top_score": 0.03278688524590164
+      }
+    }
+  },
+  {
+    "query_id": "q10",
+    "query": "What is the deadline for submitting travel expense claims?",
+    "category": "direct_keyword",
+    "answerable": true,
+    "relevant_chunk_ids": [
+      "chunk-fin-1"
+    ],
+    "rankings": {
+      "lexical": {
+        "top_5": [
+          "chunk-fin-2",
+          "chunk-fin-3",
+          "chunk-it-1",
+          "chunk-inc-2",
+          "chunk-inc-3"
+        ],
+        "target_rank": 6,
+        "top_score": 3.4453315055797975
+      },
+      "semantic": {
+        "top_5": [
+          "chunk-fin-1",
+          "chunk-hr-3",
+          "chunk-fin-3",
+          "chunk-hr-1",
+          "chunk-inc-3"
+        ],
+        "target_rank": 1,
+        "top_score": 0.6731025302632407
+      },
+      "hybrid_rrf": {
+        "top_5": [
+          "chunk-fin-3",
+          "chunk-fin-1",
+          "chunk-fin-2",
+          "chunk-inc-3",
+          "chunk-inc-2"
+        ],
+        "target_rank": 2,
+        "top_score": 0.03200204813108039
+      }
+    }
+  },
+  {
+    "query_id": "q11",
+    "query": "What is the daily meal budget when traveling internationally for business?",
+    "category": "fact_lookup",
+    "answerable": true,
+    "relevant_chunk_ids": [
+      "chunk-fin-2"
+    ],
+    "rankings": {
+      "lexical": {
+        "top_5": [
+          "chunk-fin-2",
+          "chunk-it-1",
+          "chunk-inc-2",
+          "chunk-inc-3",
+          "chunk-fin-3"
+        ],
+        "target_rank": 1,
+        "top_score": 5.493203846005329
+      },
+      "semantic": {
+        "top_5": [
+          "chunk-fin-2",
+          "chunk-fin-1",
+          "chunk-fin-3",
+          "chunk-hr-1",
+          "chunk-hr-3"
+        ],
+        "target_rank": 1,
+        "top_score": 0.5710057341547542
+      },
+      "hybrid_rrf": {
+        "top_5": [
+          "chunk-fin-2",
+          "chunk-fin-3",
+          "chunk-fin-1",
+          "chunk-hr-1",
+          "chunk-it-1"
+        ],
+        "target_rank": 1,
+        "top_score": 0.03278688524590164
+      }
+    }
+  },
+  {
+    "query_id": "q12",
+    "query": "How much money per mile is paid when driving your personal car for company work?",
+    "category": "semantic_synonym",
+    "answerable": true,
+    "relevant_chunk_ids": [
+      "chunk-fin-3"
+    ],
+    "rankings": {
+      "lexical": {
+        "top_5": [
+          "chunk-fin-3",
+          "chunk-fin-2",
+          "chunk-hr-1",
+          "chunk-ai-2",
+          "chunk-ai-3"
+        ],
+        "target_rank": 1,
+        "top_score": 4.356435643564357
+      },
+      "semantic": {
+        "top_5": [
+          "chunk-fin-3",
+          "chunk-fin-2",
+          "chunk-fin-1",
+          "chunk-hr-3",
+          "chunk-hr-1"
+        ],
+        "target_rank": 1,
+        "top_score": 0.668357609921141
+      },
+      "hybrid_rrf": {
+        "top_5": [
+          "chunk-fin-3",
+          "chunk-fin-2",
+          "chunk-hr-1",
+          "chunk-fin-1",
+          "chunk-it-1"
+        ],
+        "target_rank": 1,
+        "top_score": 0.03278688524590164
+      }
+    }
+  },
+  {
+    "query_id": "q13",
+    "query": "What is the response time requirement for a Sev-1 service outage?",
+    "category": "direct_keyword",
+    "answerable": true,
+    "relevant_chunk_ids": [
+      "chunk-inc-1"
+    ],
+    "rankings": {
+      "lexical": {
+        "top_5": [
+          "chunk-fin-2",
+          "chunk-inc-3",
+          "chunk-inc-1",
+          "chunk-eng-2",
+          "chunk-it-1"
+        ],
+        "target_rank": 3,
+        "top_score": 3.4453315055797975
+      },
+      "semantic": {
+        "top_5": [
+          "chunk-inc-1",
+          "chunk-inc-2",
+          "chunk-inc-3",
+          "chunk-hr-3",
+          "chunk-fin-1"
+        ],
+        "target_rank": 1,
+        "top_score": 0.6994521539272127
+      },
+      "hybrid_rrf": {
+        "top_5": [
+          "chunk-inc-1",
+          "chunk-inc-3",
+          "chunk-inc-2",
+          "chunk-fin-2",
+          "chunk-it-1"
+        ],
+        "target_rank": 1,
+        "top_score": 0.032266458495966696
+      }
+    }
+  },
+  {
+    "query_id": "q14",
+    "query": "What is the update frequency and SLA for major feature degradation?",
+    "category": "paraphrase",
+    "answerable": true,
+    "relevant_chunk_ids": [
+      "chunk-inc-2"
+    ],
+    "rankings": {
+      "lexical": {
+        "top_5": [
+          "chunk-inc-2",
+          "chunk-fin-2",
+          "chunk-ai-3",
+          "chunk-inc-3",
+          "chunk-fin-3"
+        ],
+        "target_rank": 1,
+        "top_score": 5.7377049180327875
+      },
+      "semantic": {
+        "top_5": [
+          "chunk-inc-2",
+          "chunk-inc-1",
+          "chunk-inc-3",
+          "chunk-hr-3",
+          "chunk-eng-2"
+        ],
+        "target_rank": 1,
+        "top_score": 0.6121064350003509
+      },
+      "hybrid_rrf": {
+        "top_5": [
+          "chunk-inc-2",
+          "chunk-inc-3",
+          "chunk-inc-1",
+          "chunk-ai-3",
+          "chunk-eng-3"
+        ],
+        "target_rank": 1,
+        "top_score": 0.03278688524590164
+      }
+    }
+  },
+  {
+    "query_id": "q15",
+    "query": "When must a blameless post-mortem draft be published following an incident?",
+    "category": "fact_lookup",
+    "answerable": true,
+    "relevant_chunk_ids": [
+      "chunk-inc-3"
+    ],
+    "rankings": {
+      "lexical": {
+        "top_5": [
+          "chunk-inc-3",
+          "chunk-hr-2",
+          "chunk-it-2",
+          "chunk-it-3",
+          "chunk-eng-2"
+        ],
+        "target_rank": 1,
+        "top_score": 5.952441152107014
+      },
+      "semantic": {
+        "top_5": [
+          "chunk-inc-3",
+          "chunk-inc-2",
+          "chunk-inc-1",
+          "chunk-it-3",
+          "chunk-fin-1"
+        ],
+        "target_rank": 1,
+        "top_score": 0.6806699831861167
+      },
+      "hybrid_rrf": {
+        "top_5": [
+          "chunk-inc-3",
+          "chunk-hr-2",
+          "chunk-it-3",
+          "chunk-inc-2",
+          "chunk-fin-1"
+        ],
+        "target_rank": 1,
+        "top_score": 0.03278688524590164
+      }
+    }
+  },
+  {
+    "query_id": "q16",
+    "query": "How does the platform combine lexical search and vector similarity scores?",
+    "category": "semantic_synonym",
+    "answerable": true,
+    "relevant_chunk_ids": [
+      "chunk-ai-1"
+    ],
+    "rankings": {
+      "lexical": {
+        "top_5": [
+          "chunk-ai-1",
+          "chunk-inc-3",
+          "chunk-fin-3",
+          "chunk-eng-3",
+          "chunk-inc-1"
+        ],
+        "target_rank": 1,
+        "top_score": 5.813389285948463
+      },
+      "semantic": {
+        "top_5": [
+          "chunk-ai-1",
+          "chunk-ai-2",
+          "chunk-inc-2",
+          "chunk-eng-2",
+          "chunk-inc-1"
+        ],
+        "target_rank": 1,
+        "top_score": 0.6009358895599411
+      },
+      "hybrid_rrf": {
+        "top_5": [
+          "chunk-ai-1",
+          "chunk-fin-3",
+          "chunk-inc-1",
+          "chunk-inc-3",
+          "chunk-inc-2"
+        ],
+        "target_rank": 1,
+        "top_score": 0.03278688524590164
+      }
+    }
+  },
+  {
+    "query_id": "q17",
+    "query": "What optical character recognition tool is used when PDFs have no selectable text?",
+    "category": "semantic_synonym",
+    "answerable": true,
+    "relevant_chunk_ids": [
+      "chunk-ai-2"
+    ],
+    "rankings": {
+      "lexical": {
+        "top_5": [
+          "chunk-it-1",
+          "chunk-inc-2",
+          "chunk-fin-3",
+          "chunk-ai-2",
+          "chunk-fin-2"
+        ],
+        "target_rank": 4,
+        "top_score": 1.163141993957704
+      },
+      "semantic": {
+        "top_5": [
+          "chunk-ai-2",
+          "chunk-ai-1",
+          "chunk-it-1",
+          "chunk-ai-3",
+          "chunk-it-3"
+        ],
+        "target_rank": 1,
+        "top_score": 0.5638508180186095
+      },
+      "hybrid_rrf": {
+        "top_5": [
+          "chunk-it-1",
+          "chunk-ai-2",
+          "chunk-inc-2",
+          "chunk-ai-3",
+          "chunk-fin-2"
+        ],
+        "target_rank": 2,
+        "top_score": 0.032266458495966696
+      }
+    }
+  },
+  {
+    "query_id": "q18",
+    "query": "How are customer third-party LLM credentials protected at rest?",
+    "category": "direct_keyword",
+    "answerable": true,
+    "relevant_chunk_ids": [
+      "chunk-ai-3"
+    ],
+    "rankings": {
+      "lexical": {
+        "top_5": [
+          "chunk-ai-3",
+          "chunk-eng-3",
+          "chunk-fin-2",
+          "chunk-it-2",
+          "chunk-inc-3"
+        ],
+        "target_rank": 1,
+        "top_score": 2.4213953353670314
+      },
+      "semantic": {
+        "top_5": [
+          "chunk-it-1",
+          "chunk-it-3",
+          "chunk-ai-3",
+          "chunk-it-2",
+          "chunk-eng-2"
+        ],
+        "target_rank": 3,
+        "top_score": 0.31432567549037715
+      },
+      "hybrid_rrf": {
+        "top_5": [
+          "chunk-ai-3",
+          "chunk-it-2",
+          "chunk-fin-2",
+          "chunk-eng-3",
+          "chunk-it-1"
+        ],
+        "target_rank": 1,
+        "top_score": 0.032266458495966696
+      }
+    }
+  },
+  {
+    "query_id": "q19",
+    "query": "taking time off for holiday rest and vacation guidelines",
+    "category": "semantic_synonym",
+    "answerable": true,
+    "relevant_chunk_ids": [
+      "chunk-hr-1"
+    ],
+    "rankings": {
+      "lexical": {
+        "top_5": [
+          "chunk-ai-3",
+          "chunk-fin-2",
+          "chunk-hr-1",
+          "chunk-inc-3",
+          "chunk-fin-3"
+        ],
+        "target_rank": 3,
+        "top_score": 3.8188545005212964
+      },
+      "semantic": {
+        "top_5": [
+          "chunk-hr-1",
+          "chunk-hr-3",
+          "chunk-hr-2",
+          "chunk-fin-1",
+          "chunk-inc-3"
+        ],
+        "target_rank": 1,
+        "top_score": 0.5716048679449421
+      },
+      "hybrid_rrf": {
+        "top_5": [
+          "chunk-hr-1",
+          "chunk-fin-2",
+          "chunk-inc-3",
+          "chunk-ai-3",
+          "chunk-fin-1"
+        ],
+        "target_rank": 1,
+        "top_score": 0.032266458495966696
+      }
+    }
+  },
+  {
+    "query_id": "q20",
+    "query": "What happens if my vacation days exceed the rollover limit on New Year's Eve?",
+    "category": "paraphrase",
+    "answerable": true,
+    "relevant_chunk_ids": [
+      "chunk-hr-3"
+    ],
+    "rankings": {
+      "lexical": {
+        "top_5": [
+          "chunk-hr-3",
+          "chunk-hr-1",
+          "chunk-hr-2",
+          "chunk-it-1",
+          "chunk-inc-2"
+        ],
+        "target_rank": 1,
+        "top_score": 5.317825878832189
+      },
+      "semantic": {
+        "top_5": [
+          "chunk-hr-3",
+          "chunk-hr-1",
+          "chunk-inc-2",
+          "chunk-hr-2",
+          "chunk-fin-1"
+        ],
+        "target_rank": 1,
+        "top_score": 0.6221292783664132
+      },
+      "hybrid_rrf": {
+        "top_5": [
+          "chunk-hr-3",
+          "chunk-hr-1",
+          "chunk-hr-2",
+          "chunk-inc-2",
+          "chunk-fin-1"
+        ],
+        "target_rank": 1,
+        "top_score": 0.03278688524590164
+      }
+    }
+  },
+  {
+    "query_id": "q21",
+    "query": "Can employees buy beer or wine during business travel?",
+    "category": "fact_lookup",
+    "answerable": true,
+    "relevant_chunk_ids": [
+      "chunk-fin-2"
+    ],
+    "rankings": {
+      "lexical": {
+        "top_5": [
+          "chunk-fin-1",
+          "chunk-hr-3",
+          "chunk-it-3",
+          "chunk-fin-3",
+          "chunk-fin-2"
+        ],
+        "target_rank": 5,
+        "top_score": 2.1782178217821784
+      },
+      "semantic": {
+        "top_5": [
+          "chunk-fin-2",
+          "chunk-fin-1",
+          "chunk-eng-2",
+          "chunk-fin-3",
+          "chunk-hr-3"
+        ],
+        "target_rank": 1,
+        "top_score": 0.43787482471094896
+      },
+      "hybrid_rrf": {
+        "top_5": [
+          "chunk-fin-1",
+          "chunk-fin-2",
+          "chunk-hr-3",
+          "chunk-fin-3",
+          "chunk-it-3"
+        ],
+        "target_rank": 2,
+        "top_score": 0.03252247488101534
+      }
+    }
+  },
+  {
+    "query_id": "q22",
+    "query": "What are the rules for hard drive encryption on employee computers?",
+    "category": "paraphrase",
+    "answerable": true,
+    "relevant_chunk_ids": [
+      "chunk-it-3"
+    ],
+    "rankings": {
+      "lexical": {
+        "top_5": [
+          "chunk-fin-2",
+          "chunk-inc-3",
+          "chunk-ai-3",
+          "chunk-fin-1",
+          "chunk-fin-3"
+        ],
+        "target_rank": 6,
+        "top_score": 3.4453315055797975
+      },
+      "semantic": {
+        "top_5": [
+          "chunk-it-3",
+          "chunk-it-2",
+          "chunk-it-1",
+          "chunk-eng-2",
+          "chunk-ai-3"
+        ],
+        "target_rank": 1,
+        "top_score": 0.6801982056620982
+      },
+      "hybrid_rrf": {
+        "top_5": [
+          "chunk-it-3",
+          "chunk-ai-3",
+          "chunk-fin-3",
+          "chunk-it-1",
+          "chunk-fin-1"
+        ],
+        "target_rank": 1,
+        "top_score": 0.031544957774465976
+      }
+    }
+  },
+  {
+    "query_id": "q23",
+    "query": "What is the best recipe for baking homemade sourdough bread?",
+    "category": "unanswerable",
+    "answerable": false,
+    "relevant_chunk_ids": [],
+    "rankings": {
+      "lexical": {
+        "top_5": [
+          "chunk-fin-2",
+          "chunk-it-1",
+          "chunk-inc-2",
+          "chunk-inc-3",
+          "chunk-fin-3"
+        ],
+        "target_rank": null,
+        "top_score": 3.4453315055797975
+      },
+      "semantic": {
+        "top_5": [
+          "chunk-fin-1",
+          "chunk-ai-2",
+          "chunk-ai-1",
+          "chunk-fin-2",
+          "chunk-fin-3"
+        ],
+        "target_rank": null,
+        "top_score": 0.07121711037581248
+      },
+      "hybrid_rrf": {
+        "top_5": [
+          "chunk-fin-2",
+          "chunk-ai-2",
+          "chunk-it-1",
+          "chunk-fin-1",
+          "chunk-fin-3"
+        ],
+        "target_rank": null,
+        "top_score": 0.032018442622950824
+      }
+    }
+  },
+  {
+    "query_id": "q24",
+    "query": "Does the company allow cryptocurrency mining in the office data center?",
+    "category": "unanswerable",
+    "answerable": false,
+    "relevant_chunk_ids": [],
+    "rankings": {
+      "lexical": {
+        "top_5": [
+          "chunk-inc-3",
+          "chunk-hr-1",
+          "chunk-it-1",
+          "chunk-inc-2",
+          "chunk-fin-3"
+        ],
+        "target_rank": null,
+        "top_score": 2.235123367198839
+      },
+      "semantic": {
+        "top_5": [
+          "chunk-it-3",
+          "chunk-it-1",
+          "chunk-ai-3",
+          "chunk-eng-2",
+          "chunk-it-2"
+        ],
+        "target_rank": null,
+        "top_score": 0.33487952528239234
+      },
+      "hybrid_rrf": {
+        "top_5": [
+          "chunk-it-1",
+          "chunk-it-3",
+          "chunk-inc-2",
+          "chunk-fin-3",
+          "chunk-hr-1"
+        ],
+        "target_rank": null,
+        "top_score": 0.03200204813108039
+      }
+    }
+  },
+  {
+    "query_id": "q25",
+    "query": "What is the tuition reimbursement policy for master degree programs?",
+    "category": "unanswerable",
+    "answerable": false,
+    "relevant_chunk_ids": [],
+    "rankings": {
+      "lexical": {
+        "top_5": [
+          "chunk-fin-2",
+          "chunk-it-1",
+          "chunk-inc-2",
+          "chunk-inc-3",
+          "chunk-fin-3"
+        ],
+        "target_rank": null,
+        "top_score": 3.4453315055797975
+      },
+      "semantic": {
+        "top_5": [
+          "chunk-fin-3",
+          "chunk-fin-2",
+          "chunk-hr-2",
+          "chunk-hr-1",
+          "chunk-hr-3"
+        ],
+        "target_rank": null,
+        "top_score": 0.2936724586824238
+      },
+      "hybrid_rrf": {
+        "top_5": [
+          "chunk-fin-2",
+          "chunk-fin-3",
+          "chunk-it-1",
+          "chunk-hr-1",
+          "chunk-inc-2"
+        ],
+        "target_rank": null,
+        "top_score": 0.03252247488101534
+      }
+    }
+  }
+]

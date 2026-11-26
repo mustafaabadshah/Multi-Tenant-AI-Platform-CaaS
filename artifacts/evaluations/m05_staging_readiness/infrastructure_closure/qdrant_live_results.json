@@ -1,0 +1,16 @@
+{
+  "milestone": "M05",
+  "component": "Qdrant Vector Database Live Integration",
+  "timestamp": "2026-11-08T00:50:00Z",
+  "status": "NOT RUN — ENVIRONMENT CONSTRAINT",
+  "reason": "Host available physical memory is below 2048 MB machine safety threshold.",
+  "compose_profile": "docker-compose.m05-qdrant.yml",
+  "container_image": "qdrant/qdrant:v1.9.0",
+  "isolated_ports": [6333, 6334],
+  "affected_tests": [
+    "tests/integration/test_qdrant_live_integration.py"
+  ],
+  "verification_command": "docker compose -f docker-compose.m05-qdrant.yml up -d; pytest tests/integration/test_qdrant_live_integration.py -v; docker compose -f docker-compose.m05-qdrant.yml down -v",
+  "recovery_pattern_verified_offline": "PostgreSQL maintains authoritative source of truth for chunks and vectors; Qdrant collections can be idempotently rebuilt via repository re-indexing.",
+  "next_action": "Execute command on runner with >= 2048 MB free RAM prior to cloud deployment."
+}

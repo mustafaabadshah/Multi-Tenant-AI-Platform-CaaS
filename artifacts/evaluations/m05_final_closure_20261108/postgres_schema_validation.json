@@ -1,0 +1,16 @@
+{
+  "alembic_linear_dag": [
+    "0001_initial_schema",
+    "0002_organizations_departments_and_groups",
+    "0003_knowledge_bases_and_documents",
+    "0004_assistants_and_conversations"
+  ],
+  "schema_integrity": {
+    "primary_keys": "UUID v4 across all tables",
+    "foreign_keys": "Composite (id, tenant_id) enforced on child tables",
+    "vector_columns": "vector(1536) and vector(768) on document_chunks",
+    "fts_columns": "tsvector with gin indexing and ts_rank_cd density scoring",
+    "timestamp_format": "UTC timezone-aware across created_at and updated_at"
+  },
+  "downgrade_safety": "All 4 migrations provide symmetric downgrade implementations"
+}

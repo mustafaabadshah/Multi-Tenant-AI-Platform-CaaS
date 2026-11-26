@@ -9,11 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import TenantContext, get_current_user, require_permission
 from app.core.constants import PermissionName
 from app.database.session import get_db
+from app.models.knowledge import Document
 from app.models.user import User
 from app.repositories.audit_repository import AuditLogRepository
 from app.repositories.document_repository import IngestionJobRepository
 from app.schemas.knowledge import IngestionJobResponse
-from app.services.ingestion.service import IngestionService, run_ingestion_in_background
+from app.services.ingestion.service import run_ingestion_in_background
 
 router = APIRouter(prefix="/ingestion", tags=["Ingestion Jobs"])
 
@@ -80,6 +81,21 @@ async def retry_ingestion_job(
     job.retry_count = 0
     job.error_message = None
     job.error_category = None
+    job.started_at = None
+    job.completed_at = None
+
+    if job.document_id:
+        doc = await db.get(Document, job.document_id)
+        if doc:
+            doc.status = "QUEUED"
+
+    await repo.record_event(
+        job_id=job.id,
+        document_id=job.document_id,
+        stage="RETRY",
+        status="QUEUED",
+        message=f"Job retry requested by user {current_user.email}",
+    )
     await db.commit()
 
     # Launch background ingestion
@@ -119,6 +135,12 @@ async def cancel_ingestion_job(
 
     job.status = "CANCELLED"
     job.stage = "CANCELLED"
+
+    if job.document_id:
+        doc = await db.get(Document, job.document_id)
+        if doc and doc.status in ("QUEUED", "PROCESSING"):
+            doc.status = "CANCELLED"
+
     await repo.record_event(
         job_id=job.id,
         document_id=job.document_id,

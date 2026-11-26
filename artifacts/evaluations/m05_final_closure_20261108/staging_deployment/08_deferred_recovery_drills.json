@@ -1,0 +1,16 @@
+{
+  "status": "DEFERRED_NOT_RUN",
+  "release_policy": "STAGING_ENABLEMENT_RELEASE_GATE",
+  "deferred_drills": [
+    {
+      "drill": "PostgreSQL Custom-Format Backup & Restore (BYOK Decryption)",
+      "status": "DEFERRED \u2014 NOT RUN",
+      "rationale": "Deferred for staging preview release per master prompt Section 5 directive. Disaster recovery drills will be executed on dedicated hardware/VM with full backup volumes."
+    },
+    {
+      "drill": "Qdrant Vector Store Application-Driven Rebuild Recovery",
+      "status": "DEFERRED \u2014 NOT RUN",
+      "rationale": "Deferred for staging preview release per master prompt Section 5 directive. Default shared collection remains protected."
+    }
+  ]
+}

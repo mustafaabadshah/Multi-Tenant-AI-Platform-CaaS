@@ -1,0 +1,8 @@
+{
+  "timestamp": "2026-11-07T21:03:51.104439+00:00",
+  "status": "VERIFIED_OFFLINE_ARCHITECTURE",
+  "architecture_pattern": "PostgreSQL 16 Authoritative Truth + Ephemeral Vector Index",
+  "rebuild_function": "IngestionService.reindex_knowledge_base()",
+  "verification_evidence": "test_m05_database_recovery.py::test_authoritative_storage_model_preserves_rebuild_capability PASSED",
+  "reconstruction_coverage": "Full chunk text, positional index, metadata_json, tenant_id, and vector embeddings reside durably in PostgreSQL."
+}

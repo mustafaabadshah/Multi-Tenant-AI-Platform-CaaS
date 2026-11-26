@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-11-07T21:03:51.104439+00:00",
+  "status": "PASS (TOOLING & SCRIPT CONTROLS) / NOT RUN (LIVE CONTAINER RESTORE)",
+  "scripts": [
+    "infrastructure/scripts/backup-postgres.ps1",
+    "infrastructure/scripts/verify-backup.ps1",
+    "infrastructure/scripts/restore-postgres.ps1"
+  ],
+  "safety_features": [
+    "PostgreSQL custom format (-Fc) with blobs",
+    "SHA-256 integrity checksum (.sha256)",
+    "Structured JSON manifest (.manifest.json)",
+    "Mandatory -ConfirmRestore safety switch preventing accidental overwrite"
+  ]
+}
